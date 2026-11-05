@@ -23,6 +23,8 @@ runs differ greatly in visible geometry, and one Android run contains a p99
 spike near 34.9 ms with tile uploads. Android GPU timings are unavailable and
 RSS reports zero; those measurements are not yet meaningful.
 
+**Data collection implemented:** `./benchmark.sh` gathers desktop/Android CSVs and lifecycle logs into Git-ignored `benchmarks/`, summarizes them and automatically includes them in `mobile.zip`. It does not initiate in-app recordings.
+
 **Remaining:** repeat controlled stationary and scripted pan/zoom workloads on
 Linux and Android, including cold versus warmed-up scenes, multiple screen
 sizes, sustained operation, memory stability and thermal behavior. Store resulting CSV reports and record device specs, refresh rates,

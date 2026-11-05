@@ -48,3 +48,10 @@ future platform, not a current build target.
 Keep the docs about **the product and code as they exist**. Do not accumulate
 historic patch diaries, past build failures or superseded development plans.
 The [roadmap](roadmap.md) is the only forward implementation sequence.
+
+## Performance report collection
+
+Run `./benchmark.sh` after recording in-app benchmarks on Linux and Android.
+It collects existing CSVs, summarizes them into `benchmarks/`, and recreates
+`mobile.zip` with the reports included. See the
+[renderer instructions](renderer-lab.md#automatic-collection-for-review).

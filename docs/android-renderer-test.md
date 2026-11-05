@@ -94,6 +94,15 @@ Linux and Android; comprehensive lifecycle and sustained stress acceptance
 remain open.** Do not interpret successful APK compilation as
 proof of rotation/resume behavior.
 
+## Automatic benchmark collection
+
+After capturing scenes on Linux and Android with **Record 15s**, run
+`./benchmark.sh` once. It pulls all Android reports via ADB, includes Linux
+reports, gathers lifecycle logs when present and refreshes `mobile.zip`.
+Android USB and paired Wi-Fi devices are both supported; no manual
+`adb run-as` extraction or root is necessary. See
+[renderer benchmark collection](renderer-lab.md#automatic-collection-for-review).
+
 ## Android lifecycle recovery testing (harness implemented; device results pending)
 
 After installing the latest debug APK (`./compile_android.sh --run`),

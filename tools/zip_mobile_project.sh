@@ -8,6 +8,7 @@ main() {
     local script_dir project_root project_parent output_arg output_dir output_path
     local file_list tmp_dir tmp_archive relative_path
     local -a files=()
+    local -A seen=()
 
     if [[ $# -gt 1 ]]; then
         printf 'Usage: %s [output.zip]\n' "${0##*/}" >&2
@@ -65,8 +66,33 @@ main() {
             *.apk|*.aab|*.ipa|*.o|*.obj|*.a|*.so|*.dylib|*.dll|*.wasm|*.pyc|\
             *.log|*.tmp|*.swp|*.swo|*/.DS_Store) continue ;;
         esac
+        [[ -z "${seen[$relative_path]:-}" ]] || continue
         files+=("$relative_path")
+        seen[$relative_path]=1
     done < "$file_list"
+
+    # Benchmark captures are generated and Git-ignored, but must accompany
+    # every shared mobile.zip so performance reports are available for review.
+    # Only explicit report formats under benchmarks/ are allowed through.
+    if [[ -d "$project_root/benchmarks" ]]; then
+        while IFS= read -r -d '' relative_path; do
+            relative_path="${relative_path#"$project_root/"}"
+            case "$relative_path" in
+                benchmarks/summary.csv|benchmarks/summary.md|\
+                benchmarks/desktop/network-*.csv|\
+                benchmarks/android/network-*.csv|\
+                benchmarks/android/*/network-*.csv|\
+                benchmarks/android/*/device.txt|\
+                benchmarks/lifecycle/*/*.csv|\
+                benchmarks/lifecycle/*/*.txt) ;;
+                *) continue ;;
+            esac
+            [[ -f "$project_root/$relative_path" && ! -L "$project_root/$relative_path" ]] || continue
+            [[ -z "${seen[$relative_path]:-}" ]] || continue
+            files+=("$relative_path")
+            seen[$relative_path]=1
+        done < <(find "$project_root/benchmarks" -type f -print0)
+    fi
 
     if (( ${#files[@]} == 0 )); then
         printf 'No source files to archive.\n' >&2

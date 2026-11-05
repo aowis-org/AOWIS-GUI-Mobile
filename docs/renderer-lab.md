@@ -119,11 +119,46 @@ unavailable; it does not encompass Qt composition or display scanout.
 5. Check real-device thermal, power consumption and sustained performance
    separately; these are not provided by the app's current metrics.
 
-For Android debug APKs, the CSV is stored under the app-private data path
-printed in the UI/logcat. Retrieve using `adb shell run-as org.aowis.mobile`
-and `adb exec-out run-as org.aowis.mobile cat <relative-file>` where supported;
-otherwise retain the console summary and on-screen numbers. Do not change
-file permissions or require storage permissions just for benchmarks.
+### Automatic collection for review
+
+After recording the scenes on both devices, run **one command** from the
+repository root:
+
+```bash
+./benchmark.sh
+```
+
+The script automatically finds Linux Qt `AppDataLocation` benchmark CSVs,
+collects from **all authorized USB or paired Wi-Fi Android devices** using
+`adb exec-out run-as org.aowis.mobile`, and gathers available lifecycle event
+logs. It never requires root, accesses other apps, or gives Docker USB access.
+It saves reports in `benchmarks/desktop/`, `benchmarks/android/<device-key>/`,
+and `benchmarks/lifecycle/<device-key>/`. Existing CSVs are preserved;
+identical reports are skipped, and filename collisions never overwrite data.
+A stable device key avoids exposing raw ADB serial numbers in the report names.
+
+`benchmarks/summary.csv` and `benchmarks/summary.md` include p50/p95/p99,
+CPU/GPU timing when available, logical workload size, and peak visible
+features. The summary is an aggregation of **recorded** frame samples; it
+cannot tell whether a capture was stationary or interactive. Keep test
+conditions comparable and identify capture type manually when reviewing.
+
+The runner regenerates `mobile.zip` automatically. Captures are Git-ignored
+but **explicitly included** in source ZIP snapshots, along with the summary
+and lifecycle reports. Upload the resulting `mobile.zip` to share everything.
+
+```bash
+./benchmark.sh --desktop-only    # Linux captures only
+./benchmark.sh --android-only    # Pull reports from all authorized phones
+./benchmark.sh --serial SERIAL   # Select an Android phone explicitly
+./benchmark.sh --strict          # Error if a requested platform is missing
+./benchmark.sh --run-lifecycle   # First run 12 Android Home/resume cycles
+./benchmark.sh --help
+```
+
+`--desktop-dir PATH` permits overriding an unusual Qt data directory;
+`--no-zip` skips snapshot refresh. Automatic collection is not an automated
+benchmark capture: continue using **Record 15s** to produce measurements.
 
 ## Limitations and next acceptance
 

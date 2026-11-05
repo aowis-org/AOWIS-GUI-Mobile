@@ -77,6 +77,29 @@ Android dependencies. See [Android build and device guide](docs/android-renderer
 for setup, diagnostics and APK paths, and
 [renderer integration](docs/renderer-lab.md) for the current GPU design.
 
+## Collecting benchmark results (Linux + Android)
+
+Record **15-second** captures using the app's **Record 15s** control on
+Linux and Android. Then run one command from the repository root:
+
+```bash
+./benchmark.sh
+```
+
+This discovers Linux reports and every authorized USB/Wi-Fi Android device,
+reads Android's debug-app private CSVs via `adb run-as`, and copies everything
+into `benchmarks/`. It also retrieves available lifecycle event logs, creates
+`benchmarks/summary.csv` and `benchmarks/summary.md`, and automatically updates
+`../mobile.zip`. **Just upload that refreshed ZIP** for analysis—no ADB
+extraction or manual copying required. Missing phones produce a warning rather
+than preventing Linux results from being collected. Use `--strict` to require
+all requested sources, or `--desktop-only`/`--android-only` as needed.
+
+The collection script does not create new frame measurements: initiate captures
+in the app first. Optionally, `./benchmark.sh --run-lifecycle` performs the
+existing Android background/resume test before collecting logs. Details:
+[renderer benchmark procedure](docs/renderer-lab.md).
+
 ## What happens next
 
 **Next agreed work:** (1) run repeatable stress measurements on Linux and
