@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 Window {
@@ -9,7 +9,25 @@ Window {
     // C++ attaches the Qt/bgfx callbacks before making the window visible.
     visible: false
     title: Qt.application.name
-    color: "#102f45"
+    color: root.darkTheme ? "#102f45" : "#e3edf4"
+
+    // Controls use explicit colors: the platform's default text color is not
+    // necessarily legible on an AOWIS-colored surface. The map render theme
+    // remains independent of the application chrome.
+    readonly property bool darkTheme: appearanceSettings.dark
+    readonly property color uiSurface: darkTheme ? "#102535" : "#f3f7fa"
+    readonly property color uiRaised: darkTheme ? "#254354" : "#ffffff"
+    readonly property color uiPressed: darkTheme ? "#35586a" : "#d8e7ed"
+    readonly property color uiInput: darkTheme ? "#19384b" : "#ffffff"
+    readonly property color uiText: darkTheme ? "#f2f8fa" : "#173040"
+    readonly property color uiMuted: darkTheme ? "#b5ccd5" : "#405e6c"
+    readonly property color uiPlaceholder: darkTheme ? "#9fb8c4" : "#587481"
+    readonly property color uiAccent: darkTheme ? "#a3ead8" : "#006b57"
+    readonly property color uiBorder: darkTheme ? "#6c91a1" : "#9fb5c0"
+    readonly property color uiSelection: darkTheme ? "#346f86" : "#a8e2d4"
+    readonly property color uiSelectedText: darkTheme ? "#ffffff" : "#102a37"
+    readonly property color uiSuccess: darkTheme ? "#a2ebc2" : "#086b3c"
+    readonly property color uiError: darkTheme ? "#ffb7ad" : "#ab2730"
 
     property real viewZoom: 1.0
     property real dragX: 0
@@ -37,6 +55,8 @@ Window {
             mapServerPort.text = mapServerSettings.serverPort > 0
                                ? String(mapServerSettings.serverPort) : ""
             saveFeedback = ""
+            themeSelector.currentIndex = appearanceSettings.mode === "dark" ? 1
+                                       : appearanceSettings.mode === "light" ? 2 : 0
         }
         activePage = page
     }
@@ -79,9 +99,9 @@ Window {
         onPaint: {
             const ctx = getContext("2d")
             ctx.reset()
-            ctx.fillStyle = "#102f45"
+            ctx.fillStyle = root.darkTheme ? "#102f45" : "#e3edf4"
             ctx.fillRect(0, 0, width, height)
-            ctx.strokeStyle = "#306078"
+            ctx.strokeStyle = root.darkTheme ? "#306078" : "#a5c1d1"
             ctx.lineWidth = 1
             const step = 44 * root.viewZoom
             for (let x = (root.dragX % step); x < width; x += step) {
@@ -90,7 +110,7 @@ Window {
             for (let y = (root.dragY % step); y < height; y += step) {
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
             }
-            ctx.strokeStyle = "#67c5a9"
+            ctx.strokeStyle = root.darkTheme ? "#67c5a9" : "#007d68"
             ctx.lineWidth = 3
             ctx.beginPath()
             ctx.moveTo(width * 0.1 + root.dragX, height * 0.55 + root.dragY)
@@ -104,6 +124,7 @@ Window {
             function onViewZoomChanged() { referenceMap.requestPaint() }
             function onDragXChanged() { referenceMap.requestPaint() }
             function onDragYChanged() { referenceMap.requestPaint() }
+            function onDarkThemeChanged() { referenceMap.requestPaint() }
         }
     }
 
@@ -183,7 +204,7 @@ Window {
         id: settingsPage
         anchors.fill: parent
         visible: root.activePage === "settings"
-        color: "#102535"
+        color: root.uiSurface
 
         ColumnLayout {
             anchors.fill: parent
@@ -195,11 +216,11 @@ Window {
 
             Label {
                 text: "Settings"
-                color: "#f3f8fa"
+                color: root.uiText
                 font.pixelSize: 26
                 font.bold: true
             }
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#416a7b" }
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
             ScrollView {
                 id: settingsScroll
                 Layout.fillWidth: true
@@ -211,18 +232,104 @@ Window {
                     width: settingsScroll.availableWidth
                     spacing: 12
                     Label {
+                        text: "Appearance"
+                        color: root.uiAccent
+                        font.bold: true
+                        font.pixelSize: 19
+                    }
+                    Label {
+                        text: "Theme"
+                        color: root.uiText
+                        font.pixelSize: 14
+                    }
+                    ComboBox {
+                        id: themeSelector
+                        Layout.fillWidth: true
+                        model: ["Follow system", "Dark", "Light"]
+                        onActivated: function(index) {
+                            appearanceSettings.setMode(index === 1 ? "dark"
+                                                       : index === 2 ? "light" : "system")
+                        }
+                        palette.text: root.uiText
+                        palette.buttonText: root.uiText
+                        palette.base: root.uiInput
+                        palette.window: root.uiInput
+                        palette.highlight: root.uiSelection
+                        palette.highlightedText: root.uiSelectedText
+                        indicator: Text {
+                            x: themeSelector.width - width - 14
+                            y: (themeSelector.height - height) / 2
+                            text: "▾"
+                            color: root.uiText
+                            font.pixelSize: 18
+                        }
+                        contentItem: Text {
+                            text: themeSelector.displayText
+                            color: root.uiText
+                            leftPadding: 12
+                            rightPadding: 32
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: themeSelector.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        delegate: ItemDelegate {
+                            width: themeSelector.width
+                            text: modelData
+                            highlighted: themeSelector.highlightedIndex === index
+                            palette.text: root.uiText
+                            palette.highlightedText: root.uiSelectedText
+                            background: Rectangle {
+                                color: parent.highlighted ? root.uiSelection : root.uiInput
+                            }
+                        }
+                        popup: Popup {
+                            y: themeSelector.height - 1
+                            width: themeSelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 240)
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: themeSelector.popup.visible ? themeSelector.delegateModel : null
+                                currentIndex: themeSelector.highlightedIndex
+                                ScrollIndicator.vertical: ScrollIndicator { }
+                            }
+                            background: Rectangle {
+                                radius: 10
+                                color: root.uiInput
+                                border.color: root.uiBorder
+                            }
+                        }
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+                    Label {
                         text: "Map server"
-                        color: "#a5e7d4"
+                        color: root.uiAccent
                         font.bold: true
                         font.pixelSize: 19
                     }
                     Label {
                         text: "Server URL"
-                        color: "#dce8ec"
+                        color: root.uiText
                         font.pixelSize: 14
                     }
                     TextField {
                         id: mapServerUrl
+                        color: root.uiText
+                        placeholderTextColor: root.uiPlaceholder
+                        selectionColor: root.uiSelection
+                        selectedTextColor: root.uiSelectedText
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: mapServerUrl.activeFocus ? root.uiAccent : root.uiBorder
+                        }
                         Layout.fillWidth: true
                         placeholderText: "http://192.168.2.10"
                         selectByMouse: true
@@ -231,18 +338,28 @@ Window {
                     }
                     Label {
                         text: "Use http:// or https://. Enter the port separately."
-                        color: "#a4bbc4"
+                        color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
                     Label {
                         text: "Port"
-                        color: "#dce8ec"
+                        color: root.uiText
                         font.pixelSize: 14
                     }
                     TextField {
                         id: mapServerPort
+                        color: root.uiText
+                        placeholderTextColor: root.uiPlaceholder
+                        selectionColor: root.uiSelection
+                        selectedTextColor: root.uiSelectedText
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: mapServerPort.activeFocus ? root.uiAccent : root.uiBorder
+                        }
                         Layout.fillWidth: true
                         placeholderText: "e.g. 8080"
                         selectByMouse: true
@@ -252,6 +369,16 @@ Window {
                         onTextEdited: root.saveFeedback = ""
                     }
                     Button {
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                            opacity: parent.enabled ? 1.0 : 0.55
+                        }
+                        
                         text: "Save map server"
                         Layout.fillWidth: true
                         enabled: mapServerUrl.text.trim().length > 0 && mapServerPort.acceptableInput
@@ -272,7 +399,7 @@ Window {
                     Label {
                         text: root.saveFeedback
                         visible: text.length > 0
-                        color: root.saveSucceeded ? "#9de6bd" : "#ffb8ad"
+                        color: root.saveSucceeded ? root.uiSuccess : root.uiError
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
@@ -280,14 +407,14 @@ Window {
                         text: mapServerSettings.configured
                               ? "Saved endpoint: " + mapServerSettings.endpointUrl
                               : "No map server configured yet."
-                        color: "#c5e2e7"
+                        color: root.uiText
                         font.pixelSize: 13
                         wrapMode: Text.WrapAnywhere
                         Layout.fillWidth: true
                     }
                     Label {
                         text: "The endpoint is saved locally. Map-server requests are not implemented yet; the visible network is still synthetic test geometry."
-                        color: "#92b2be"
+                        color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
@@ -302,7 +429,7 @@ Window {
         id: diagnosticsPage
         anchors.fill: parent
         visible: root.activePage === "diagnostics"
-        color: "#102535"
+        color: root.uiSurface
 
         Flickable {
             id: diagnosticScroll
@@ -318,44 +445,158 @@ Window {
                 x: 16
                 width: Math.max(0, diagnosticScroll.width - 32)
                 spacing: 12
-                Label { text: "Diagnostics"; color: "#f3f8fa"; font.pixelSize: 26; font.bold: true }
-                Label { text: lab.bgfxMode ? "BGFX renderer" : "QML baseline"; color: "#a5e7d4"; font.pixelSize: 13 }
+                Label { text: "Diagnostics"; color: root.uiText; font.pixelSize: 26; font.bold: true }
+                Label { text: lab.bgfxMode ? "BGFX renderer" : "QML baseline"; color: root.uiAccent; font.pixelSize: 13 }
                 ComboBox {
                     id: workloadSelector
+                    palette.text: root.uiText
+                    palette.buttonText: root.uiText
+                    palette.base: root.uiInput
+                    palette.window: root.uiInput
+                    palette.highlight: root.uiSelection
+                    palette.highlightedText: root.uiSelectedText
+                    indicator: Text {
+                        x: workloadSelector.width - width - 14
+                        y: (workloadSelector.height - height) / 2
+                        text: "▾"
+                        color: root.uiText
+                        font.pixelSize: 18
+                    }
+                    contentItem: Text {
+                        text: workloadSelector.displayText
+                        color: root.uiText
+                        leftPadding: 12
+                        rightPadding: 32
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                    background: Rectangle {
+                        implicitHeight: 48
+                        radius: 10
+                        color: root.uiInput
+                        border.color: workloadSelector.activeFocus ? root.uiAccent : root.uiBorder
+                    }
+                    delegate: ItemDelegate {
+                        width: workloadSelector.width
+                        text: modelData
+                        highlighted: workloadSelector.highlightedIndex === index
+                        palette.text: root.uiText
+                        palette.highlightedText: root.uiSelectedText
+                        background: Rectangle {
+                            color: parent.highlighted ? root.uiSelection : root.uiInput
+                        }
+                    }
+                    popup: Popup {
+                        y: workloadSelector.height - 1
+                        width: workloadSelector.width
+                        implicitHeight: Math.min(contentItem.implicitHeight + 4, 270)
+                        padding: 2
+                        contentItem: ListView {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: workloadSelector.popup.visible ? workloadSelector.delegateModel : null
+                            currentIndex: workloadSelector.highlightedIndex
+                            ScrollIndicator.vertical: ScrollIndicator { }
+                        }
+                        background: Rectangle {
+                            radius: 10
+                            color: root.uiInput
+                            border.color: root.uiBorder
+                        }
+                    }
                     Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
                     model: ["Demo", "~1k features", "~10k features", "~100k features", "~1M features"]
                     onActivated: function(index) { lab.setWorkload(index) }
                 }
                 Button {
+                    palette.buttonText: root.uiText
+                    palette.text: root.uiText
+                    background: Rectangle {
+                        implicitHeight: 44
+                        radius: 10
+                        color: parent.down ? root.uiPressed : root.uiRaised
+                        border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                        opacity: parent.enabled ? 1.0 : 0.55
+                    }
+                    
                     text: lab.benchmarkActive ? "Recording…" : "Record 15s"
                     Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
                     onClicked: lab.startBenchmark()
                 }
                 Button {
+                    palette.buttonText: root.uiText
+                    palette.text: root.uiText
+                    background: Rectangle {
+                        implicitHeight: 44
+                        radius: 10
+                        color: parent.down ? root.uiPressed : root.uiRaised
+                        border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                        opacity: parent.enabled ? 1.0 : 0.55
+                    }
+                    
                     text: "Recreate GPU resources (test)"
                     Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
                     onClicked: lab.requestGpuRecreation()
                 }
-                Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                Label { text: lab.details; color: "#f0f7f9"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
-                Label { text: "bgfx frames: " + lab.frames + " | " + root.lastTap; color: "#dbe9ed"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                Label { text: lab.recoveryStatus; color: "#ffdb9e"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11 }
-                Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
-                Label { text: lab.sceneStats; color: "#e7c88c"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
-                Label { text: lab.benchmarkResult; color: "#ade9c8"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
+                Label { text: lab.status; color: root.uiAccent; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Label { text: lab.details; color: root.uiText; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
+                Label { text: "bgfx frames: " + lab.frames + " | " + root.lastTap; color: root.uiText; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: lab.timings; color: root.uiMuted; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: lab.recoveryStatus; color: root.uiAccent; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11 }
+                Label { text: lab.lifecycle; color: root.uiMuted; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
+                Label { text: lab.sceneStats; color: root.uiAccent; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
+                Label { text: lab.benchmarkResult; color: root.uiSuccess; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
                 Label {
                     text: "Zoom: " + root.viewZoom.toFixed(2) + "× | Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY)
-                    color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12
+                    color: root.uiText; Layout.fillWidth: true; font.pixelSize: 12
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Button { text: "−"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25) }
-                    Button { text: "Center"; Layout.fillWidth: true; onClicked: { root.dragX = 0; root.dragY = 0 } }
-                    Button { text: "+"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25) }
+                    Button {
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                            opacity: parent.enabled ? 1.0 : 0.55
+                        }
+                        text: "−"
+                        Layout.fillWidth: true
+                        onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25)
+                    }
+                    Button {
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                            opacity: parent.enabled ? 1.0 : 0.55
+                        }
+                        text: "Center"
+                        Layout.fillWidth: true
+                        onClicked: { root.dragX = 0; root.dragY = 0 }
+                    }
+                    Button {
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                            opacity: parent.enabled ? 1.0 : 0.55
+                        }
+                        text: "+"
+                        Layout.fillWidth: true
+                        onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25)
+                    }
                 }
             }
         }
@@ -370,24 +611,63 @@ Window {
         // Back/Escape go through navigateBack(), in the same order everywhere.
         closePolicy: Popup.CloseOnReleaseOutside
         background: Rectangle {
-            color: "#132d3e"
-            border.color: "#416a7b"
+            color: root.uiSurface
+            border.color: root.uiBorder
         }
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
             spacing: 12
-            Label { text: "AOWIS"; color: "#f2faf9"; font.bold: true; font.pixelSize: 25; Layout.topMargin: 20 }
-            Label { text: "Mobile"; color: "#97c6ce"; font.pixelSize: 13 }
-            Rectangle { Layout.fillWidth: true; height: 1; color: "#416a7b" }
-            Button { text: "Map"; Layout.fillWidth: true; onClicked: root.openPage("map") }
-            Button { text: "Settings"; Layout.fillWidth: true; onClicked: root.openPage("settings") }
-            Button { text: "Diagnostics"; Layout.fillWidth: true; onClicked: root.openPage("diagnostics") }
+            Label { text: "AOWIS"; color: root.uiText; font.bold: true; font.pixelSize: 25; Layout.topMargin: 20 }
+            Label { text: "Mobile"; color: root.uiMuted; font.pixelSize: 13 }
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+            Button {
+                palette.buttonText: root.uiText
+                palette.text: root.uiText
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 10
+                    color: parent.down ? root.uiPressed : root.uiRaised
+                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                    opacity: parent.enabled ? 1.0 : 0.55
+                }
+                text: "Map"
+                Layout.fillWidth: true
+                onClicked: root.openPage("map")
+            }
+            Button {
+                palette.buttonText: root.uiText
+                palette.text: root.uiText
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 10
+                    color: parent.down ? root.uiPressed : root.uiRaised
+                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                    opacity: parent.enabled ? 1.0 : 0.55
+                }
+                text: "Settings"
+                Layout.fillWidth: true
+                onClicked: root.openPage("settings")
+            }
+            Button {
+                palette.buttonText: root.uiText
+                palette.text: root.uiText
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 10
+                    color: parent.down ? root.uiPressed : root.uiRaised
+                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                    opacity: parent.enabled ? 1.0 : 0.55
+                }
+                text: "Diagnostics"
+                Layout.fillWidth: true
+                onClicked: root.openPage("diagnostics")
+            }
             Item { Layout.fillHeight: true }
             Label {
                 text: "AOWIS Mobile"
                 Layout.fillWidth: true
-                color: "#87aebb"
+                color: root.uiMuted
                 font.pixelSize: 12
             }
         }
@@ -403,12 +683,21 @@ Window {
         width: 52
         height: 52
         text: "☰"
+        palette.buttonText: root.uiText
+        palette.text: root.uiText
+        contentItem: Text {
+            text: hamburgerButton.text
+            font: hamburgerButton.font
+            color: root.uiText
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
         font.pixelSize: 24
         Accessible.name: "Open navigation menu"
         background: Rectangle {
             radius: 12
-            color: "#df142c3a"
-            border.color: "#538593"
+            color: root.uiRaised
+            border.color: root.uiBorder
         }
         onClicked: navigationDrawer.open()
     }

@@ -1,5 +1,6 @@
 #include "render_lab.h"
 #include "map_server_settings.h"
+#include "appearance_settings.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -58,9 +59,11 @@ int main(int argc, char *argv[])
 
     RenderLab lab(useBgfx);
     MapServerSettings mapServerSettings;
+    AppearanceSettings appearanceSettings;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
     engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;

@@ -17,7 +17,8 @@ Selectable synthetic networks (~1k to ~1M total node/pipe features) use
 viewport tiles, bounded GPU buffers and explicit LOD sampling. A 15-second
 benchmark saves frame-level CSV and frame-pacing percentiles.
 The mobile UI now starts with a clean, map-first view. Its hamburger menu
-opens **Settings → Map server** (persistent HTTP/HTTPS URL and numeric port)
+opens **Settings → Appearance** (system/dark/light interface theme) and
+**Settings → Map server** (persistent HTTP/HTTPS URL and numeric port)
 and **Diagnostics** (stress presets, recording, GPU recovery, zoom/recenter).
 These settings only configure a future map client; they do **not** yet load
 map imagery or establish a server connection.

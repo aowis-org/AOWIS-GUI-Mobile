@@ -24,6 +24,8 @@ qt_add_executable(aowis-mobile
     src/main.cpp
     src/map_server_settings.cpp
     src/map_server_settings.h
+    src/appearance_settings.cpp
+    src/appearance_settings.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
@@ -207,6 +209,13 @@ if(BUILD_TESTING)
     target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)
     target_link_libraries(aowis-mobile-map-server-settings-tests PRIVATE Qt6::Core)
     add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
+    add_executable(aowis-mobile-appearance-settings-tests
+        tests/appearance_settings_tests.cpp src/appearance_settings.cpp src/appearance_settings.h)
+    target_include_directories(aowis-mobile-appearance-settings-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-appearance-settings-tests PRIVATE Qt6::Core Qt6::Gui)
+    add_test(NAME aowis-mobile-appearance-settings COMMAND aowis-mobile-appearance-settings-tests)
+    set_tests_properties(aowis-mobile-appearance-settings PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(aowis-mobile-lifecycle-tests
         tests/lifecycle_watchdog_tests.cpp src/lifecycle_watchdog.cpp)
     target_include_directories(aowis-mobile-lifecycle-tests PRIVATE src)

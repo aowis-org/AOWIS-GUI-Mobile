@@ -70,6 +70,14 @@ normal behavior (sending the application to the background). Desktop Escape
 closes the drawer or returns to the map as well. Unsaved changes to the map
 server fields are not applied: use **Save map server** before leaving.
 
+**Settings → Appearance** provides a persistent **Follow system / Dark / Light**
+selector. Switching takes effect immediately; the system choice follows the
+Android/desktop color scheme when Qt reports a change. The settings screens,
+drawer, text fields, buttons, prompts and diagnostics use an explicit shared
+palette so text remains legible in both themes. The bgfx map renderer keeps its
+own graphics palette; changing the interface theme does not recolor hydraulic
+network geometry.
+
 **Settings → Map server** provides two fields: HTTP(S) server URL (without a
 port) and a numeric port (1–65535). Both values are validated in C++, saved
 through Qt's per-user settings, and restored on restart. A full endpoint URL

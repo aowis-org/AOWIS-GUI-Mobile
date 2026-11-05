@@ -10,6 +10,8 @@ required = [
     "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
     "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
     "src/map_server_settings.cpp", "src/map_server_settings.h",
+    "src/appearance_settings.cpp", "src/appearance_settings.h",
+    "tests/appearance_settings_tests.cpp",
     "tests/map_server_settings_tests.cpp",
     "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp",
     "src/performance_samples.cpp", "src/performance_samples.h",
@@ -106,6 +108,15 @@ checks = [
      'QSettings' in (root / "src/map_server_settings.cpp").read_text() and
      'mapServerSettings.save' in qml and 'IntValidator { bottom: 1; top: 65535 }' in qml and
      'Qt.ImhDigitsOnly' in qml),
+    ("system dark light theme and explicit field contrast", 'appearanceSettings.mode' in qml and
+     'appearanceSettings.dark' in qml and 'appearanceSettings.setMode' in qml and
+     'placeholderTextColor: root.uiPlaceholder' in qml and
+     'color: root.uiText' in qml and 'palette.buttonText: root.uiText' in qml and
+     'QtQuick.Controls.Basic' in qml),
+    ("persistent appearance settings and system theme", 'QSettings' in
+     (root / "src/appearance_settings.cpp").read_text() and
+     'colorSchemeChanged' in (root / "src/appearance_settings.cpp").read_text() and
+     'aowis-mobile-appearance-settings-tests' in cmake),
     ("settings regression test", 'aowis-mobile-map-server-settings-tests' in cmake and
      'aowis-mobile-map-server-settings' in cmake),
     ("Android launch package", 'shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
@@ -121,6 +132,8 @@ checks = [
         "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
         "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
     "src/map_server_settings.cpp", "src/map_server_settings.h",
+    "src/appearance_settings.cpp", "src/appearance_settings.h",
+    "tests/appearance_settings_tests.cpp",
     "tests/map_server_settings_tests.cpp",
         "src/performance_samples.cpp", "src/performance_samples.h",
         "src/lifecycle_watchdog.cpp", "src/lifecycle_watchdog.h",
