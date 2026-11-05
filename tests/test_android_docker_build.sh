@@ -109,10 +109,22 @@ assert_log 'docker run '
 # Prevent regression to obsolete aqtinstall release or Qt archive architecture.
 source "$root/tools/qt-android/toolchain_versions.sh"
 [[ "$AOWIS_ANDROID_AQT_GIT_REF" =~ ^[a-f0-9]{40}$ ]] || fail 'aqt ref is not a 40-character commit'
-[[ "$AOWIS_ANDROID_TOOLCHAIN_REVISION" -ge 2 ]] || fail 'image version was not bumped'
+[[ "$AOWIS_ANDROID_TOOLCHAIN_REVISION" -ge 3 ]] || fail 'image version was not bumped'
 grep -Fq -- 'aqtinstall @ git+https://github.com/miurahr/aqtinstall.git@${AQT_GIT_REF}' "$root/tools/qt-android/Dockerfile" || fail 'pinned modern aqt is missing'
 grep -Fq -- '"${QT_VERSION}" linux_gcc_64' "$root/tools/qt-android/Dockerfile" || fail 'old Linux Qt archive architecture'
 grep -Fq -- '"${QT_VERSION}" android_arm64_v8a' "$root/tools/qt-android/Dockerfile" || fail 'Android Qt architecture changed'
 grep -Fq -- 'AQT_GIT_REF=$AOWIS_ANDROID_AQT_GIT_REF' "$root/prepare_android_docker.sh" || fail 'aqt pin not passed to Docker build'
 
-printf 'Android Docker entrypoint: 8 scenarios + Qt repository contract passed\n' 
+# The real device build depends on Qt's host-side tools being executable,
+# Android's shared-library install destination, and Qt 6.12 TaskTree addon.
+grep -Fq 'libglib2.0-0t64' "$root/tools/qt-android/Dockerfile" || fail 'GLib host runtime missing'
+grep -Fq 'libexec/qmlimportscanner' "$root/tools/qt-android/Dockerfile" || fail 'qmlimportscanner missing from preflight'
+grep -Fq -- '--modules qttasktree' "$root/tools/qt-android/Dockerfile" || fail 'TaskTree not requested'
+grep -Fq 'android_arm64_v8a/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake' "$root/tools/qt-android/Dockerfile" || fail 'TaskTree Android validation missing'
+grep -Eq '^[[:space:]]+LIBRARY DESTINATION lib$' "$root/CMakeLists.txt" || fail 'Android library install destination missing'
+# The pinned bgfx EGL backend uses ANativeWindow_setBuffersGeometry. The
+# Android NDK exports it from libandroid.so; GLES/EGL alone cannot resolve it.
+grep -Fq 'target_link_libraries(aowis-mobile-render-lab PRIVATE android)' "$root/CMakeLists.txt" || fail 'bgfx Android native-window library link missing'
+
+printf 'Android Docker entrypoint: 8 scenarios + build dependency contracts passed\n'
+

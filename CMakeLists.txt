@@ -91,6 +91,11 @@ if(AOWIS_MOBILE_WITH_BGFX)
     target_sources(aowis-mobile-render-lab PRIVATE
         src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
     target_link_libraries(aowis-mobile-render-lab PRIVATE bgfx)
+    if(ANDROID)
+        # bgfx's EGL backend calls ANativeWindow_setBuffersGeometry. This
+        # function is provided by the Android NDK's libandroid, not EGL/GLES.
+        target_link_libraries(aowis-mobile-render-lab PRIVATE android)
+    endif()
     target_compile_definitions(aowis-mobile-render-lab PRIVATE AOWIS_LAB_WITH_BGFX=1)
 else()
     target_compile_definitions(aowis-mobile-render-lab PRIVATE AOWIS_LAB_WITH_BGFX=0)
@@ -104,8 +109,11 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
     endif()
 endif()
 
+# Android executables are shared libraries. Unlike desktop executables,
+# CMake requires a LIBRARY destination for Qt's Android module target.
 install(TARGETS aowis-mobile-render-lab
     BUNDLE DESTINATION .
+    LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 

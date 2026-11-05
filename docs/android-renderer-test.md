@@ -39,7 +39,11 @@ and Android NDK **27.2.12479018**. Versions are declared in
 installer or a Qt account. `aqtinstall` is pinned to a specific upstream
 Git commit because its 3.3.0 PyPI release does not support Qt 6.12's
 repository structure. The Linux host archive is selected using
-`linux_gcc_64` (Qt's installed directory is still `gcc_64`). Updating the
+`linux_gcc_64` (Qt's installed directory is still `gcc_64`). The Docker
+image includes GLib and other Linux libraries required to execute the host
+`qmlimportscanner`/`qmlcachegen` programs, plus the separately packaged
+Qt 6.12 **TaskTree** addon (host and Android). A preflight ELF dependency
+check fails during image creation if a Qt host tool cannot load. Updating the
 pinned toolchain revision changes the Docker image tag to force a rebuild.
 Google's command-line-tools archive is SHA-256
 verified against the published checksum. The build process accepts Android
@@ -134,3 +138,29 @@ presentation time, battery drain or thermal throttling.
 Passing this narrow lab **does not** prove Qt Quick / bgfx compatibility on
 all Android devices or yet justify removing the existing AOWIS desktop
 renderer from GUI.
+
+## Qt 6.12 Docker toolchain troubleshooting
+
+The initial r2 image provisioned Qt/SDK successfully but Android CMake
+configuration exposed missing Linux host GLib, the separately packaged
+Android Qt6TaskTree component, and an absent `LIBRARY DESTINATION` for the
+Qt Android shared-library application. The r3 image supplies these dependencies
+and the project CMake now includes the Android library install destination.
+The image retains the expensive upstream downloads in reusable Docker layers
+when Docker's build cache is available. Run `./compile_android.sh` normally;
+its image tag will select the updated r3 image automatically.
+
+This corrects the **observed configuration failures**. A complete APK build
+and physical-device test still require verification on a host with Docker.
+
+### Android native-window linker dependency
+
+The Docker Qt 6.12.0 r3 toolchain and source compilation succeeded, but the
+first full arm64-v8a link failed on `ANativeWindow_setBuffersGeometry` from
+bgfx's EGL backend. This function is exported by the Android NDK's
+`libandroid.so`, not `libEGL.so` or `libGLESv2.so`. When bgfx is enabled, the
+Android application target explicitly links the CMake library `android`.
+The QML-only baseline does not need this dependency. The fix changes only
+link configuration; it does not alter the rendering strategy or require a
+Docker image rebuild. Building and running the APK on a device remain the
+acceptance tests.

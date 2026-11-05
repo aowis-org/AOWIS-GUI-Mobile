@@ -65,5 +65,42 @@ RUN yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager \
         "build-tools;${ANDROID_BUILD_TOOLS}" "ndk;${ANDROID_NDK_VERSION}" \
     && test -x "/opt/android-sdk/ndk/${ANDROID_NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
 
+# Qt 6.12's Linux host tools use GLib (including qmlimportscanner). The
+# Ubuntu minimal image must provide this shared library explicitly. Keep this
+# layer AFTER Qt/SDK provisioning so Docker can reuse the expensive r2 layers.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libglib2.0-0t64 libsm6 libice6 libxkbcommon-x11-0 \
+        libxcb-cursor0 libxcb-render0 libxcb-shape0 libxcb-randr0 \
+        libxcb-xfixes0 libxcb-render-util0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# TaskTree became a separately packaged Qt module in Qt 6.11. Android
+# Qt6QmlAssetDownloaderPrivate requires it even if this lab does not use
+# TaskTree directly. Install the matching official host/target archives.
+RUN /opt/aqt-venv/bin/aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 \
+        --modules qttasktree -O /opt/qt \
+    && /opt/aqt-venv/bin/aqt install-qt all_os android "${QT_VERSION}" android_arm64_v8a \
+        --modules qttasktree -O /opt/qt \
+    && test -f "/opt/qt/${QT_VERSION}/gcc_64/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake" \
+    && test -f "/opt/qt/${QT_VERSION}/android_arm64_v8a/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake"
+
+# Fail at image construction rather than at the first app configure when a
+# Linux host tool has missing ELF runtime dependencies.
+RUN set -eu; \
+    for executable in \
+        "/opt/qt/${QT_VERSION}/gcc_64/bin/qmake" \
+        "/opt/qt/${QT_VERSION}/gcc_64/libexec/qmlimportscanner" \
+        "/opt/qt/${QT_VERSION}/gcc_64/libexec/qmlcachegen"; do \
+        test -x "$executable"; \
+        missing="$(ldd "$executable" | grep 'not found' || true)"; \
+        if [ -n "$missing" ]; then \
+            echo "Missing host libraries for $executable:" >&2; \
+            echo "$missing" >&2; \
+            exit 1; \
+        fi; \
+    done; \
+    "/opt/qt/${QT_VERSION}/gcc_64/bin/qmake" -query QT_VERSION
+
 ENV PATH="/opt/android-sdk/platform-tools:/opt/android-sdk/cmdline-tools/latest/bin:${JAVA_HOME}/bin:${PATH}"
 WORKDIR /project
