@@ -40,6 +40,30 @@ Window {
         }
         activePage = page
     }
+    // Back is in-app navigation while a drawer or secondary page is open.
+    // At the map root, leave Android's native Back behavior intact.
+    function navigateBack() {
+        if (navigationDrawer.opened) {
+            navigationDrawer.close()
+        } else if (activePage !== "map") {
+            openPage("map")
+        }
+    }
+
+    // Qt 6.12 sends an unhandled Android Back to the background. A window-
+    // level Shortcut works even when a Settings TextField owns keyboard focus.
+    Shortcut {
+        sequences: ["Back"]
+        enabled: Qt.platform.os === "android" &&
+                 (navigationDrawer.opened || root.activePage !== "map")
+        onActivated: root.navigateBack()
+    }
+    Shortcut {
+        sequence: "Escape"
+        enabled: Qt.platform.os !== "android" &&
+                 (navigationDrawer.opened || root.activePage !== "map")
+        onActivated: root.navigateBack()
+    }
     onViewZoomChanged: publishView()
     onDragXChanged: publishView()
     onDragYChanged: publishView()
@@ -341,8 +365,10 @@ Window {
         id: navigationDrawer
         width: Math.min(root.width * 0.82, 310)
         height: root.height
-        edge: Qt.LeftEdge
+        edge: Qt.RightEdge
         modal: true
+        // Back/Escape go through navigateBack(), in the same order everywhere.
+        closePolicy: Popup.CloseOnReleaseOutside
         background: Rectangle {
             color: "#132d3e"
             border.color: "#416a7b"
@@ -371,7 +397,7 @@ Window {
     // header and permanently expanded metrics/benchmark overlays.
     Button {
         id: hamburgerButton
-        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 14
         width: 52

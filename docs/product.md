@@ -59,9 +59,16 @@ Qt Quick/QML, not a QWidget desktop port.
 
 ## Implemented navigation and server configuration
 
-The map fills the app window with a small hamburger button; the previous
-permanent metrics and workload controls have moved to **Diagnostics** in the
-menu. The same diagnostic tools remain accessible for Android/Linux testing.
+The map fills the app window with a small hamburger button in the **top-right**;
+the navigation drawer opens from the **right**. The previous permanent metrics
+and workload controls have moved to **Diagnostics** in the menu. The same
+diagnostic tools remain accessible for Android/Linux testing.
+
+On Android, **Back** closes an open drawer first; otherwise it returns from
+Settings or Diagnostics to the map. From the map, Back retains Android's
+normal behavior (sending the application to the background). Desktop Escape
+closes the drawer or returns to the map as well. Unsaved changes to the map
+server fields are not applied: use **Save map server** before leaving.
 
 **Settings → Map server** provides two fields: HTTP(S) server URL (without a
 port) and a numeric port (1–65535). Both values are validated in C++, saved

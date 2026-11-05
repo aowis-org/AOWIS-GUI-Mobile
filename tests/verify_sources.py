@@ -90,6 +90,18 @@ checks = [
     ("minimal hamburger navigation", 'id: hamburgerButton' in qml and
      'id: navigationDrawer' in qml and 'root.openPage("settings")' in qml and
      'root.openPage("diagnostics")' in qml),
+    ("right-side mobile navigation", 'id: hamburgerButton' in qml and
+     'anchors.right: parent.right' in qml and 'edge: Qt.RightEdge' in qml and
+     'closePolicy: Popup.CloseOnReleaseOutside' in qml),
+    ("Android Back returns from secondary pages", 'sequences: ["Back"]' in qml and
+     'Qt.platform.os === "android"' in qml and
+     'navigationDrawer.opened || root.activePage !== "map"' in qml and
+     'onActivated: root.navigateBack()' in qml and
+     'function navigateBack()' in qml and
+     'navigationDrawer.close()' in qml and
+     'openPage("map")' in qml),
+    ("desktop Escape returns to map", 'sequence: "Escape"' in qml and
+     'Qt.platform.os !== "android"' in qml),
     ("persistent map server settings", 'mapServerSettings' in main and
      'QSettings' in (root / "src/map_server_settings.cpp").read_text() and
      'mapServerSettings.save' in qml and 'IntValidator { bottom: 1; top: 65535 }' in qml and
