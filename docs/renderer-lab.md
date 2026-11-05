@@ -1,194 +1,141 @@
 # Qt Quick / bgfx rendering laboratory
 
-## Purpose and current status
+## Purpose and verified status
 
-This repository now contains a **minimal rendering experiment**, not yet the
-AOWIS Mobile survey application. The lab deliberately has no AOWIS MODEL, MAP,
-DVMDB, sensor or network dependency. Its purpose is to answer whether bgfx can
-reliably render a map beneath Qt Quick controls while Qt owns the native window
-and presentation lifecycle.
+AOWIS-Mobile currently contains an isolated renderer test, **not** a mobile
+survey editor. It examines whether Qt Quick can own a native OpenGL window,
+while bgfx uses its EGL context to draw under QML. No AOWIS MODEL, MAP, DVMDB,
+location, or editor dependencies are involved.
 
-**Status (5 November 2026):** a user-provided Linux screenshot demonstrates
-that the pinned bgfx direct-underlay experiment builds, produces bgfx debug
-characters and displays QML controls over the result. The repeated blue/yellow
-rows in that screenshot were generated intentionally by the previous test loop;
-the faint diagnostic behind the translucent header was expected underlay
-show-through, not proven GPU corruption.
+On **5 November 2026**, user-provided Linux screenshots showed the **earlier
+ASCII test scene** rendering under QML; dragging and zooming affected the bgfx
+output without obscuring the QML controls. Character-grid aliasing made some
+lines disappear at particular sample positions. This is **not** an indication
+of GPU line-rendering behavior.
 
-This is an **initial visual success, not an integration or performance pass**.
-Normal bgfx shader geometry, framebuffer restoration under complex scenes,
-resizing, mobile device lifecycle, GPU frame times, and Android have not been
-validated. No extraction into `AOWIS-RENDER` should occur yet.
+**Current implementation:** real GPU geometry has replaced that ASCII probe.
+It uses pinned vertex-color shaders, retained vertex buffers, and bgfx draw
+submissions. The GPU geometry build and visual composition on real hardware
+are **not yet verified**. Do not interpret source tests or frame counters as a
+GPU integration pass. No desktop GUI renderer extraction has been undertaken.
 
-This milestone does *not* extract the desktop renderer. Extracting the shared
-`AOWIS-RENDER` library remains a subsequent decision after integration evidence.
+## Dependencies and reproducible build
 
-## Dependency model
+`tools/init_bgfx.sh` pins `external/bgfx.cmake` to `v1.159.9485-574` and its
+nested bgfx/bx/bimg revisions. This is a temporary Git submodule, not shipped
+inside `mobile.zip`. CMake never fetches source dependencies.
 
-A **temporary** `external/bgfx.cmake` Git submodule is provisioned by
-`tools/init_bgfx.sh`. It is pinned to upstream release tag
-`v1.159.9485-574`, and its own pinned nested submodules provide matching
-versions of bgfx, bx and bimg. The script stages `.gitmodules` and the Git
-submodule pointer in the Mobile repository. Commit both alongside the source.
+The GPU geometry test uses `vs_cubes` and `fs_cubes`, **precompiled bgfx sample
+shaders from that exact pinned bgfx checkout**. `CMakeLists.txt` embeds both
+`glsl` (Linux OpenGL) and `essl` (Android OpenGL ES) binary pairs in Qt
+resources. It does not compile shaders at runtime, invoke shaderc during the
+build, or use shader binaries generated against unrelated bgfx versions.
+These are temporary test shaders and **not** the AOWIS-RENDER shader library.
 
-The patch ZIP cannot represent a Git gitlink by itself; run the installer once
-in your Git checkout after applying the source patch. Never vendor the
-submodule contents into `mobile.zip`. CMake will not download dependencies.
-
-The lab uses upstream [bgfx.cmake](https://github.com/bkaradzic/bgfx.cmake),
-with its examples, tools, tests, video decoding, and bgfx internal renderer
-thread disabled to limit the build and keep submission on the Qt render thread.
-
-## Linux commands
-
-Baseline (no dependency download needed):
+Linux:
 
 ```bash
-cmake -S . -B build-linux-lab -G Ninja -DAOWIS_MOBILE_WITH_BGFX=OFF
-cmake --build build-linux-lab -j 8
-./build-linux-lab/aowis-mobile-render-lab
-```
-
-One-time bgfx dependency provisioning:
-
-```bash
+# Provision bgfx only if it is not already initialized.
 ./tools/init_bgfx.sh
-```
-
-Experimental bgfx build and run:
-
-```bash
 cmake -S . -B build-linux-bgfx -G Ninja -DAOWIS_MOBILE_WITH_BGFX=ON
 cmake --build build-linux-bgfx -j 8
+ctest --test-dir build-linux-bgfx --output-on-failure
 ./build-linux-bgfx/aowis-mobile-render-lab --bgfx-underlay
 ```
 
-Linux requires the Qt 6.5+ Core, Gui, Qml, Quick and QuickControls2 development
-components, CMake 3.21+, a C++20 compiler and Ninja. The underlay probe
-requires an **EGL-backed** Qt OpenGL context (not GLX). On X11, selecting the
-EGL Qt xcb integration may be necessary, depending on available Qt plugins;
-for example, use `QT_XCB_GL_INTEGRATION=xcb_egl` if installed. On native
-Wayland, the Qt implementation must expose an EGL context.
+For QML without bgfx, run the executable without `--bgfx-underlay`, or build
+with `-DAOWIS_MOBILE_WITH_BGFX=OFF` in a separate build directory.
 
-For a build with bgfx linked but **not initialized**, launch without
-`--bgfx-underlay`; this is the QML baseline. The experimental mode is selected
-at process startup to avoid switching graphics-device ownership mid-frame.
+The experiment requires Qt 6.5+ Core/Gui/Qml/Quick/QuickControls2, C++20,
+CMake >=3.21, Ninja, a compatible GPU and an **EGL-backed Qt OpenGL context**.
+If the Qt xcb backend selects GLX, try `QT_XCB_GL_INTEGRATION=xcb_egl` on Linux
+when that Qt integration plugin is installed.
 
-## Android
+Android uses the Qt-provided Android kit, SDK/NDK and packaging. With bgfx ON,
+Android starts the experiment by default; `--baseline` is available on
+launchers that support custom arguments. Shader binaries are packaged inside
+the executable's Qt resource section, not loaded from the source checkout.
+Android compilation and device behavior are **not yet demonstrated**.
 
-Android is the first intended device target, using the **Android Qt 6.5+ kit**
-and matching CMake/toolchain configuration. Provision the git submodule first,
-then configure with the Qt-provided `qt-cmake` (or Qt Creator Android kit),
-build, package and deploy using the Qt Android toolchain. `QT_ANDROID_ABIS`,
-Android SDK/NDK versions and signing are intentionally taken from the
-installed Qt kit, not hardcoded into this repository. The app uses the Qt
-package template; there are no permissions or manifest customizations yet.
+## Actual render pipeline
 
-On Android, builds with `AOWIS_MOBILE_WITH_BGFX=ON` **automatically start
-in experimental mode**, because normal Android launchers do not forward custom
-CLI arguments. Builds with the option `OFF` run the QML baseline. `--baseline`
-can force the QML-only mode when an Android launcher does support custom
-arguments.
+- bgfx clears the map background in the Qt-owned OpenGL/EGL render pass.
+- A retained, world-space grid uses actual line primitives, with minor/major
+  colors. There is no character-cell sampling and no redraw-by-CPU on pan.
+- A small hydraulic-style demonstration network uses colored triangle meshes
+  for pipes and circular junction markers. It is synthetic test geometry, not
+  a NetworkHydraulic object.
+- One model-space geometry set is uploaded to GPU buffers during init. An
+  orthographic view matrix moves/scales the scene for all subsequent frames.
+  Input pan values are QML logical pixels, scaled by device pixel ratio.
+- Shader/program and vertex buffers are cleaned up before `bgfx::shutdown()`
+  on Qt Quick scene-graph invalidation.
+- QML owns map input, the header, status panel, buttons and app presentation.
+  Its baseline Canvas is hidden when bgfx is selected.
 
-## What is rendered
+Code boundaries: `gpu_scene_geometry` is dependency-free mesh generation and
+camera math; `gpu_scene_renderer` owns bgfx resources/draws; `render_lab` owns
+Qt Quick integration, cross-thread view values, lifecycle and timings.
 
-- Baseline: a Qt Quick Canvas draws a test grid and polyline.
-- Experimental underlay: bgfx clears the **same** framebuffer to dark blue,
-  submits a touch view, and draws a diagnostic character-grid scene with
-  line segments and nodes. The scene is generated by `src/probe_scene.cpp`
-  and displayed with `bgfx::dbgTextPrintf`, **not** a vertex/shader-based map.
-- Both: QML owns the opaque header and bottom status sheet, pointer/touch
-  handling, plus/minus zoom and recenter buttons.
-- QML sends zoom and pan state through `RenderLab::setView()` to atomic
-  values consumed by the Qt Quick render thread. Moving or scaling the scene
-  tests real input propagation to bgfx; it is not just a hidden Canvas update.
-- Status sheet reports actual C++ bgfx frame calls and initialization state,
-  alongside the current zoom and pan values. Frame counts alone are not
-  evidence of correct composition or high performance.
+## Frame diagnostics
 
-These two visual scenes are intentionally *not* identical and must not be used
-for GPU workload or energy comparisons. First prove correct graphics ownership;
-then implement a common scene and realistic frame pacing for benchmarks.
+The bottom panel reports:
 
-## How the direct-underlay experiment works
+- **bgfx submit CPU (ms):** elapsed wall-clock time for preparing the draw
+  submissions and `bgfx::frame(BGFX_FRAME_FLUSH)` on the render thread.
+  This may include waits or GL-driver work. It is **not** total Qt frame time.
+- **Frame interval (ms):** measured time between successive bgfx callbacks.
+  This is not a measurement of screen presentation latency or QML FPS.
+- **bgfx GPU (ms):** the bgfx stats GPU timestamp delta **only if supported and
+  positive**; otherwise `N/A`. These GPU counters may lag submitted frames.
+- **Draws:** bgfx's reported draw count, which can reflect an earlier frame.
 
-1. Select Qt Quick's OpenGL graphics API before the first QQuickWindow.
-2. Connect to `beforeRenderPassRecording` with `Qt::DirectConnection` so
-   all GL calls happen on Qt Quick's scenegraph render thread while Qt's main
-   render pass is active.
-3. Wrap calls in `beginExternalCommands()` / `endExternalCommands()` to isolate
-   Qt and external OpenGL state.
-4. Get the current Qt-owned EGL context from `QOpenGLContext` and pass it as
-   bgfx `Init.platformData.context`. Reject GLX and non-OpenGL configurations.
-5. Compile bgfx with `BGFX_CONFIG_MULTITHREADED=OFF`. Submit a view and
-   `bgfx::frame(BGFX_FRAME_FLUSH)` in that same callback. The pinned bgfx API
-   documents this flag as executing drawing without presenting the backbuffer.
-   Shutdown on scenegraph invalidation.
+These metrics are preliminary diagnostics, **not** credible power, thermal,
+end-to-end FPS, or direct-underlay-versus-texture performance comparisons.
 
-**Central unresolved risk:** although `BGFX_FRAME_FLUSH` requests no bgfx
-buffer presentation, bgfx still owns GPU state and manages render-target
-bindings inside a Qt-owned scenegraph render pass. Qt Quick also owns surface
-presentation. The mode can still exhibit missing map output, missing QML
-overlays, flicker, timing problems or backend-specific failures. The Qt
-external-command state fence does **not** guarantee that bgfx's framebuffer
-and viewport are the ones Qt Quick expects. bgfx must not be patched or forked
-before measuring alternatives.
+## Rendering integration limitations
 
-### Pinned bgfx API compatibility
+Qt Quick chooses the OpenGL graphics API before creating its first window.
+`RenderLab` connects to `beforeRenderPassRecording` on the scenegraph rendering
+thread, wraps bgfx calls in `beginExternalCommands()` /
+`endExternalCommands()`, borrows `QEGLContext`, and submits
+`bgfx::frame(BGFX_FRAME_FLUSH)`. bgfx's internal renderer thread remains OFF.
+Qt owns the swap, native window, resize, and scenegraph lifecycle.
 
-The pinned bgfx revision `9b636df330c81e11c84595651a291b6c59fb7396`
-uses `Init::swapChain.width/height` and `Init::reset` rather than the older
-`Init::resolution` fields. Its `bgfx::reset` accepts global flags and an
-optional `SwapChain*`, not separate width/height arguments.
+**Not yet guaranteed:** correct framebuffer binding under Qt redirected
+rendering, complete GL state restoration, shader compatibility on all devices,
+repeated Android foreground/background cycles, seamless resize, and precise
+frame pacing. The native underlay may ultimately be unsuitable. Do **not**
+extract the desktop renderer until this basic integration is verified.
 
-Qt owns the EGL drawable and its dimensions. The lab therefore uses
-`bgfx::reset(BGFX_RESET_NONE)` on Qt window-size changes, updates the bgfx view
-rectangle, and intentionally does **not** pass a window swapchain description:
-`Init::swapChain.nwh` is unset because Qt owns the surface. Actual resize
-correctness is part of the visual/device validation, not yet demonstrated.
+## Checks and next experiment
 
-A second unresolved issue is correct framebuffer ownership when the Qt scene
-graph renders through a redirect, offscreen buffer or Android-specific surface.
-Do not infer correct rendering merely from successful initialization.
-
-Qt documentation: [QQuickWindow custom rendering](https://doc.qt.io/qt-6/qquickwindow.html).
-bgfx source: [EGL context and swap handling](https://github.com/bkaradzic/bgfx/blob/master/src/glcontext_egl.cpp).
-
-## Test procedure and decision criteria
-
-1. **Baseline:** launch, resize, tap, drag, zoom and recenter. Record startup,
-   QML behavior and GPU backend.
-2. **Experimental:** verify the bgfx grid/connected-node characters are visible,
-   while the opaque QML header, status and controls are visually in front.
-   Check that dragging changes the **bgfx** pattern, +/− scales it, and
-   Center recenters it (rather than merely updating QML state).
-3. Check continuous animation for missing frames, flicker, incorrect layers,
-   wrong colors or tear artifacts; also test dragging/rapid resizing.
-4. On Android, background/foreground, screen off/on, rotate, keyboard/dialog
-   overlays and repeated launches. Record crashes and graphics warnings.
-5. Compare correctness before performance. If the Qt-owned surface is not
-   reliably composited, classify same-target underlay as **unproven/unsuitable**.
-6. Only after correctness: add equivalent render workloads, steady-state GPU
-   timings, 99th percentile frame pacing, thermal/battery measurements, and a
-   zero-copy texture or separate-surface adapter for A/B comparison.
-
-Do not prematurely choose the future shared renderer's platform API based on
-this one experimental path.
-
-## Diagnostics and local source test
-
-The debug-text scene intentionally uses glyphs rather than compiled shaders.
-It proves less than the eventual AOWIS map renderer, but it makes the initial
-ownership and Qt Quick input boundaries easy to inspect. A subsequent experiment
-must use the ordinary bgfx vertex/index/shader path with a controlled scene.
-
-The independent scene generator is unit-tested without Qt or bgfx:
+Dependency-free unit and source checks:
 
 ```bash
-c++ -std=c++20 -Wall -Wextra -Werror tests/probe_scene_tests.cpp src/probe_scene.cpp -o /tmp/aowis-mobile-probe-scene-tests
-/tmp/aowis-mobile-probe-scene-tests
+c++ -std=c++20 -Wall -Wextra -Werror \
+  tests/gpu_scene_geometry_tests.cpp src/gpu_scene_geometry.cpp \
+  -o /tmp/aowis-mobile-gpu-scene-tests
+/tmp/aowis-mobile-gpu-scene-tests
+python3 tests/verify_sources.py
 ```
 
-When building with CMake, `ctest --test-dir build-linux-bgfx --output-on-failure`
-also runs `aowis-mobile-probe-scene`. Passing this test does not demonstrate
-correct GPU composition.
+With Qt+bgfx, also run `ctest --test-dir build-linux-bgfx --output-on-failure`.
+Unit tests prove only scene/camera math, not GPU rendering.
+
+**User validation procedure:**
+
+1. Launch `--bgfx-underlay`. Look for colored grid lines, turquoise/brown
+   pipes and filled circular junctions, all drawn by GPU shaders.
+2. Drag, zoom in/out to 0.3x and 3x, recenter and resize repeatedly. Grid
+   lines should remain continuous (no ASCII sampling gaps); QML overlays must
+   stay opaque, crisp and responsive.
+3. Observe any missing vertices, shader errors, flicker, lost rendering,
+   black screen, corrupted UI, wrong device-pixel-ratio scaling or crashes.
+4. Capture the terminal log, diagnostics and a screenshot for review. Report
+   whether the bgfx GPU timing is available.
+5. Repeat on real Android hardware, including screen rotation, background,
+   foreground and display sleep. Only then benchmark alternative composition
+   paths with **equivalent** workloads and energy/frame-pacing measurements.
+
+This repository remains a deliberately disposable integration laboratory.

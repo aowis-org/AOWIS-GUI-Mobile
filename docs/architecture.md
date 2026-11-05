@@ -3,10 +3,11 @@
 ## Current repository state
 
 **Implemented here:** repository README, Apache-2.0 LICENSE, `.gitignore`,
-`tools/apply_patch.sh`, `tools/zip_mobile_project.sh`, and documentation.
+`tools/apply_patch.sh`, `tools/zip_mobile_project.sh`, documentation, and
+a small Qt Quick/bgfx GPU rendering laboratory.
 
-**Not implemented here:** Qt/CMake project, Android or iOS packaging, app UI,
-map renderer, GNSS integration, local persistence, new geographic MODEL types,
+**Not implemented here:** production Android or iOS packaging, complete app UI,
+production map renderer, GNSS integration, local persistence, new geographic MODEL types,
 OSM support, or DVMDB/mobile transport. These are target components.
 
 ## Proposed software structure
@@ -47,10 +48,11 @@ components where separation permits. Do **not** embed desktop QWidget docks,
 inspection panels or desktop pointer handling in the mobile UI. Mobile input,
 overlays, forms and lifecycle are separate concerns.
 
-**Proposed rendering experiment:** demonstrate a responsive 2D map in Qt
-Quick on an Android device, using bgfx if surface integration and frame
-ownership are practical. A separate mobile 2D renderer is acceptable if it
-shares data and geometry semantics. 3D is not necessary for the survey MVP.
+**Current rendering experiment:** the isolated Qt Quick/bgfx laboratory renders
+GPU geometry under a QML interface in a shared EGL context. Its Android
+behavior, timing and GPU composition are not yet validated. A separate mobile
+2D renderer remains an option if direct-underlay integration is unsuitable.
+3D is not necessary for the survey MVP.
 
 ### AOWIS-SERVER-MAP (existing elsewhere)
 

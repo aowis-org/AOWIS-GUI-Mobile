@@ -1,61 +1,64 @@
 #!/usr/bin/env python3
-"""Dependency-free structural checks for the experimental Qt Quick lab.
-
-These tests cannot replace compiling against Qt/bgfx or testing on a GPU.
-"""
+"""Static checks for the rendering experiment, not a GPU or Qt build test."""
 from pathlib import Path
 import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
 required = [
-    "CMakeLists.txt",
-    "src/main.cpp",
-    "src/render_lab.cpp",
-    "src/render_lab.h",
-    "src/probe_scene.cpp",
-    "src/probe_scene.h",
-    "tests/probe_scene_tests.cpp",
-    "qml/Main.qml",
-    "tools/init_bgfx.sh",
-    "docs/renderer-lab.md",
+    "CMakeLists.txt", "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
+    "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
+    "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
+    "tests/gpu_scene_geometry_tests.cpp", "qml/Main.qml",
+    "tools/init_bgfx.sh", "docs/renderer-lab.md",
 ]
 for path in required:
     assert (root / path).is_file(), path
 
 cmake = (root / "CMakeLists.txt").read_text()
 source = (root / "src/render_lab.cpp").read_text()
+scene = (root / "src/gpu_scene_renderer.cpp").read_text()
+geometry = (root / "src/gpu_scene_geometry.cpp").read_text()
 main = (root / "src/main.cpp").read_text()
 qml = (root / "qml/Main.qml").read_text()
 setup = (root / "tools/init_bgfx.sh").read_text()
 
 checks = [
-    ("explicit no-bgfx baseline option", "AOWIS_MOBILE_WITH_BGFX" in cmake),
-    ("qml resource type alias", "QT_RESOURCE_ALIAS Main.qml" in cmake),
-    ("no implicit git fetching from cmake", "FetchContent_" not in cmake),
-    ("no bgfx render thread", "BGFX_CONFIG_MULTITHREADED OFF" in cmake),
+    ("qml-only baseline still available", "AOWIS_MOBILE_WITH_BGFX" in cmake and "Canvas {" in qml),
+    ("no dependency fetching in CMake", "FetchContent_" not in cmake),
+    ("single Qt-owned render thread", "BGFX_CONFIG_MULTITHREADED OFF" in cmake),
+    ("Qt external GL state fence", "beginExternalCommands" in source and "endExternalCommands" in source),
     ("Qt Quick rendering callback", "beforeRenderPassRecording" in source),
-    ("Qt GL state fence", "beginExternalCommands" in source and "endExternalCommands" in source),
-    ("borrowed Qt EGL context", "nativeInterface<QNativeInterface::QEGLContext>" in source),
-    ("bgfx submits without swapping Qt's surface", "bgfx::frame(BGFX_FRAME_FLUSH);" in source),
-    ("current bgfx init API", "init.swapChain.width" in source and "init.swapChain.height" in source and "init.reset" in source),
-    ("current bgfx reset API", "bgfx::reset(BGFX_RESET_NONE);" in source),
-    ("old bgfx resolution API absent", "init.resolution" not in source and not re.search(r"bgfx::reset\s*\([^)]*,[^)]*,[^)]*\)", source)),
-    ("QML view state reaches bgfx", "setView" in source and "viewZoom.load" in source and "publishView()" in qml),
-    ("bgfx diagnostic scene is interactive", "AowisMobileProbe::createScene" in source and "probe_scene.cpp" in cmake),
-    ("opaque QML panels", "#ff142533" in qml and "#ff152938" in qml),
-    ("unit test enabled", "aowis-mobile-probe-scene" in cmake),
-    ("scenegraph shutdown", "sceneGraphInvalidated" in source and "bgfx::shutdown()" in source),
-    ("Android chooses test on launch", "androidExperimentalDefault = true" in main),
-    ("QML baseline graphic", "Canvas {" in qml),
-    ("QML interactive map", "MouseArea {" in qml),
-    ("QML status and controls", "lab.status" in qml and "onClicked:" in qml),
-    ("known git pin", "v1.159.9485-574" in setup),
-    ("gitlink committed", "add .gitmodules external/bgfx.cmake" in setup),
-    ("no auto in new C++", all(not re.search(r"\bauto\b", (root / n).read_text()) for n in ["src/main.cpp", "src/render_lab.cpp", "src/render_lab.h", "src/probe_scene.h", "src/probe_scene.cpp", "tests/probe_scene_tests.cpp"])),
+    ("borrowed EGL context", "nativeInterface<QNativeInterface::QEGLContext>" in source),
+    ("no bgfx swap", "bgfx::frame(BGFX_FRAME_FLUSH);" in source),
+    ("current pinned bgfx init", "init.swapChain.width" in source and "init.reset" in source),
+    ("current bgfx reset", "bgfx::reset(BGFX_RESET_NONE);" in source),
+    ("pinned matching GL/GLES shaders", all(s in cmake for s in ["glsl/vs_cubes.bin", "essl/vs_cubes.bin", "glsl/fs_cubes.bin", "essl/fs_cubes.bin"])),
+    ("shader binaries embedded in application", "qt_add_resources(aowis-mobile-render-lab" in cmake),
+    ("ordinary GPU shader program", "bgfx::createProgram" in scene and "bgfx::createShader" in scene),
+    ("retained GPU vertex buffers", "bgfx::createVertexBuffer" in scene),
+    ("GPU draw submissions", "bgfx::submit" in scene and "BGFX_STATE_PT_LINES" in scene),
+    ("pan/zoom through GPU camera matrix", "setViewTransform" in scene and "makeCamera" in scene),
+    ("no CPU regeneration in rendering callback", "createScene()" not in source and "createScene()" not in scene.split("void GpuSceneRenderer::render")[1]),
+    ("continuous 2-vertex line segments", "push(target, {coordinate, -6144.0f}" in geometry),
+    ("mesh triangles for pipes and nodes", "scene.pipeTriangles" in geometry and "scene.nodeTriangles" in geometry),
+    ("real CPU timings labeled correctly", "submitMicroseconds" in source and "frameIntervalMicroseconds" in source),
+    ("GPU stats only if measured", "gpuTimerFreq > 0" in source and 'QStringLiteral("N/A")' in source),
+    ("QML displays performance diagnostics", "lab.timings" in qml),
+    ("no bgfx ASCII renderer remains", "dbgTextPrintf" not in source and "dbgTextClear" not in source),
+    ("unit geometry test", "aowis-mobile-gpu-scene" in cmake),
+    ("render-thread cleanup", "sceneGraphInvalidated" in source and "gpuScene->release()" in source),
+    ("Android default test mode", "androidExperimentalDefault = true" in main),
+    ("QML controls", "MouseArea {" in qml and "onClicked:" in qml),
+    ("same bgfx pin", "v1.159.9485-574" in setup),
+    ("style: no auto type inference", all(not re.search(r"\bauto\b", (root / name).read_text()) for name in [
+        "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
+        "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
+        "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h", "tests/gpu_scene_geometry_tests.cpp"
+    ])),
 ]
-for name, result in checks:
-    print(f"{'PASS' if result else 'FAIL'}: {name}")
-if not all(result for _, result in checks):
+for name, ok in checks:
+    print(f"{'PASS' if ok else 'FAIL'}: {name}")
+if not all(ok for _, ok in checks):
     sys.exit(1)
-print("Structural checks passed (not a Qt/bgfx compile or GPU test).")
+print("Static checks passed; native Qt/bgfx compilation and GPU test still required.")

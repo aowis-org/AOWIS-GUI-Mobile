@@ -1,5 +1,7 @@
 #include "render_lab.h"
-#include "probe_scene.h"
+#if AOWIS_LAB_WITH_BGFX
+#include "gpu_scene_renderer.h"
+#endif
 
 #include <QDebug>
 #include <QOpenGLContext>
@@ -9,8 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <string>
-#include <vector>
+#include <chrono>
 
 #if AOWIS_LAB_WITH_BGFX
 #include <bgfx/bgfx.h>
@@ -50,7 +51,8 @@ QString RenderLab::status() const
     case Phase::NoEglContext: return QStringLiteral("No external EGL context available");
     case Phase::WrongGraphicsApi: return QStringLiteral("Qt Quick is not using OpenGL");
     case Phase::InitFailed: return QStringLiteral("bgfx::init() failed");
-    case Phase::Rendering: return QStringLiteral("bgfx frame calls active (visual test required)");
+    case Phase::GeometryInitFailed: return QStringLiteral("GPU vertex/shader setup failed (check log)");
+    case Phase::Rendering: return QStringLiteral("GPU geometry submitted; inspect actual scene");
     case Phase::Destroyed: return QStringLiteral("Scene graph released");
     }
     return QStringLiteral("Unknown");
@@ -63,8 +65,24 @@ QString RenderLab::details() const
     if (this->phase.load(std::memory_order_relaxed) == Phase::NoEglContext)
         return QStringLiteral("Requires a Qt-owned EGL/OpenGL context; GLX is not supported by this probe.");
     if (this->phase.load(std::memory_order_relaxed) == Phase::Rendering)
-        return QStringLiteral("Verify bgfx color/text AND QML overlays remain visible. Frame count alone is NOT proof of correct composition.");
+        return QStringLiteral("Vertex-color shaders: grid, pipes and nodes. Verify geometry + QML overlay during resize and gestures.");
     return QStringLiteral("Experimental: bgfx may swap a Qt-owned EGL surface. See docs/renderer-lab.md.");
+}
+
+QString RenderLab::timings() const
+{
+    if (!this->requestedBgfx)
+        return QStringLiteral("Timing: baseline; no bgfx submission");
+    const int64_t submit = this->submitMicroseconds.load(std::memory_order_relaxed);
+    const int64_t interval = this->frameIntervalMicroseconds.load(std::memory_order_relaxed);
+    const int64_t gpu = this->gpuMicroseconds.load(std::memory_order_relaxed);
+    const QString gpuText = gpu < 0 ? QStringLiteral("N/A")
+        : QStringLiteral("%1 ms").arg(double(gpu) / 1000.0, 0, 'f', 2);
+    return QStringLiteral("bgfx submit CPU: %1 ms  |  frame interval: %2 ms\n"
+                          "bgfx GPU (if supported): %3  |  draws: %4")
+        .arg(double(submit) / 1000.0, 0, 'f', 2)
+        .arg(double(interval) / 1000.0, 0, 'f', 2)
+        .arg(gpuText).arg(this->drawCalls.load(std::memory_order_relaxed));
 }
 
 void RenderLab::setView(double zoom, double panX, double panY)
@@ -138,7 +156,17 @@ void RenderLab::initializeOnRenderThread()
     this->initialized = true;
     this->lastWidth.store(static_cast<int>(init.swapChain.width));
     this->lastHeight.store(static_cast<int>(init.swapChain.height));
-    bgfx::setDebug(BGFX_DEBUG_TEXT);
+    bgfx::setDebug(BGFX_DEBUG_NONE);
+    this->gpuScene = new GpuSceneRenderer();
+    if (!this->gpuScene->initialize())
+    {
+        delete this->gpuScene;
+        this->gpuScene = nullptr;
+        bgfx::shutdown();
+        this->initialized = false;
+        this->phase.store(Phase::GeometryInitFailed);
+        return;
+    }
     this->phase.store(Phase::Rendering);
     qInfo("AOWIS render lab: bgfx initialized with Qt EGL context");
 #else
@@ -179,29 +207,36 @@ void RenderLab::renderOnRenderThread()
         this->lastWidth.store(width);
         this->lastHeight.store(height);
     }
-    bgfx::setViewRect(0, 0, 0, static_cast<uint16_t>(std::min(width, 65535)),
-                      static_cast<uint16_t>(std::min(height, 65535)));
-    bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x102f45ff, 1.0f, 0);
-    bgfx::touch(0);
-    bgfx::dbgTextClear();
-    const double zoom = this->viewZoom.load(std::memory_order_relaxed);
-    const double panX = this->viewPanX.load(std::memory_order_relaxed);
-    const double panY = this->viewPanY.load(std::memory_order_relaxed);
-    // Leave the translucent/opaque QML panels outside the diagnostic content.
-    bgfx::dbgTextPrintf(2, 5, 0x0b, "BGFX diagnostic scene - QML handles pan / zoom / tap");
-    const int columns = std::clamp(width / 8 - 4, 12, 95);
-    const int rows = std::clamp(height / 20 - 15, 6, 28);
-    const std::vector<std::string> scene =
-        AowisMobileProbe::createScene(columns, rows, zoom, panX, panY);
-    for (size_t row = 0; row < scene.size(); ++row)
-    {
-        // Background palette index zero avoids opaque blue/yellow text bands.
-        bgfx::dbgTextPrintf(2, static_cast<uint16_t>(8 + row), 0x0a,
-                            "%s", scene[row].c_str());
-    }
-    // Pinned bgfx supports FLUSH: execute commands without presenting the
-    // backbuffer. The Qt Quick scene graph presents after this callback.
+    const std::chrono::steady_clock::time_point tick = std::chrono::steady_clock::now();
+    const int64_t nowMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+        tick.time_since_epoch()).count();
+    if (this->lastFrameTimestampMicroseconds != 0)
+        this->frameIntervalMicroseconds.store(
+            nowMicroseconds - this->lastFrameTimestampMicroseconds, std::memory_order_relaxed);
+    this->lastFrameTimestampMicroseconds = nowMicroseconds;
+
+    const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    const double devicePixelRatio = this->window->devicePixelRatio();
+    this->gpuScene->render(width, height, devicePixelRatio,
+                           this->viewZoom.load(std::memory_order_relaxed),
+                           this->viewPanX.load(std::memory_order_relaxed),
+                           this->viewPanY.load(std::memory_order_relaxed));
+    // Do not present bgfx's borrowed context: Qt Quick owns swap/presentation.
     bgfx::frame(BGFX_FRAME_FLUSH);
+    const bgfx::Stats *stats = bgfx::getStats();
+    if (stats != nullptr)
+    {
+        this->drawCalls.store(stats->numDraw, std::memory_order_relaxed);
+        if (stats->gpuTimerFreq > 0 && stats->gpuTimeEnd > stats->gpuTimeBegin)
+        {
+            this->gpuMicroseconds.store(
+                (stats->gpuTimeEnd - stats->gpuTimeBegin) * INT64_C(1000000)
+                  / stats->gpuTimerFreq, std::memory_order_relaxed);
+        }
+    }
+    const int64_t elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    this->submitMicroseconds.store(elapsed, std::memory_order_relaxed);
     this->window->endExternalCommands();
     this->renderedFrames.fetch_add(1, std::memory_order_relaxed);
 #endif
@@ -212,6 +247,12 @@ void RenderLab::shutdownOnRenderThread()
 #if AOWIS_LAB_WITH_BGFX
     if (this->initialized)
     {
+        if (this->gpuScene != nullptr)
+        {
+            this->gpuScene->release();
+            delete this->gpuScene;
+            this->gpuScene = nullptr;
+        }
         bgfx::shutdown();
         this->initialized = false;
     }
@@ -219,6 +260,11 @@ void RenderLab::shutdownOnRenderThread()
     this->phase.store(Phase::Destroyed);
     this->lastWidth.store(0);
     this->lastHeight.store(0);
+    this->lastFrameTimestampMicroseconds = 0;
+    this->submitMicroseconds.store(0);
+    this->frameIntervalMicroseconds.store(0);
+    this->gpuMicroseconds.store(-1);
+    this->drawCalls.store(0);
 }
 
 void RenderLab::refreshStatus()

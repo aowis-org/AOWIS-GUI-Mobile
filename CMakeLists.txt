@@ -16,8 +16,8 @@ qt_add_executable(aowis-mobile-render-lab
     src/main.cpp
     src/render_lab.cpp
     src/render_lab.h
-    src/probe_scene.cpp
-    src/probe_scene.h
+    src/gpu_scene_geometry.cpp
+    src/gpu_scene_geometry.h
 )
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
@@ -56,6 +56,28 @@ if(AOWIS_MOBILE_WITH_BGFX)
     set(BGFX_CONFIG_MULTITHREADED OFF CACHE BOOL "" FORCE)
     set(BGFX_CONFIG_VIDEO OFF CACHE BOOL "" FORCE)
     add_subdirectory("${AOWIS_BGFX_CMAKE_DIR}" "${CMAKE_BINARY_DIR}/bgfx-dependency" EXCLUDE_FROM_ALL)
+    # Use the pinned bgfx sample's already compiled, matched vertex-color
+    # shaders. No shaderc cross-compilation or downloaded shader pack needed.
+    # QRC embeds both GL and GLES variants for Linux + Android deployment.
+    set(AOWIS_BGFX_SHADER_ROOT "${AOWIS_BGFX_CMAKE_DIR}/bgfx/examples/runtime/shaders")
+    set(AOWIS_BGFX_SHADER_FILES
+        "${AOWIS_BGFX_SHADER_ROOT}/glsl/vs_cubes.bin"
+        "${AOWIS_BGFX_SHADER_ROOT}/glsl/fs_cubes.bin"
+        "${AOWIS_BGFX_SHADER_ROOT}/essl/vs_cubes.bin"
+        "${AOWIS_BGFX_SHADER_ROOT}/essl/fs_cubes.bin"
+    )
+    foreach(AOWIS_SHADER IN LISTS AOWIS_BGFX_SHADER_FILES)
+        if(NOT EXISTS "${AOWIS_SHADER}")
+            message(FATAL_ERROR "Missing pinned bgfx example shader: ${AOWIS_SHADER}")
+        endif()
+    endforeach()
+    qt_add_resources(aowis-mobile-render-lab "aowis_lab_vertex_color_shaders"
+        PREFIX "/aowis_lab/shaders"
+        BASE "${AOWIS_BGFX_SHADER_ROOT}"
+        FILES ${AOWIS_BGFX_SHADER_FILES}
+    )
+    target_sources(aowis-mobile-render-lab PRIVATE
+        src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
     target_link_libraries(aowis-mobile-render-lab PRIVATE bgfx)
     target_compile_definitions(aowis-mobile-render-lab PRIVATE AOWIS_LAB_WITH_BGFX=1)
 else()
@@ -75,12 +97,12 @@ install(TARGETS aowis-mobile-render-lab
     RUNTIME DESTINATION bin
 )
 
-# Pure C++ diagnostic-scene test: no bgfx, Qt, or GPU context required.
+# Pure C++ geometry/camera test: no bgfx, Qt, or GPU context required.
 include(CTest)
 if(BUILD_TESTING)
-    add_executable(aowis-mobile-probe-scene-tests
-        tests/probe_scene_tests.cpp
-        src/probe_scene.cpp
+    add_executable(aowis-mobile-gpu-scene-tests
+        tests/gpu_scene_geometry_tests.cpp
+        src/gpu_scene_geometry.cpp
     )
-    add_test(NAME aowis-mobile-probe-scene COMMAND aowis-mobile-probe-scene-tests)
+    add_test(NAME aowis-mobile-gpu-scene COMMAND aowis-mobile-gpu-scene-tests)
 endif()

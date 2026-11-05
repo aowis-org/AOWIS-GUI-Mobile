@@ -20,7 +20,8 @@ semantics**.
 
 > **Repository status (2026-11-05):** The repo contains a runnable-source
 > **Qt Quick rendering laboratory** and the initial, experimental bgfx underlay
-> code path. The experimental integration is **not yet runtime-verified**.
+> code path. The initial ASCII underlay was visually verified on Linux;
+> the current GPU vertex/shader test is **not yet runtime-verified**.
 > There is no survey/GPS/OSM/hydraulic editor, mobile data store or sync yet.
 
 ## Renderer laboratory

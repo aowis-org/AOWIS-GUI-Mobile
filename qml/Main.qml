@@ -23,7 +23,7 @@ Window {
     Component.onCompleted: publishView()
 
     // In baseline mode the grid is rendered by Qt Quick. In bgfx mode its
-    // background and debug text come from bgfx, never from this QML Canvas.
+    // background and GPU geometry come from bgfx, never from this QML Canvas.
     Canvas {
         id: referenceMap
         anchors.fill: parent
@@ -119,7 +119,8 @@ Window {
                 spacing: 6
                 Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                 Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
-                Label { text: "bgfx frame calls: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: "bgfx frames: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                 Label { text: "Zoom: " + root.viewZoom.toFixed(2) + "×  |  Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY); color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12 }
             }
         }
