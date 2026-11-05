@@ -20,11 +20,17 @@ android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
     echo 'Container Android toolchain is incomplete; rebuild using ./prepare_android_docker.sh.' >&2
     exit 1
 }
+render_cmake_args=()
 if [[ "$bgfx" == ON ]]; then
     [[ -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]] || {
         echo 'bgfx submodules missing; run ./tools/init_bgfx.sh on the host.' >&2
         exit 1
     }
+    [[ -f "${AOWIS_ANDROID_RENDER_SOURCE_DIR:-}/CMakeLists.txt" ]] || {
+        echo 'AOWIS-GUI-Render checkout missing from Android container.' >&2
+        exit 1
+    }
+    render_cmake_args=(-DAOWIS_RENDER_SOURCE_DIR="$AOWIS_ANDROID_RENDER_SOURCE_DIR")
 fi
 
 # Preserve the Android debug certificate between Docker runs. The host binds
@@ -51,7 +57,8 @@ echo "Build: $build_dir"
     -DQT_HOST_PATH="$qt_host" \
     -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
     -DANDROID_NDK_ROOT="$ndk" \
-    -DAOWIS_MOBILE_WITH_BGFX="$bgfx"
+    -DAOWIS_MOBILE_WITH_BGFX="$bgfx" \
+    "${render_cmake_args[@]}"
 cmake --build "$build_dir" --target aowis-mobile_make_apk --parallel "$jobs"
 
 # Verify the actual produced APK has the same signature as the persistent

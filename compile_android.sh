@@ -207,6 +207,20 @@ command -v docker >/dev/null 2>&1 || die 'Docker is missing (Arch: sudo pacman -
 if [[ "$bgfx" == ON && ! -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]]; then
     die 'bgfx is not initialized. Run ./tools/init_bgfx.sh first.'
 fi
+# The Docker container sees only /project unless we explicitly mount a sibling
+# Render checkout. Always provide one read-only renderer mount, whether the
+# checkout is nested or located beside Mobile.
+renderer_mount=()
+if [[ "$bgfx" == ON ]]; then
+    renderer_host="${AOWIS_RENDER_SOURCE_DIR:-$project_dir/external/AOWIS-GUI-Render}"
+    if [[ ! -f "$renderer_host/CMakeLists.txt" && -z "${AOWIS_RENDER_SOURCE_DIR:-}" ]]; then
+        renderer_host="$project_dir/../AOWIS-GUI-Render"
+    fi
+    [[ -f "$renderer_host/CMakeLists.txt" ]] ||
+        die 'AOWIS-GUI-Render missing: initialize it under external/ or use a sibling checkout.'
+    renderer_host="$(realpath -- "$renderer_host")"
+    renderer_mount=(-v "$renderer_host:/aowis-render:ro")
+fi
 jobs="${AOWIS_ANDROID_JOBS:-8}"
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || die 'AOWIS_ANDROID_JOBS must be a positive integer.'
 
@@ -237,6 +251,7 @@ echo "=== Compiling Android APK with Docker: $AOWIS_ANDROID_IMAGE ==="
 docker run --rm --network="${AOWIS_DOCKER_RUN_NETWORK:-host}" \
     --user "$(id -u):$(id -g)" \
     -v "$project_dir:/project" -w /project \
+    "${renderer_mount[@]}" \
     -v "$cache_root:/gradle-cache" \
     -v "$signing_dir:/tmp/.android" \
     -e HOME=/tmp \
@@ -246,6 +261,7 @@ docker run --rm --network="${AOWIS_DOCKER_RUN_NETWORK:-host}" \
     -e "AOWIS_ANDROID_NDK_VERSION=$AOWIS_ANDROID_NDK_VERSION" \
     -e "AOWIS_ANDROID_BUILD_TOOLS_VERSION=$AOWIS_ANDROID_BUILD_TOOLS_VERSION" \
     -e "AOWIS_ANDROID_BGFX=$bgfx" \
+    -e AOWIS_ANDROID_RENDER_SOURCE_DIR=/aowis-render \
     -e "AOWIS_ANDROID_BUILD_NAME=$build_name" \
     -e "AOWIS_ANDROID_JOBS=$jobs" \
     "$AOWIS_ANDROID_IMAGE" \

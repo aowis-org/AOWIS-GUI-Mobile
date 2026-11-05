@@ -6,10 +6,12 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
-mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/bgfx.cmake/bgfx/include/bgfx" "$work/bin" "$work/cache"
+mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/bgfx.cmake/bgfx/include/bgfx" \
+    "$work/repo/external/AOWIS-GUI-Render" "$work/bin" "$work/cache"
 cp "$root/compile_android.sh" "$root/prepare_android_docker.sh" "$work/repo/"
 cp "$root/tools/qt-android/"*.sh "$work/repo/tools/qt-android/"
-touch "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h"
+touch "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" \
+    "$work/repo/external/AOWIS-GUI-Render/CMakeLists.txt"
 cat > "$work/bin/docker" <<'MOCK_DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -83,6 +85,8 @@ export FAKE_IMAGE_EXISTS=0 FAKE_DEVICE_COUNT=0
 run_case
 assert_log 'docker build '
 assert_log 'docker run '
+assert_log ':/aowis-render:ro'
+assert_log 'AOWIS_ANDROID_RENDER_SOURCE_DIR=/aowis-render'
 assert_not_log 'adb -s '
 # The signing key directory lives OUTSIDE the source tree and is mounted for
 # every Docker invocation, regardless of local checkout names or build mode.

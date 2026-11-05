@@ -175,3 +175,13 @@ that tile buffers and shaders are released/rebuilt without persistent black
 frames, stale geometry or accumulation of RSS. See the
 [Android device checklist](android-renderer-test.md). Only then consider
 extraction into `AOWIS-GUI-Render`, preserving Desktop GUI and WASM behavior.
+
+## Shared renderer device integration
+
+`AOWIS-GUI-Render` supplies `AOWIS::RenderDevice`, now linked by Mobile. It
+mediates bgfx device initialization/retirement on Qt Quick's scene-graph
+render thread, while Qt retains the EGL context and swap ownership. Mobile's
+vertex-color sample scene and `BGFX_FRAME_FLUSH` path are intentionally still
+local; the production map/terrain renderer interface has not been integrated.
+Set `AOWIS_RENDER_SOURCE_DIR` if the repo is not a sibling checkout or a
+submodule at `external/AOWIS-GUI-Render`.

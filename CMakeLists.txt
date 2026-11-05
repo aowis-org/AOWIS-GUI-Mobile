@@ -117,9 +117,22 @@ if(AOWIS_MOBILE_WITH_BGFX)
         BASE "${AOWIS_BGFX_SHADER_ROOT}"
         FILES ${AOWIS_BGFX_SHADER_FILES}
     )
+    # Shared GPU device lifecycle and view/target ownership. Mobile retains
+    # the pinned bgfx.cmake runtime and its Qt-owned EGL underlay.
+    set(AOWIS_RENDER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-GUI-Render"
+        CACHE PATH "AOWIS-GUI-Render source checkout")
+    if(NOT EXISTS "${AOWIS_RENDER_SOURCE_DIR}/CMakeLists.txt")
+        set(AOWIS_RENDER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../AOWIS-GUI-Render")
+    endif()
+    if(NOT EXISTS "${AOWIS_RENDER_SOURCE_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "AOWIS-GUI-Render missing. Initialize external/AOWIS-GUI-Render "
+            "or place the Render checkout beside Mobile.")
+    endif()
+    set(AOWIS_RENDER_BUILD_MAP_CORE OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${AOWIS_RENDER_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-render" EXCLUDE_FROM_ALL)
     target_sources(aowis-mobile PRIVATE
         src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
-    target_link_libraries(aowis-mobile PRIVATE bgfx)
+    target_link_libraries(aowis-mobile PRIVATE AOWIS::RenderDevice)
     if(ANDROID)
         # bgfx's EGL backend calls ANativeWindow_setBuffersGeometry. This
         # function is provided by the Android NDK's libandroid, not EGL/GLES.

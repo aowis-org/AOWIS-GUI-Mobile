@@ -59,6 +59,7 @@ namespace
 
 #if AOWIS_LAB_WITH_BGFX
 #include <bgfx/bgfx.h>
+#include "map/bgfx/bgfx_device_manager.h"
 #endif
 
 RenderLab::RenderLab(bool requestedBgfx, QObject *parent)
@@ -531,7 +532,11 @@ void RenderLab::initializeOnRenderThread()
     // The bgfx context is borrowed from Qt; no second render thread is used.
     // The frame is submitted with BGFX_FRAME_FLUSH to request rendering
     // without a bgfx buffer swap. Qt remains the presentation owner.
-    if (!bgfx::init(init))
+    BgfxDeviceManager &device = BgfxDeviceManager::shared();
+    if (!device.prepareFor(this) ||
+        !device.initialize(this, init,
+            [this]() { return this->initialized; },
+            [this]() { this->shutdownOnRenderThread(); }))
     {
         this->phase.store(Phase::InitFailed);
         qWarning("AOWIS render lab: bgfx::init failed");
@@ -547,7 +552,7 @@ void RenderLab::initializeOnRenderThread()
     {
         delete this->gpuScene;
         this->gpuScene = nullptr;
-        bgfx::shutdown();
+        device.shutdown(this);
         this->initialized = false;
         this->phase.store(Phase::GeometryInitFailed);
         return;
@@ -678,7 +683,7 @@ void RenderLab::shutdownOnRenderThread()
             delete this->gpuScene;
             this->gpuScene = nullptr;
         }
-        bgfx::shutdown();
+        BgfxDeviceManager::shared().shutdown(this);
         this->initialized = false;
     }
 #endif
