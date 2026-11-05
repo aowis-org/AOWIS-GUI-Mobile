@@ -40,4 +40,4 @@ echo "Build: $build_dir"
     -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
     -DANDROID_NDK_ROOT="$ndk" \
     -DAOWIS_MOBILE_WITH_BGFX="$bgfx"
-cmake --build "$build_dir" --target aowis-mobile-render-lab_make_apk --parallel "$jobs"
+cmake --build "$build_dir" --target aowis-mobile_make_apk --parallel "$jobs"

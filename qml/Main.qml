@@ -8,7 +8,7 @@ Window {
     height: 800
     // The C++ side shows this after RenderLab::attach() is complete.
     visible: false
-    title: "AOWIS Mobile — Renderer Lab"
+    title: "AOWIS"
     color: "#102f45"
     property real viewZoom: 1.0
     property real dragX: 0

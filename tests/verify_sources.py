@@ -34,7 +34,7 @@ checks = [
     ("current pinned bgfx init", "init.swapChain.width" in source and "init.reset" in source),
     ("current bgfx reset", "bgfx::reset(BGFX_RESET_NONE);" in source),
     ("pinned matching GL/GLES shaders", all(s in cmake for s in ["glsl/vs_cubes.bin", "essl/vs_cubes.bin", "glsl/fs_cubes.bin", "essl/fs_cubes.bin"])),
-    ("shader binaries embedded in application", "qt_add_resources(aowis-mobile-render-lab" in cmake),
+    ("shader binaries embedded in application", "qt_add_resources(aowis-mobile" in cmake),
     ("ordinary GPU shader program", "bgfx::createProgram" in scene and "bgfx::createShader" in scene),
     ("retained GPU vertex buffers", "bgfx::createVertexBuffer" in scene),
     ("GPU draw submissions", "bgfx::submit" in scene and "BGFX_STATE_PT_LINES" in scene),
@@ -54,7 +54,19 @@ checks = [
     ("scene graph rebuild hints on Android", "setPersistentSceneGraph(false)" in main and "setPersistentGraphics(false)" in main),
     ("background pauses frame timer", "refresh.stop()" in main and "applicationStateChanged" in main),
     ("render lifecycle diagnostics", "sceneGraphStarts" in source and "sceneGraphStops" in source and "bgfxInitializations" in source),
-    ("Android manifest via Qt", 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile.renderlab"' in cmake),
+    ("Android manifest via Qt", 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"' in cmake),
+    ("app binary identity", "qt_add_executable(aowis-mobile" in cmake and
+     "qt_add_qml_module(aowis-mobile" in cmake),
+    ("production QML module", "URI AOWIS.Mobile" in cmake and
+     'QStringLiteral("AOWIS.Mobile")' in main),
+    ("Android launcher label", 'QT_ANDROID_APP_NAME "AOWIS"' in cmake),
+    ("Qt and QML window titles", 'QStringLiteral("AOWIS")' in main and
+     'title: "AOWIS"' in qml),
+    ("Android launch package", 'shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
+     in (root / "compile_android.sh").read_text()),
+    ("Linux executable", '--target aowis-mobile' in (root / "compile_linux.sh").read_text()),
+    ("Linux desktop entry", 'Name=AOWIS\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text() and
+     'Exec=aowis-mobile\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text()),
     ("Android Docker build tooling exists", (root / "compile_android.sh").is_file() and (root / "prepare_android_docker.sh").is_file() and (root / "tools/qt-android/Dockerfile").is_file()),
     ("same bgfx pin", "v1.159.9485-574" in setup),
     ("style: no auto type inference", all(not re.search(r"\bauto\b", (root / name).read_text()) for name in [

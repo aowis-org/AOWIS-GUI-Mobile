@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=AOWIS Mobile (Renderer Lab)
-Comment=Qt Quick and bgfx mobile rendering laboratory
-Exec=aowis-mobile-render-lab
+Name=AOWIS
+Comment=AOWIS geographic field survey and mapping
+Exec=aowis-mobile
 Icon=org.aowis.mobile
 Terminal=false
 Categories=Graphics;Development;

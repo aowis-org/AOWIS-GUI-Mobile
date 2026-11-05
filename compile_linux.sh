@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# AOWIS Mobile Qt Quick/bgfx laboratory: targeted native Linux build.
+# AOWIS desktop Qt Quick/bgfx app: targeted native Linux build.
 # Use Arch's installed Qt 6, never Android's Docker Qt cross-toolchain.
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
@@ -80,7 +80,7 @@ cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
     -DAOWIS_MOBILE_WITH_BGFX="$BGFX" \
     -DBUILD_TESTING="$TESTING"
 # Build only the application and its actual dependencies, not every test/tool.
-cmake --build "$BUILD_DIR" --target aowis-mobile-render-lab --parallel "$JOBS"
+cmake --build "$BUILD_DIR" --target aowis-mobile --parallel "$JOBS"
 
 if "$run_tests"; then
     cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests --parallel "$JOBS"
@@ -88,11 +88,11 @@ if "$run_tests"; then
 fi
 
 if "$build_only"; then
-    printf '=== Linux application ready: %s/aowis-mobile-render-lab ===\n' "$BUILD_DIR"
+    printf '=== Linux application ready: %s/aowis-mobile ===\n' "$BUILD_DIR"
     exit 0
 fi
 
 if "$baseline"; then
-    exec "$BUILD_DIR/aowis-mobile-render-lab" --baseline
+    exec "$BUILD_DIR/aowis-mobile" --baseline
 fi
-exec "$BUILD_DIR/aowis-mobile-render-lab" --bgfx-underlay
+exec "$BUILD_DIR/aowis-mobile" --bgfx-underlay

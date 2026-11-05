@@ -18,16 +18,15 @@ These workflows share map navigation, geometry tools, GPS input, feature
 selection and attribute editing, but they **do not share the same persistence
 semantics**.
 
-> **Repository status (2026-11-05):** The repo contains a runnable-source
-> **Qt Quick rendering laboratory** and the initial, experimental bgfx underlay
-> code path. The initial ASCII underlay was visually verified on Linux;
-> the GPU vertex/shader underlay has also been **visually verified on Linux**.
-> The Android ARM64 APK **builds successfully** entirely inside Docker on
-> Arch Linux, and the same Qt Quick/bgfx probe has now been **visually verified
-> on a real Android phone** (2026-11-05).
-> There is no survey/GPS/OSM/hydraulic editor, mobile data store or sync yet.
+> **Current implementation (2026-11-05):** The runnable **AOWIS** application
+> uses Qt Quick with bgfx direct-underlay rendering on Linux and Android.
+> The GPU scene and QML interaction have been visually verified on both platforms,
+> including a real Android phone. The current on-screen map-like grid, hydraulic
+> lines and controls remain **development diagnostics**, not survey or hydraulic
+> editing functionality. GPS, OSM, field observations, areas, persistent editing
+> and synchronization have not yet been implemented.
 
-## Renderer laboratory
+## Build and run AOWIS
 
 On Arch Linux, the **native desktop build** uses the installed Qt 6
 (`qt6-base`, `qt6-declarative`), CMake and Ninja. With the temporary pinned bgfx
@@ -74,8 +73,12 @@ network access and disk space; subsequent compilations reuse the image and a
 persistent Gradle cache. Run `./prepare_android_docker.sh` to rebuild the
 image explicitly. See the [Android build and device-test guide](docs/android-renderer-test.md).
 
-See [Renderer lab details, limitations and test protocol](docs/renderer-lab.md).
-The lab is a GPU-integration experiment, **not** a working mobile map editor.
+The installed Android application is named **AOWIS** with package ID
+`org.aowis.mobile`; the Linux executable and window title are also **AOWIS**.
+This supersedes the former `org.aowis.mobile.renderlab` package ID, so the
+previously installed probe may remain as a separate app until uninstalled.
+See [Rendering diagnostics and remaining integration tests](docs/renderer-lab.md).
+The diagnostic map is **not** a working mobile field editor yet.
 
 ## Documentation
 

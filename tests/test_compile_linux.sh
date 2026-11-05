@@ -16,11 +16,11 @@ printf 'cmake %s\n' "$*" >> "$AOWIS_LINUX_TEST_LOG"
 if [[ "${1:-}" == '--build' ]]; then
     build_dir="$2"
     mkdir -p "$build_dir"
-    cat > "$build_dir/aowis-mobile-render-lab" <<'PROGRAM'
+    cat > "$build_dir/aowis-mobile" <<'PROGRAM'
 #!/usr/bin/env bash
 printf 'run %s\n' "$*" >> "$AOWIS_LINUX_TEST_LOG"
 PROGRAM
-    chmod +x "$build_dir/aowis-mobile-render-lab"
+    chmod +x "$build_dir/aowis-mobile"
 fi
 STUB
 cat > "$TMP_DIR/mockbin/ctest" <<'STUB'
@@ -53,7 +53,7 @@ assert_not_contains() {
 assert_contains '-DAOWIS_MOBILE_WITH_BGFX=OFF'
 assert_contains '-DBUILD_TESTING=OFF'
 assert_contains 'build-linux-lab'
-assert_contains '--target aowis-mobile-render-lab --parallel 3'
+assert_contains '--target aowis-mobile --parallel 3'
 assert_not_contains 'run '
 printf 'PASS: baseline build only\n'
 

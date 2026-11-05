@@ -277,6 +277,6 @@ fi
 
 echo "=== Installing and launching on $serial ==="
 adb -s "$serial" install -r "$apk" || die "APK installation failed on $serial"
-adb -s "$serial" shell monkey -p org.aowis.mobile.renderlab -c android.intent.category.LAUNCHER 1 \
+adb -s "$serial" shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1 \
     || die "Launching AOWIS Mobile failed on $serial"
 echo '=== AOWIS Mobile launched ==='

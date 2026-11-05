@@ -96,7 +96,7 @@ assert_not_log 'adb '
 run_case --baseline
 assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-baseline'
 assert_log 'adb -s mobile1 install -r'
-assert_log 'adb -s mobile1 shell monkey'
+assert_log 'adb -s mobile1 shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
 
 # Multiple devices cannot be chosen implicitly, and explicit --run requires one.
 export FAKE_DEVICE_COUNT=2
@@ -193,7 +193,10 @@ grep -Fq 'android_arm64_v8a/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake' "$roo
 grep -Eq '^[[:space:]]+LIBRARY DESTINATION lib$' "$root/CMakeLists.txt" || fail 'Android library install destination missing'
 # The pinned bgfx EGL backend uses ANativeWindow_setBuffersGeometry. The
 # Android NDK exports it from libandroid.so; GLES/EGL alone cannot resolve it.
-grep -Fq 'target_link_libraries(aowis-mobile-render-lab PRIVATE android)' "$root/CMakeLists.txt" || fail 'bgfx Android native-window library link missing'
+grep -Fq 'target_link_libraries(aowis-mobile PRIVATE android)' "$root/CMakeLists.txt" || fail 'bgfx Android native-window library link missing'
+grep -Fq -- '--target aowis-mobile_make_apk' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'Android APK build still uses old test target'
+grep -Fq 'QT_ANDROID_APP_NAME "AOWIS"' "$root/CMakeLists.txt" || fail 'Android launcher label changed'
+grep -Fq 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"' "$root/CMakeLists.txt" || fail 'Android package identity changed'
 
 printf 'Android Docker entrypoint: 15+ scenarios + build dependency contracts passed\n'
 

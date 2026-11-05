@@ -1,7 +1,7 @@
 # Android Qt Quick / bgfx device test
 
 **Status:** Android ARM64 APK successfully built with Docker/Qt 6.12.0 on Arch
-Linux (2026-11-05). Physical Android device launch and rendering have not yet
+Linux (2026-11-05). Physical Android device launch and rendering have now
 been confirmed. Linux direct underlay with real GPU
 vertex/shader geometry and visible QML overlays was visually confirmed on
 2026-11-05. This procedure tests the same code on Android, where EGL, GPU
@@ -70,7 +70,7 @@ is needed on the Arch host. `AOWIS_DOCKER_BUILD_NETWORK` and
 ./compile_android.sh --wifi-connect 192.168.1.50:38017  # CONNECT port, if mDNS blocked
 ```
 
-The script builds only `aowis-mobile-render-lab_make_apk`, with native tests,
+The script builds only `aowis-mobile_make_apk`, with native tests,
 bgfx examples and unrelated tools disabled. Output is written under
 `build-android-bgfx/` or `build-android-baseline/`, with the debug APK under
 `android-build/build/outputs/apk/debug/`. Docker runs using the invoking host
@@ -134,8 +134,11 @@ system-safe area, so circular masks do not cut off the gear teeth. Windows and m
 builds have `.ico` and `.icns` assets ready for their respective application
 packaging; Android does not require a custom manifest to set the icon.
 
-Both lab variants have the same package ID (`org.aowis.mobile.renderlab`),
-so installing one replaces the other. On Android the bgfx underlay is selected
+Both build variants have the same package ID (`org.aowis.mobile`),
+so installing one replaces the other. The launcher label is exactly **AOWIS**.
+The earlier renderer probe used `org.aowis.mobile.renderlab`, which Android
+treats as a **different app**; it may still be installed and can be removed
+from the phone after the new AOWIS package is running. On Android the bgfx underlay is selected
 automatically in the GPU build. If `--run` is specified, deployment must
 succeed; by default, a missing device just leaves the APK on disk.
 

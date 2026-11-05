@@ -17,11 +17,11 @@ int main(int argc, char *argv[])
     // Qt Quick to use OpenGL ES, for Linux desktop it requests OpenGL.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     QGuiApplication application(argc, argv);
-    QCoreApplication::setApplicationName(QStringLiteral("AOWIS Mobile Render Lab"));
+    QCoreApplication::setApplicationName(QStringLiteral("AOWIS"));
     application.setWindowIcon(QIcon(QStringLiteral(":/aowis/icon.png")));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Qt Quick / bgfx presentation ownership experiment"));
+    parser.setApplicationDescription(QStringLiteral("AOWIS mobile field survey application"));
     parser.addHelpOption();
     QCommandLineOption experimental(QStringLiteral("bgfx-underlay"),
         QStringLiteral("EXPERIMENTAL: run bgfx on Qt Quick's OpenGL render thread and surface"));
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     RenderLab lab(useBgfx);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
-    engine.loadFromModule(QStringLiteral("AOWIS.RenderLab"), QStringLiteral("Main"));
+    engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;
 

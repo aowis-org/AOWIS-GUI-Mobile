@@ -1,9 +1,10 @@
-# Qt Quick / bgfx rendering laboratory
+# AOWIS Qt Quick / bgfx rendering diagnostics
 
 ## Purpose and verified status
 
-AOWIS-Mobile currently contains an isolated renderer test, **not** a mobile
-survey editor. It examines whether Qt Quick can own a native OpenGL window,
+AOWIS-Mobile is the **AOWIS** application, currently showing a renderer
+diagnostic scene rather than a functional survey editor. The existing scene
+examines whether Qt Quick can own a native OpenGL window,
 while bgfx uses its EGL context to draw under QML. No AOWIS MODEL, MAP, DVMDB,
 location, or editor dependencies are involved.
 
@@ -139,7 +140,8 @@ Unit tests prove only scene/camera math, not GPU rendering.
    foreground and display sleep. Only then benchmark alternative composition
    paths with **equivalent** workloads and energy/frame-pacing measurements.
 
-This repository remains a deliberately disposable integration laboratory.
+The diagnostic scene is replaceable; the **application and tested Qt Quick/bgfx integration**
+are now the foundation for further AOWIS Mobile development.
 
 ## Android milestone (first device presentation verified)
 

@@ -6,7 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 
-# This is an isolated rendering experiment, not the future AOWIS app runtime.
+# AOWIS mobile application, currently retaining an instrumented renderer scene.
+# Keep the proven Qt Quick/bgfx integration while product features are added.
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -18,7 +19,7 @@ set(AOWIS_WINDOWS_ICON_RESOURCE "")
 if(WIN32)
     set(AOWIS_WINDOWS_ICON_RESOURCE packaging/windows/aowis.rc)
 endif()
-qt_add_executable(aowis-mobile-render-lab
+qt_add_executable(aowis-mobile
     ${AOWIS_WINDOWS_ICON_RESOURCE}
     src/main.cpp
     src/render_lab.cpp
@@ -28,7 +29,7 @@ qt_add_executable(aowis-mobile-render-lab
 )
 
 set_source_files_properties(assets/icons/aowis.png PROPERTIES QT_RESOURCE_ALIAS icon.png)
-qt_add_resources(aowis-mobile-render-lab "aowis_application_icon"
+qt_add_resources(aowis-mobile "aowis_application_icon"
     PREFIX "/aowis"
     FILES assets/icons/aowis.png
 )
@@ -36,15 +37,15 @@ qt_add_resources(aowis-mobile-render-lab "aowis_application_icon"
 if(APPLE AND NOT ANDROID)
     set_source_files_properties(assets/icons/aowis.icns PROPERTIES
         MACOSX_PACKAGE_LOCATION "Resources")
-    target_sources(aowis-mobile-render-lab PRIVATE assets/icons/aowis.icns)
-    set_target_properties(aowis-mobile-render-lab PROPERTIES
+    target_sources(aowis-mobile PRIVATE assets/icons/aowis.icns)
+    set_target_properties(aowis-mobile PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_ICON_FILE aowis.icns)
 endif()
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
-qt_add_qml_module(aowis-mobile-render-lab
-    URI AOWIS.RenderLab
+qt_add_qml_module(aowis-mobile
+    URI AOWIS.Mobile
     VERSION 1.0
     QML_FILES qml/Main.qml
 )
@@ -53,9 +54,9 @@ qt_add_qml_module(aowis-mobile-render-lab
 # Activity/template so orientation, Qt library loading and lifecycle are not
 # accidentally broken by a hand-written manifest for this temporary lab.
 if(ANDROID)
-    set_target_properties(aowis-mobile-render-lab PROPERTIES
-        QT_ANDROID_PACKAGE_NAME "org.aowis.mobile.renderlab"
-        QT_ANDROID_APP_NAME "AOWIS Mobile"
+    set_target_properties(aowis-mobile PROPERTIES
+        QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"
+        QT_ANDROID_APP_NAME "AOWIS"
         QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
         QT_ANDROID_APP_ICON "@mipmap/ic_launcher"
         QT_ANDROID_VERSION_CODE 1
@@ -63,7 +64,7 @@ if(ANDROID)
     )
 endif()
 
-target_link_libraries(aowis-mobile-render-lab PRIVATE
+target_link_libraries(aowis-mobile PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )
 
@@ -107,22 +108,22 @@ if(AOWIS_MOBILE_WITH_BGFX)
             message(FATAL_ERROR "Missing pinned bgfx example shader: ${AOWIS_SHADER}")
         endif()
     endforeach()
-    qt_add_resources(aowis-mobile-render-lab "aowis_lab_vertex_color_shaders"
+    qt_add_resources(aowis-mobile "aowis_lab_vertex_color_shaders"
         PREFIX "/aowis_lab/shaders"
         BASE "${AOWIS_BGFX_SHADER_ROOT}"
         FILES ${AOWIS_BGFX_SHADER_FILES}
     )
-    target_sources(aowis-mobile-render-lab PRIVATE
+    target_sources(aowis-mobile PRIVATE
         src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
-    target_link_libraries(aowis-mobile-render-lab PRIVATE bgfx)
+    target_link_libraries(aowis-mobile PRIVATE bgfx)
     if(ANDROID)
         # bgfx's EGL backend calls ANativeWindow_setBuffersGeometry. This
         # function is provided by the Android NDK's libandroid, not EGL/GLES.
-        target_link_libraries(aowis-mobile-render-lab PRIVATE android)
+        target_link_libraries(aowis-mobile PRIVATE android)
     endif()
-    target_compile_definitions(aowis-mobile-render-lab PRIVATE AOWIS_LAB_WITH_BGFX=1)
+    target_compile_definitions(aowis-mobile PRIVATE AOWIS_LAB_WITH_BGFX=1)
 else()
-    target_compile_definitions(aowis-mobile-render-lab PRIVATE AOWIS_LAB_WITH_BGFX=0)
+    target_compile_definitions(aowis-mobile PRIVATE AOWIS_LAB_WITH_BGFX=0)
 endif()
 
 # The experiment uses native OpenGL/EGL context access. It is deliberately
@@ -135,7 +136,7 @@ endif()
 
 # Android executables are shared libraries. Unlike desktop executables,
 # CMake requires a LIBRARY destination for Qt's Android module target.
-install(TARGETS aowis-mobile-render-lab
+install(TARGETS aowis-mobile
     BUNDLE DESTINATION .
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin

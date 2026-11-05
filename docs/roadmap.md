@@ -2,23 +2,27 @@
 
 ## Baseline
 
-As of **2026-11-05**, Mobile includes patch/ZIP tooling, product
-documentation, and a minimal Qt Quick rendering lab with a QML-only baseline
-and an **unverified** experimental bgfx direct-underlay path. No real device
-test, survey feature, GPS, storage or synchronization implementation exists.
-Refer to [renderer lab](renderer-lab.md) for its acceptance criteria; the
-priorities below describe future product deliverables, not completed stages.
+As of **2026-11-05**, the **AOWIS** application has a working Qt Quick
+shell and a bgfx direct-underlay diagnostic map on Linux and Android (verified
+on an Android phone). Its identity is `org.aowis.mobile` on Android and
+`aowis-mobile` on Linux. The QML-only comparison path remains available.
+This is a rendering foundation, **not yet a survey editor**: GPS, generic
+feature capture, local survey data, offline basemaps and synchronization are
+not implemented. See [rendering diagnostics](renderer-lab.md) for outstanding
+lifecycle, scalability and performance validation. The priorities below are
+future product deliverables, not claims of completed field functionality.
 
 The scope is intentionally a field-survey product. The complete desktop editor
 and community OSM editor are not requirements for the first usable APK.
 
 ## Priority 1 — Runnable map shell
 
-Build a minimal Android Qt/CMake application with Qt Quick/QML controls and a
-2D map viewport. Integrate application lifecycle, touch pan/zoom, responsive
-layout, visible position indicator, and a mock/provider-backed map source.
-Validate Qt Quick/bgfx composition and device lifecycle on real hardware
-before extracting a shared AOWIS renderer library. Keep iOS-compatible interfaces where cheap to do so.
+Build on the existing Android/Linux Qt Quick shell and verified bgfx underlay.
+Finish the real-device lifecycle, orientation, resize and scalability tests;
+replace synthetic test geometry with a proper map viewport and initial map
+source. Add a visible position indicator and map-coordinate selection. Keep
+mobile adapters iOS-compatible where practical. Extract the shared renderer
+only after lifecycle and architecture tests, not merely because the probe draws.
 
 **Accept when:** the application launches reliably, pans/zooms smoothly,
 recovers after background/resume and exposes selected map coordinates.
@@ -118,5 +122,6 @@ ships, replace proposed wording with verified contracts and move remaining
 work here; do not accumulate superseded patch-stage roadmaps.
 
 The Android GPU-underlay validation instructions are maintained in
-[Android renderer test](android-renderer-test.md); physical-device acceptance
-is pending and precedes extracting the shared renderer.
+[Android renderer test](android-renderer-test.md). Basic real-device drawing
+and interaction are verified; repeated background/foreground, rotation,
+large-scene performance and recovery acceptance remain open.
