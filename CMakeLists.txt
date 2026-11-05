@@ -82,7 +82,7 @@ if(AOWIS_MOBILE_WITH_BGFX)
        NOT EXISTS "${AOWIS_BGFX_CMAKE_DIR}/bimg/include/bimg/bimg.h")
         message(FATAL_ERROR
             "bgfx.cmake and its nested submodules are not initialized.\n"
-            "Run ./tools/init_bgfx.sh and reconfigure, or configure with "
+            "Run ./git_submodule_init.sh --bgfx and reconfigure, or configure with "
             "-DAOWIS_MOBILE_WITH_BGFX=OFF for the QML-only baseline.")
     endif()
 
@@ -119,14 +119,13 @@ if(AOWIS_MOBILE_WITH_BGFX)
     )
     # Shared GPU device lifecycle and view/target ownership. Mobile retains
     # the pinned bgfx.cmake runtime and its Qt-owned EGL underlay.
+    # Use the pinned submodule by default. Android Docker may explicitly set
+    # AOWIS_RENDER_SOURCE_DIR to its read-only /aowis-render mount.
     set(AOWIS_RENDER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-GUI-Render"
-        CACHE PATH "AOWIS-GUI-Render source checkout")
+        CACHE PATH "AOWIS-GUI-Render source checkout (normally the pinned submodule)")
     if(NOT EXISTS "${AOWIS_RENDER_SOURCE_DIR}/CMakeLists.txt")
-        set(AOWIS_RENDER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../AOWIS-GUI-Render")
-    endif()
-    if(NOT EXISTS "${AOWIS_RENDER_SOURCE_DIR}/CMakeLists.txt")
-        message(FATAL_ERROR "AOWIS-GUI-Render missing. Initialize external/AOWIS-GUI-Render "
-            "or place the Render checkout beside Mobile.")
+        message(FATAL_ERROR "AOWIS-GUI-Render missing at ${AOWIS_RENDER_SOURCE_DIR}. "
+            "Run ./git_submodule_init.sh --render or initialize the pinned Git submodule.")
     endif()
     set(AOWIS_RENDER_BUILD_MAP_CORE OFF CACHE BOOL "" FORCE)
     add_subdirectory("${AOWIS_RENDER_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-render" EXCLUDE_FROM_ALL)

@@ -23,7 +23,7 @@ android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
 render_cmake_args=()
 if [[ "$bgfx" == ON ]]; then
     [[ -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]] || {
-        echo 'bgfx submodules missing; run ./tools/init_bgfx.sh on the host.' >&2
+        echo 'bgfx submodules missing; run ./git_submodule_init.sh --bgfx on the host.' >&2
         exit 1
     }
     [[ -f "${AOWIS_ANDROID_RENDER_SOURCE_DIR:-}/CMakeLists.txt" ]] || {
