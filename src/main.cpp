@@ -17,7 +17,14 @@ int main(int argc, char *argv[])
     // Qt Quick to use OpenGL ES, for Linux desktop it requests OpenGL.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     QGuiApplication application(argc, argv);
-    QCoreApplication::setApplicationName(QStringLiteral("AOWIS"));
+    // Keep the phone launcher concise, but distinguish the desktop application.
+#if defined(Q_OS_ANDROID)
+    const QString applicationLabel = QStringLiteral("AOWIS");
+#else
+    const QString applicationLabel = QStringLiteral("AOWIS Mobile");
+#endif
+    QCoreApplication::setApplicationName(applicationLabel);
+    application.setApplicationDisplayName(applicationLabel);
     application.setWindowIcon(QIcon(QStringLiteral(":/aowis/icon.png")));
 
     QCommandLineParser parser;

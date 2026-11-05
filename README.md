@@ -73,8 +73,10 @@ network access and disk space; subsequent compilations reuse the image and a
 persistent Gradle cache. Run `./prepare_android_docker.sh` to rebuild the
 image explicitly. See the [Android build and device-test guide](docs/android-renderer-test.md).
 
-The installed Android application is named **AOWIS** with package ID
-`org.aowis.mobile`; the Linux executable and window title are also **AOWIS**.
+On Android, the launcher label is exactly **AOWIS** (package ID
+`org.aowis.mobile`). On Linux, the window title, application display name,
+header and desktop launcher label are **AOWIS Mobile**; the executable remains
+`aowis-mobile`.
 This supersedes the former `org.aowis.mobile.renderlab` package ID, so the
 previously installed probe may remain as a separate app until uninstalled.
 See [Rendering diagnostics and remaining integration tests](docs/renderer-lab.md).

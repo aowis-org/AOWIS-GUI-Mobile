@@ -135,7 +135,7 @@ builds have `.ico` and `.icns` assets ready for their respective application
 packaging; Android does not require a custom manifest to set the icon.
 
 Both build variants have the same package ID (`org.aowis.mobile`),
-so installing one replaces the other. The launcher label is exactly **AOWIS**.
+so installing one replaces the other. The Android launcher label is exactly **AOWIS**; Linux uses **AOWIS Mobile** for its window and launcher labels.
 The earlier renderer probe used `org.aowis.mobile.renderlab`, which Android
 treats as a **different app**; it may still be installed and can be removed
 from the phone after the new AOWIS package is running. On Android the bgfx underlay is selected

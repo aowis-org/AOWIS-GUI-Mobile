@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=AOWIS
+Name=AOWIS Mobile
 Comment=AOWIS geographic field survey and mapping
 Exec=aowis-mobile
 Icon=org.aowis.mobile

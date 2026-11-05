@@ -60,12 +60,16 @@ checks = [
     ("production QML module", "URI AOWIS.Mobile" in cmake and
      'QStringLiteral("AOWIS.Mobile")' in main),
     ("Android launcher label", 'QT_ANDROID_APP_NAME "AOWIS"' in cmake),
-    ("Qt and QML window titles", 'QStringLiteral("AOWIS")' in main and
-     'title: "AOWIS"' in qml),
+    ("platform-specific application names", '#if defined(Q_OS_ANDROID)' in main and
+     'QStringLiteral("AOWIS")' in main and 'QStringLiteral("AOWIS Mobile")' in main and
+     'setApplicationName(applicationLabel)' in main and
+     'setApplicationDisplayName(applicationLabel)' in main),
+    ("QML window and header follow application name", 'title: Qt.application.name' in qml and
+     'Label { text: Qt.application.name;' in qml),
     ("Android launch package", 'shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
      in (root / "compile_android.sh").read_text()),
     ("Linux executable", '--target aowis-mobile' in (root / "compile_linux.sh").read_text()),
-    ("Linux desktop entry", 'Name=AOWIS\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text() and
+    ("Linux desktop entry", 'Name=AOWIS Mobile\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text() and
      'Exec=aowis-mobile\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text()),
     ("Android Docker build tooling exists", (root / "compile_android.sh").is_file() and (root / "prepare_android_docker.sh").is_file() and (root / "tools/qt-android/Dockerfile").is_file()),
     ("same bgfx pin", "v1.159.9485-574" in setup),

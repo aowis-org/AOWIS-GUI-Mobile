@@ -8,7 +8,7 @@ Window {
     height: 800
     // The C++ side shows this after RenderLab::attach() is complete.
     visible: false
-    title: "AOWIS"
+    title: Qt.application.name
     color: "#102f45"
     property real viewZoom: 1.0
     property real dragX: 0
@@ -156,7 +156,7 @@ Window {
             anchors.fill: parent
             anchors.margins: 12
             spacing: 8
-            Label { text: "AOWIS"; color: "white"; font.bold: true; font.pixelSize: 19 }
+            Label { text: Qt.application.name; color: "white"; font.bold: true; font.pixelSize: 19 }
             Item { Layout.fillWidth: true }
             Label {
                 text: lab.bgfxMode ? "BGFX UNDERLAY" : "QML BASELINE"
