@@ -36,7 +36,12 @@ Android ARM64, JDK **21**, Android SDK API **36**, Build Tools **36.0.0**,
 and Android NDK **27.2.12479018**. Versions are declared in
 `tools/qt-android/toolchain_versions.sh`. Provisioning uses the open-source
 `aqtinstall` command-line downloader for official Qt archives, not the Qt GUI
-installer or a Qt account. Google's command-line-tools archive is SHA-256
+installer or a Qt account. `aqtinstall` is pinned to a specific upstream
+Git commit because its 3.3.0 PyPI release does not support Qt 6.12's
+repository structure. The Linux host archive is selected using
+`linux_gcc_64` (Qt's installed directory is still `gcc_64`). Updating the
+pinned toolchain revision changes the Docker image tag to force a rebuild.
+Google's command-line-tools archive is SHA-256
 verified against the published checksum. The build process accepts Android
 SDK license terms when provisioning; please review those terms before building.
 

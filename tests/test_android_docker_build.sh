@@ -106,4 +106,13 @@ assert_not_log 'docker run '
 run_case --baseline --build-only
 assert_log 'docker run '
 
-echo 'Android Docker entrypoint: 8 scenario tests passed'
+# Prevent regression to obsolete aqtinstall release or Qt archive architecture.
+source "$root/tools/qt-android/toolchain_versions.sh"
+[[ "$AOWIS_ANDROID_AQT_GIT_REF" =~ ^[a-f0-9]{40}$ ]] || fail 'aqt ref is not a 40-character commit'
+[[ "$AOWIS_ANDROID_TOOLCHAIN_REVISION" -ge 2 ]] || fail 'image version was not bumped'
+grep -Fq -- 'aqtinstall @ git+https://github.com/miurahr/aqtinstall.git@${AQT_GIT_REF}' "$root/tools/qt-android/Dockerfile" || fail 'pinned modern aqt is missing'
+grep -Fq -- '"${QT_VERSION}" linux_gcc_64' "$root/tools/qt-android/Dockerfile" || fail 'old Linux Qt archive architecture'
+grep -Fq -- '"${QT_VERSION}" android_arm64_v8a' "$root/tools/qt-android/Dockerfile" || fail 'Android Qt architecture changed'
+grep -Fq -- 'AQT_GIT_REF=$AOWIS_ANDROID_AQT_GIT_REF' "$root/prepare_android_docker.sh" || fail 'aqt pin not passed to Docker build'
+
+printf 'Android Docker entrypoint: 8 scenarios + Qt repository contract passed\n' 

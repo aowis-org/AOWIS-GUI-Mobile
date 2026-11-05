@@ -22,7 +22,7 @@ echo "Docker network: $network"
 
 docker build --network="$network" --pull \
     --build-arg "QT_VERSION=$AOWIS_QT_ANDROID_VERSION" \
-    --build-arg "AQT_VERSION=$AOWIS_ANDROID_AQT_VERSION" \
+    --build-arg "AQT_GIT_REF=$AOWIS_ANDROID_AQT_GIT_REF" \
     --build-arg "ANDROID_API=$AOWIS_ANDROID_SDK_API" \
     --build-arg "ANDROID_BUILD_TOOLS=$AOWIS_ANDROID_BUILD_TOOLS_VERSION" \
     --build-arg "ANDROID_NDK_VERSION=$AOWIS_ANDROID_NDK_VERSION" \
