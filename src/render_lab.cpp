@@ -1,4 +1,5 @@
 #include "render_lab.h"
+#include "probe_scene.h"
 
 #include <QDebug>
 #include <QOpenGLContext>
@@ -8,6 +9,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #if AOWIS_LAB_WITH_BGFX
 #include <bgfx/bgfx.h>
@@ -62,6 +65,14 @@ QString RenderLab::details() const
     if (this->phase.load(std::memory_order_relaxed) == Phase::Rendering)
         return QStringLiteral("Verify bgfx color/text AND QML overlays remain visible. Frame count alone is NOT proof of correct composition.");
     return QStringLiteral("Experimental: bgfx may swap a Qt-owned EGL surface. See docs/renderer-lab.md.");
+}
+
+void RenderLab::setView(double zoom, double panX, double panY)
+{
+    // Called by QML on the GUI thread. Atomics are read by the render thread.
+    this->viewZoom.store(std::clamp(zoom, 0.3, 3.0), std::memory_order_relaxed);
+    this->viewPanX.store(std::clamp(panX, -4096.0, 4096.0), std::memory_order_relaxed);
+    this->viewPanY.store(std::clamp(panY, -4096.0, 4096.0), std::memory_order_relaxed);
 }
 
 void RenderLab::attach(QQuickWindow *window)
@@ -173,12 +184,21 @@ void RenderLab::renderOnRenderThread()
     bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x102f45ff, 1.0f, 0);
     bgfx::touch(0);
     bgfx::dbgTextClear();
-    bgfx::dbgTextPrintf(2, 2, 0x2f, "AOWIS - BGFX / QT QUICK UNDERLAY TEST");
-    bgfx::dbgTextPrintf(2, 4, 0x0f, "bgfx: %ux%u - QML UI must remain on top",
-                        static_cast<unsigned int>(width), static_cast<unsigned int>(height));
-    const uint64_t next = this->renderedFrames.load(std::memory_order_relaxed) + 1;
-    for (uint16_t yy = 8; yy < 24; yy += 3)
-        bgfx::dbgTextPrintf(4, yy, 0x1e, "*   +-------+     +----+      .    *    %llu", static_cast<unsigned long long>(next));
+    const double zoom = this->viewZoom.load(std::memory_order_relaxed);
+    const double panX = this->viewPanX.load(std::memory_order_relaxed);
+    const double panY = this->viewPanY.load(std::memory_order_relaxed);
+    // Leave the translucent/opaque QML panels outside the diagnostic content.
+    bgfx::dbgTextPrintf(2, 5, 0x0b, "BGFX diagnostic scene - QML handles pan / zoom / tap");
+    const int columns = std::clamp(width / 8 - 4, 12, 95);
+    const int rows = std::clamp(height / 20 - 15, 6, 28);
+    const std::vector<std::string> scene =
+        AowisMobileProbe::createScene(columns, rows, zoom, panX, panY);
+    for (size_t row = 0; row < scene.size(); ++row)
+    {
+        // Background palette index zero avoids opaque blue/yellow text bands.
+        bgfx::dbgTextPrintf(2, static_cast<uint16_t>(8 + row), 0x0a,
+                            "%s", scene[row].c_str());
+    }
     // Pinned bgfx supports FLUSH: execute commands without presenting the
     // backbuffer. The Qt Quick scene graph presents after this callback.
     bgfx::frame(BGFX_FRAME_FLUSH);

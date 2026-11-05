@@ -16,6 +16,8 @@ qt_add_executable(aowis-mobile-render-lab
     src/main.cpp
     src/render_lab.cpp
     src/render_lab.h
+    src/probe_scene.cpp
+    src/probe_scene.h
 )
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
@@ -72,3 +74,13 @@ install(TARGETS aowis-mobile-render-lab
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin
 )
+
+# Pure C++ diagnostic-scene test: no bgfx, Qt, or GPU context required.
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(aowis-mobile-probe-scene-tests
+        tests/probe_scene_tests.cpp
+        src/probe_scene.cpp
+    )
+    add_test(NAME aowis-mobile-probe-scene COMMAND aowis-mobile-probe-scene-tests)
+endif()

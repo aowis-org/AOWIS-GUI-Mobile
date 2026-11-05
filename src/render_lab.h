@@ -24,6 +24,7 @@ public:
     QString details() const;
     quint64 frames() const;
     void attach(QQuickWindow *window);
+    Q_INVOKABLE void setView(double zoom, double panX, double panY);
 
 signals:
     void statusChanged();
@@ -50,6 +51,9 @@ private:
     std::atomic<quint64> renderedFrames{0};
     std::atomic<int> lastWidth{0};
     std::atomic<int> lastHeight{0};
+    std::atomic<double> viewZoom{1.0};
+    std::atomic<double> viewPanX{0.0};
+    std::atomic<double> viewPanY{0.0};
     bool initialized = false; // Render thread only.
     QQuickWindow *window = nullptr;
     QTimer statusTimer;

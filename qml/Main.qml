@@ -14,6 +14,14 @@ Window {
     property real dragY: 0
     property string lastTap: "Touch or click the map"
 
+    function publishView() {
+        lab.setView(viewZoom, dragX, dragY)
+    }
+    onViewZoomChanged: publishView()
+    onDragXChanged: publishView()
+    onDragYChanged: publishView()
+    Component.onCompleted: publishView()
+
     // In baseline mode the grid is rendered by Qt Quick. In bgfx mode its
     // background and debug text come from bgfx, never from this QML Canvas.
     Canvas {
@@ -78,7 +86,7 @@ Window {
         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
         height: headerLayout.implicitHeight + 24
         radius: 12
-        color: "#d9142533"
+        color: "#ff142533"
         border.color: "#478292"
         RowLayout {
             id: headerLayout
@@ -103,7 +111,7 @@ Window {
             Layout.fillWidth: true
             implicitHeight: statPanel.implicitHeight + 24
             radius: 12
-            color: "#e6152938"
+            color: "#ff152938"
             border.color: "#478292"
             ColumnLayout {
                 id: statPanel
@@ -112,6 +120,7 @@ Window {
                 Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                 Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
                 Label { text: "bgfx frame calls: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: "Zoom: " + root.viewZoom.toFixed(2) + "×  |  Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY); color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12 }
             }
         }
         RowLayout {
