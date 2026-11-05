@@ -62,7 +62,7 @@ printf 'PASS: baseline build only\n'
 if "$TMP_DIR/repo/compile_linux.sh" --build-only >"$TMP_DIR/error.log" 2>&1; then
     echo 'Expected failure for missing bgfx checkout' >&2; exit 1
 fi
-grep -F './tools/init_bgfx.sh' "$TMP_DIR/error.log" >/dev/null
+grep -F './git_submodule_init.sh' "$TMP_DIR/error.log" >/dev/null
 [[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
 printf 'PASS: missing pinned bgfx diagnostics\n'
 

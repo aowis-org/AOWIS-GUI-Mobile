@@ -21,7 +21,7 @@ Environment:
 
 Requires CMake, Ninja, and host Qt 6 (Core, Gui, Qml, Quick, QuickControls2).
 On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative
-For bgfx: initialize the existing pinned submodule with ./tools/init_bgfx.sh.
+For bgfx and the shared renderer: ./git_submodule_init.sh.
 HELP
 }
 
@@ -66,7 +66,7 @@ else
         external/bgfx.cmake/bimg/include/bimg/bimg.h; do
         if [[ ! -f "$PROJECT_DIR/$file" ]]; then
             printf 'AOWIS Mobile Linux: bgfx submodules missing (%s).\n' "$file" >&2
-            printf 'Run ./tools/init_bgfx.sh once, then rerun ./compile_linux.sh.\n' >&2
+            printf 'Run ./git_submodule_init.sh once, then rerun ./compile_linux.sh.\n' >&2
             exit 1
         fi
     done

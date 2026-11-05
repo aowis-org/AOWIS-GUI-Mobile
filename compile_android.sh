@@ -205,7 +205,7 @@ fi
 
 command -v docker >/dev/null 2>&1 || die 'Docker is missing (Arch: sudo pacman -S docker).'
 if [[ "$bgfx" == ON && ! -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]]; then
-    die 'bgfx is not initialized. Run ./tools/init_bgfx.sh first.'
+    die 'bgfx is not initialized. Run ./git_submodule_init.sh first.'
 fi
 # The Docker container sees only /project unless we explicitly mount a sibling
 # Render checkout. Always provide one read-only renderer mount, whether the
@@ -217,7 +217,7 @@ if [[ "$bgfx" == ON ]]; then
         renderer_host="$project_dir/../AOWIS-GUI-Render"
     fi
     [[ -f "$renderer_host/CMakeLists.txt" ]] ||
-        die 'AOWIS-GUI-Render missing: initialize it under external/ or use a sibling checkout.'
+        die 'AOWIS-GUI-Render missing: run ./git_submodule_init.sh --render.'
     renderer_host="$(realpath -- "$renderer_host")"
     renderer_mount=(-v "$renderer_host:/aowis-render:ro")
 fi

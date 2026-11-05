@@ -33,21 +33,43 @@ acceptance tests.
 | --- | --- | --- |
 | Desktop application | `AOWIS-GUI` | AOWIS |
 | Mobile application (this repo) | `AOWIS-GUI-Mobile` | **AOWIS Mobile** on Linux; **AOWIS** on Android |
-| Planned common rendering library | `AOWIS-GUI-Render` | Library, no launcher |
+| Shared rendering library | `AOWIS-GUI-Render` | Library, no launcher |
 
 The Mobile executable/CMake target remains `aowis-mobile` and the Android
 package ID remains `org.aowis.mobile`. Neither is a user-facing title. The
 provided AOWIS icon is used by Linux/Android and has assets for future desktop
-platforms. Renaming the repository does **not** imply the renderer has already
-been extracted from Desktop GUI.
+platforms. The shared library is linked by Mobile for bgfx device lifecycle. The full
+production map/terrain renderer has not yet been moved out of Desktop GUI.
 
 ## Build
 
-Initialize the temporary pinned bgfx submodule for a new checkout:
+Initialize **both** Git submodules, including bgfx.cmake's pinned nested
+bgfx/bx/bimg revisions, after cloning:
 
 ```bash
-./tools/init_bgfx.sh
+./git_submodule_init.sh
 ```
+
+To advance only the AOWIS renderer to its tracked upstream branch:
+
+```bash
+./git_submodule_update.sh
+git diff --submodule=log
+git add external/AOWIS-GUI-Render
+# Review/test, then commit the new gitlink in Mobile.
+```
+
+The updater deliberately does **not** advance third-party bgfx.cmake or its
+nested vendor repositories. `./git_submodule_update.sh --all` additionally
+initializes the third-party dependencies at their recorded pins, without
+advancing them. `./git_submodule_init.sh --render` and `--bgfx` permit selective
+initialization. Changing the independently pinned bgfx.cmake release remains
+an explicit operation through `./tools/init_bgfx.sh`.
+
+A `.gitmodules` entry is not enough: the repository must also track a gitlink
+(mode `160000`) for each submodule. Both new scripts reject missing gitlinks
+with a diagnostic. New clones should use `git clone --recurse-submodules`,
+or run `./git_submodule_init.sh` afterwards.
 
 Linux (installed Qt 6, CMake, Ninja, C++ compiler):
 
@@ -102,11 +124,11 @@ existing Android background/resume test before collecting logs. Details:
 
 ## What happens next
 
-**Next agreed work:** (1) run repeatable stress measurements on Linux and
-Android using the new scene presets and CSV capture; (2) Android orientation,
-pause/resume, lock/unlock and EGL/scene-graph recovery tests. After these pass, define and extract the shared
-renderer into `AOWIS-GUI-Render` without regressing Desktop GUI/WASM behavior.
-The real mapping and survey tools follow that foundation.
+**Next agreed work:** move the production map/terrain/HUD rendering code into
+`AOWIS-GUI-Render`, retaining Desktop GUI, Android, and WebAssembly rendering
+behavior. The shared device layer is already linked by Mobile; the Mobile
+scene still uses its existing stress-test renderer. The real mapping and
+survey tools follow that foundation.
 
 Read the [documentation index](docs/README.md) or the
 [current roadmap](docs/roadmap.md).
@@ -150,8 +172,8 @@ This upgrade procedure does not depend on the local checkout directory name.
 Patch ZIPs may include `AOWIS-GUI-Mobile/.aowis-patch-delete.txt` containing
 repository-relative file removals. Applying a patch refreshes file timestamps
 and regenerates `mobile.zip`. The source snapshot excludes build outputs,
-secrets, Git metadata and nested submodule contents. The `external/bgfx.cmake`
-submodule is pinned separately in Git.
+secrets, Git metadata and nested submodule contents. The `external/bgfx.cmake` and `external/AOWIS-GUI-Render`
+submodules are pinned separately by Git gitlinks.
 
 License: Apache-2.0.
 
