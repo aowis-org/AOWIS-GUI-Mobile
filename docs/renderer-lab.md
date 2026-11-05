@@ -55,7 +55,7 @@ Android uses the Qt-provided Android kit, SDK/NDK and packaging. With bgfx ON,
 Android starts the experiment by default; `--baseline` is available on
 launchers that support custom arguments. Shader binaries are packaged inside
 the executable's Qt resource section, not loaded from the source checkout.
-Android compilation and device behavior are **not yet demonstrated**.
+Android build/install tooling has been added; **no Android compilation or real-device run has yet been verified**. See [the device test procedure](android-renderer-test.md).
 
 ## Actual render pipeline
 
@@ -139,3 +139,18 @@ Unit tests prove only scene/camera math, not GPU rendering.
    paths with **equivalent** workloads and energy/frame-pacing measurements.
 
 This repository remains a deliberately disposable integration laboratory.
+
+## Android milestone (prepared, not device-verified)
+
+The same real-geometry Qt Quick + bgfx underlay now has an Android debug APK
+build script and installer, an auto-generated Qt Android package identity, a
+hidden-until-attached QML window (avoids early render callback races), and
+one-finger drag, pinch-to-zoom, tap and wheel pointer handlers. The Android
+scenegraph requests resource release on hide and records app pause/resume,
+scenegraph start/stop, and bgfx initialization counts. See
+[Android build, installation and real-device checks](android-renderer-test.md).
+
+**Known risk:** calling bgfx inside Qt's active OpenGL render pass remains an
+experimental arrangement. Repeated scenegraph recreation on a device can
+expose GL state/ownership bugs that did not occur on Linux. These changes are
+instrumentation and validation infrastructure, **not** proof of recovery.

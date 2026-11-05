@@ -15,6 +15,7 @@ class RenderLab final : public QObject
     Q_PROPERTY(QString details READ details NOTIFY statusChanged)
     Q_PROPERTY(quint64 frames READ frames NOTIFY statusChanged)
     Q_PROPERTY(QString timings READ timings NOTIFY statusChanged)
+    Q_PROPERTY(QString lifecycle READ lifecycle NOTIFY statusChanged)
 
 public:
     explicit RenderLab(bool requestedBgfx, QObject *parent = nullptr);
@@ -25,6 +26,8 @@ public:
     QString details() const;
     quint64 frames() const;
     QString timings() const;
+    QString lifecycle() const;
+    void setApplicationActive(bool active);
     void attach(QQuickWindow *window);
     Q_INVOKABLE void setView(double zoom, double panX, double panY);
 
@@ -58,6 +61,12 @@ private:
     std::atomic<int64_t> frameIntervalMicroseconds{0};
     std::atomic<int64_t> gpuMicroseconds{-1};
     std::atomic<uint32_t> drawCalls{0};
+    std::atomic<uint32_t> sceneGraphStarts{0};
+    std::atomic<uint32_t> sceneGraphStops{0};
+    std::atomic<uint32_t> bgfxInitializations{0};
+    std::atomic<uint32_t> resumes{0};
+    std::atomic<uint32_t> pauses{0};
+    std::atomic<bool> applicationActive{false};
     int64_t lastFrameTimestampMicroseconds = 0; // Render thread only.
     std::atomic<double> viewZoom{1.0};
     std::atomic<double> viewPanX{0.0};

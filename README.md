@@ -21,7 +21,9 @@ semantics**.
 > **Repository status (2026-11-05):** The repo contains a runnable-source
 > **Qt Quick rendering laboratory** and the initial, experimental bgfx underlay
 > code path. The initial ASCII underlay was visually verified on Linux;
-> the current GPU vertex/shader test is **not yet runtime-verified**.
+> the GPU vertex/shader underlay has also been **visually verified on Linux**.
+> Android build and device integration are now prepared but **not verified on
+> real Android hardware**.
 > There is no survey/GPS/OSM/hydraulic editor, mobile data store or sync yet.
 
 ## Renderer laboratory
@@ -44,6 +46,10 @@ cmake --build build-linux-bgfx -j 8
 ./build-linux-bgfx/aowis-mobile-render-lab --bgfx-underlay
 ```
 
+For an Android arm64 device, follow the [Android build and device-test guide](docs/android-renderer-test.md).
+It includes Qt Android kit/SDK/NDK prerequisites, build, `adb` install,
+touch, orientation and lifecycle checks.
+
 See [Renderer lab details, limitations and test protocol](docs/renderer-lab.md).
 The lab is a GPU-integration experiment, **not** a working mobile map editor.
 
@@ -58,6 +64,7 @@ Start at [Documentation index](docs/README.md).
 - [Offline operation and synchronization](docs/offline-sync.md)
 - [Implementation roadmap and acceptance criteria](docs/roadmap.md)
 - [Qt Quick / bgfx renderer laboratory](docs/renderer-lab.md)
+- [Android renderer build and device validation](docs/android-renderer-test.md)
 
 ## Patch and source ZIP tooling
 

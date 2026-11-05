@@ -85,6 +85,29 @@ QString RenderLab::timings() const
         .arg(gpuText).arg(this->drawCalls.load(std::memory_order_relaxed));
 }
 
+QString RenderLab::lifecycle() const
+{
+    return QStringLiteral("App: %1 | resumes: %2 | pauses: %3\n"
+                          "Scenegraph: %4 inits / %5 releases | bgfx inits: %6")
+        .arg(this->applicationActive.load() ? QStringLiteral("active") : QStringLiteral("inactive"))
+        .arg(this->resumes.load()).arg(this->pauses.load())
+        .arg(this->sceneGraphStarts.load()).arg(this->sceneGraphStops.load())
+        .arg(this->bgfxInitializations.load());
+}
+
+void RenderLab::setApplicationActive(bool active)
+{
+    const bool wasActive = this->applicationActive.exchange(active);
+    if (wasActive == active)
+        return;
+    if (active)
+        this->resumes.fetch_add(1);
+    else
+        this->pauses.fetch_add(1);
+    qInfo("AOWIS render lab: application %s", active ? "active" : "inactive");
+    emit statusChanged();
+}
+
 void RenderLab::setView(double zoom, double panX, double panY)
 {
     // Called by QML on the GUI thread. Atomics are read by the render thread.
@@ -103,12 +126,18 @@ void RenderLab::attach(QQuickWindow *window)
     // remain DirectConnections, with zero GUI-thread QObject manipulation.
     QObject::connect(window, &QQuickWindow::sceneGraphInitialized,
                      window, [this]() {
+                         this->sceneGraphStarts.fetch_add(1);
                          this->phase.store(Phase::AwaitingSceneGraph);
+                         qInfo("AOWIS render lab: Qt scenegraph initialized");
                      }, Qt::DirectConnection);
     QObject::connect(window, &QQuickWindow::beforeRenderPassRecording,
                      window, [this]() { this->renderOnRenderThread(); }, Qt::DirectConnection);
     QObject::connect(window, &QQuickWindow::sceneGraphInvalidated,
-                     window, [this]() { this->shutdownOnRenderThread(); }, Qt::DirectConnection);
+                     window, [this]() {
+                         this->sceneGraphStops.fetch_add(1);
+                         this->shutdownOnRenderThread();
+                         qInfo("AOWIS render lab: Qt scenegraph invalidated");
+                     }, Qt::DirectConnection);
 }
 
 void RenderLab::initializeOnRenderThread()
@@ -154,6 +183,7 @@ void RenderLab::initializeOnRenderThread()
         return;
     }
     this->initialized = true;
+    this->bgfxInitializations.fetch_add(1);
     this->lastWidth.store(static_cast<int>(init.swapChain.width));
     this->lastHeight.store(static_cast<int>(init.swapChain.height));
     bgfx::setDebug(BGFX_DEBUG_NONE);
@@ -168,7 +198,8 @@ void RenderLab::initializeOnRenderThread()
         return;
     }
     this->phase.store(Phase::Rendering);
-    qInfo("AOWIS render lab: bgfx initialized with Qt EGL context");
+    qInfo("AOWIS render lab: bgfx initialized with Qt EGL context (backend: %s)",
+          context->isOpenGLES() ? "GLES" : "OpenGL");
 #else
     this->phase.store(Phase::InitFailed);
 #endif

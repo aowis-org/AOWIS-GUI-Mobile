@@ -59,11 +59,35 @@ int main(int argc, char *argv[])
         qCritical("QML root must be a Qt Quick Window");
         return 1;
     }
+    // QML deliberately creates the window invisible. Attach all render-thread
+    // callbacks BEFORE it can create a scenegraph or GL context.
+#if defined(Q_OS_ANDROID)
+    // Exercise resource teardown/recreation across Android backgrounding.
+    // Qt's persistence settings are hints, not guarantees on EGL context loss.
+    window->setPersistentSceneGraph(false);
+    window->setPersistentGraphics(false);
+#endif
     lab.attach(window);
 
     QTimer refresh;
     refresh.setInterval(16);
     QObject::connect(&refresh, &QTimer::timeout, window, [window]() { window->update(); });
-    refresh.start();
+    QObject::connect(&application, &QGuiApplication::applicationStateChanged,
+                     &lab, [&lab, &refresh, window](Qt::ApplicationState state) {
+        const bool active = state == Qt::ApplicationActive;
+        lab.setApplicationActive(active);
+        if (active)
+        {
+            refresh.start();
+            window->update();
+        }
+        else
+            refresh.stop();
+    });
+    window->show();
+    const bool active = application.applicationState() == Qt::ApplicationActive;
+    lab.setApplicationActive(active);
+    if (active)
+        refresh.start();
     return application.exec();
 }

@@ -6,7 +6,8 @@ Window {
     id: root
     width: 480
     height: 800
-    visible: true
+    // The C++ side shows this after RenderLab::attach() is complete.
+    visible: false
     title: "AOWIS Mobile — Renderer Lab"
     color: "#102f45"
     property real viewZoom: 1.0
@@ -16,6 +17,14 @@ Window {
 
     function publishView() {
         lab.setView(viewZoom, dragX, dragY)
+    }
+    function zoomAround(factor, x, y) {
+        const previous = viewZoom
+        const next = Math.max(0.3, Math.min(3, previous * factor))
+        const ratio = next / previous
+        dragX = dragX * ratio + (x - width / 2) * (1 - ratio)
+        dragY = dragY * ratio + (y - height / 2) * (1 - ratio)
+        viewZoom = next
     }
     onViewZoomChanged: publishView()
     onDragXChanged: publishView()
@@ -60,25 +69,79 @@ Window {
         }
     }
 
-    MouseArea {
+    // Pointer handlers work with Android touchscreen multitouch, stylus,
+    // mouse and touchpad. They share the same pan/zoom model as desktop.
+    // QML overlays are later siblings, so their Buttons retain input priority.
+    Item {
         id: mapArea
         anchors.fill: parent
-        property real startX: 0
-        property real startY: 0
-        onPressed: function(mouse) {
-            startX = mouse.x
-            startY = mouse.y
-        }
-        onPositionChanged: function(mouse) {
-            if (pressed) {
-                root.dragX += mouse.x - startX
-                root.dragY += mouse.y - startY
-                startX = mouse.x
-                startY = mouse.y
+
+        TapHandler {
+            onTapped: function(point) {
+                root.lastTap = "Map tap: " + Math.round(point.position.x) +
+                               ", " + Math.round(point.position.y)
             }
         }
-        onClicked: function(mouse) {
-            root.lastTap = "Map tap: " + Math.round(mouse.x) + ", " + Math.round(mouse.y)
+
+        DragHandler {
+            id: panGesture
+            target: null
+            property real previousX: 0
+            property real previousY: 0
+            onActiveChanged: {
+                previousX = 0
+                previousY = 0
+            }
+            onActiveTranslationChanged: {
+                if (!active || pinchGesture.active)
+                    return
+                const deltaX = activeTranslation.x - previousX
+                const deltaY = activeTranslation.y - previousY
+                previousX = activeTranslation.x
+                previousY = activeTranslation.y
+                root.dragX += deltaX
+                root.dragY += deltaY
+            }
+        }
+
+        PinchHandler {
+            id: pinchGesture
+            target: null
+            property real baseZoom: 1
+            property real baseX: 0
+            property real baseY: 0
+            property real anchorX: 0
+            property real anchorY: 0
+            onActiveChanged: {
+                if (active) {
+                    baseZoom = root.viewZoom
+                    baseX = root.dragX
+                    baseY = root.dragY
+                    anchorX = centroid.position.x - mapArea.width / 2
+                    anchorY = centroid.position.y - mapArea.height / 2
+                }
+            }
+            function updatePinch() {
+                if (!active)
+                    return
+                const newZoom = Math.max(0.3, Math.min(3, baseZoom * activeScale))
+                const ratio = newZoom / baseZoom
+                root.viewZoom = newZoom
+                // Keep the feature underneath the original fingers anchored,
+                // including translation of the gesture centroid.
+                root.dragX = baseX * ratio + anchorX * (1 - ratio) + activeTranslation.x
+                root.dragY = baseY * ratio + anchorY * (1 - ratio) + activeTranslation.y
+            }
+            onActiveScaleChanged: updatePinch()
+            onActiveTranslationChanged: updatePinch()
+        }
+
+        WheelHandler {
+            target: null
+            onWheel: function(event) {
+                const factor = Math.pow(1.25, event.angleDelta.y / 120)
+                root.zoomAround(factor, point.position.x, point.position.y)
+            }
         }
     }
 
@@ -121,6 +184,7 @@ Window {
                 Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
                 Label { text: "bgfx frames: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                 Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
                 Label { text: "Zoom: " + root.viewZoom.toFixed(2) + "×  |  Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY); color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12 }
             }
         }

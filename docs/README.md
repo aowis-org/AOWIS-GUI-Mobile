@@ -34,3 +34,5 @@ notes or redundant historical roadmaps. AOWIS is pre-first-release: there is
 no need to design migration compatibility for nonexistent mobile users.
 
 - [Renderer laboratory](renderer-lab.md): Qt Quick/bgfx experiment, build and validation protocol.
+
+- [Android renderer build and device validation](android-renderer-test.md) — packaging, touch and lifecycle checklist.

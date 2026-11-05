@@ -27,6 +27,18 @@ qt_add_qml_module(aowis-mobile-render-lab
     QML_FILES qml/Main.qml
 )
 
+# Qt generates the Android Manifest and deployment metadata. Keep its stock
+# Activity/template so orientation, Qt library loading and lifecycle are not
+# accidentally broken by a hand-written manifest for this temporary lab.
+if(ANDROID)
+    set_target_properties(aowis-mobile-render-lab PROPERTIES
+        QT_ANDROID_PACKAGE_NAME "org.aowis.mobile.renderlab"
+        QT_ANDROID_APP_NAME "AOWIS Renderer Lab"
+        QT_ANDROID_VERSION_CODE 1
+        QT_ANDROID_VERSION_NAME "0.1"
+    )
+endif()
+
 target_link_libraries(aowis-mobile-render-lab PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )

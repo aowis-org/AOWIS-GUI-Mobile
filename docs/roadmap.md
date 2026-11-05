@@ -116,3 +116,7 @@ the default for fine-grained edits or History navigation.
 Keep documentation current with *implemented product behavior*. Once code
 ships, replace proposed wording with verified contracts and move remaining
 work here; do not accumulate superseded patch-stage roadmaps.
+
+The Android GPU-underlay validation instructions are maintained in
+[Android renderer test](android-renderer-test.md); physical-device acceptance
+is pending and precedes extracting the shared renderer.
