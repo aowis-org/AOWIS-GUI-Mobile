@@ -16,6 +16,11 @@ baseline, frame diagnostics, and Android application-lifecycle counters.
 Selectable synthetic networks (~1k to ~1M total node/pipe features) use
 viewport tiles, bounded GPU buffers and explicit LOD sampling. A 15-second
 benchmark saves frame-level CSV and frame-pacing percentiles.
+The mobile UI now starts with a clean, map-first view. Its hamburger menu
+opens **Settings → Map server** (persistent HTTP/HTTPS URL and numeric port)
+and **Diagnostics** (stress presets, recording, GPU recovery, zoom/recenter).
+These settings only configure a future map client; they do **not** yet load
+map imagery or establish a server connection.
 The Android APK builds in a pinned Docker toolchain on Arch Linux and has been
 launched on a physical Android phone. Linux rendering has also been exercised.
 
@@ -23,9 +28,8 @@ launched on a physical Android phone. Linux rendering has also been exercised.
 synthetic rendering test scene—not actual georeferenced maps or saved network
 objects. There is no GPS capture, feature classification, point/line/area editor,
 offline map package, local observation store or DVMDB synchronization in this
-repository yet. The stress harness has not yet been
-benchmarked on real hardware, and Android context recovery has not yet passed
-acceptance tests.
+repository yet. The stress harness has initial Linux/Android recordings; further controlled
+performance and genuine context-loss testing remain open.
 
 ## Names and repository family
 

@@ -9,6 +9,8 @@ required = [
     "CMakeLists.txt", "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
     "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
     "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
+    "src/map_server_settings.cpp", "src/map_server_settings.h",
+    "tests/map_server_settings_tests.cpp",
     "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp",
     "src/performance_samples.cpp", "src/performance_samples.h",
         "src/lifecycle_watchdog.cpp", "src/lifecycle_watchdog.h",
@@ -85,8 +87,15 @@ checks = [
      'QStringLiteral("AOWIS")' in main and 'QStringLiteral("AOWIS Mobile")' in main and
      'setApplicationName(applicationLabel)' in main and
      'setApplicationDisplayName(applicationLabel)' in main),
-    ("QML window and header follow application name", 'title: Qt.application.name' in qml and
-     'Label { text: Qt.application.name;' in qml),
+    ("minimal hamburger navigation", 'id: hamburgerButton' in qml and
+     'id: navigationDrawer' in qml and 'root.openPage("settings")' in qml and
+     'root.openPage("diagnostics")' in qml),
+    ("persistent map server settings", 'mapServerSettings' in main and
+     'QSettings' in (root / "src/map_server_settings.cpp").read_text() and
+     'mapServerSettings.save' in qml and 'IntValidator { bottom: 1; top: 65535 }' in qml and
+     'Qt.ImhDigitsOnly' in qml),
+    ("settings regression test", 'aowis-mobile-map-server-settings-tests' in cmake and
+     'aowis-mobile-map-server-settings' in cmake),
     ("Android launch package", 'shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
      in (root / "compile_android.sh").read_text()),
     ("Linux executable", '--target aowis-mobile' in (root / "compile_linux.sh").read_text()),
@@ -95,9 +104,12 @@ checks = [
     ("Android Docker build tooling exists", (root / "compile_android.sh").is_file() and (root / "prepare_android_docker.sh").is_file() and (root / "tools/qt-android/Dockerfile").is_file()),
     ("same bgfx pin", "v1.159.9485-574" in setup),
     ("style: no auto type inference", all(not re.search(r"\bauto\b", (root / name).read_text()) for name in [
-        "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
+        "src/main.cpp", "src/map_server_settings.cpp", "src/map_server_settings.h",
+        "tests/map_server_settings_tests.cpp", "src/render_lab.cpp", "src/render_lab.h",
         "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
         "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
+    "src/map_server_settings.cpp", "src/map_server_settings.h",
+    "tests/map_server_settings_tests.cpp",
         "src/performance_samples.cpp", "src/performance_samples.h",
         "src/lifecycle_watchdog.cpp", "src/lifecycle_watchdog.h",
         "tests/lifecycle_watchdog_tests.cpp",

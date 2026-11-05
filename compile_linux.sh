@@ -12,7 +12,7 @@ Usage: ./compile_linux.sh [options]
   (default)       Build optimized Qt Quick + bgfx renderer and launch it.
   --build-only    Build without launching the application.
   --baseline      Build and launch the QML-only baseline (no bgfx).
-  --tests         Also build and run the C++ scene geometry tests.
+  --tests         Also build and run the targeted C++ regression tests.
   --help          Show this help.
 
 Environment:
@@ -83,8 +83,8 @@ cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
 cmake --build "$BUILD_DIR" --target aowis-mobile --parallel "$JOBS"
 
 if "$run_tests"; then
-    cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests aowis-mobile-lifecycle-tests --parallel "$JOBS"
-    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-(gpu-(scene|stress)|lifecycle)$'
+    cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests --parallel "$JOBS"
+    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-(gpu-(scene|stress)|lifecycle|map-server-settings)$'
 fi
 
 if "$build_only"; then

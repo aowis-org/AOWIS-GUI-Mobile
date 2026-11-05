@@ -13,6 +13,7 @@
 class TestBinding final : public MapBgfx2dStyleBinding
 {
 public:
+    bool ready() const override { return true; }
     void bind(Mode, Table, bool) const override {}
 };
 

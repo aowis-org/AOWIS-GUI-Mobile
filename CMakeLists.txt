@@ -22,6 +22,8 @@ endif()
 qt_add_executable(aowis-mobile
     ${AOWIS_WINDOWS_ICON_RESOURCE}
     src/main.cpp
+    src/map_server_settings.cpp
+    src/map_server_settings.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
@@ -200,6 +202,11 @@ if(BUILD_TESTING)
         src/performance_samples.cpp
     )
     add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
+    add_executable(aowis-mobile-map-server-settings-tests
+        tests/map_server_settings_tests.cpp src/map_server_settings.cpp src/map_server_settings.h)
+    target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-map-server-settings-tests PRIVATE Qt6::Core)
+    add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
     add_executable(aowis-mobile-lifecycle-tests
         tests/lifecycle_watchdog_tests.cpp src/lifecycle_watchdog.cpp)
     target_include_directories(aowis-mobile-lifecycle-tests PRIVATE src)

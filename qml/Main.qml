@@ -6,15 +6,18 @@ Window {
     id: root
     width: 480
     height: 800
-    // The C++ side shows this after RenderLab::attach() is complete.
+    // C++ attaches the Qt/bgfx callbacks before making the window visible.
     visible: false
     title: Qt.application.name
     color: "#102f45"
+
     property real viewZoom: 1.0
     property real dragX: 0
     property real dragY: 0
     property string lastTap: "Touch or click the map"
-    property bool showPerformance: true
+    property string activePage: "map"
+    property string saveFeedback: ""
+    property bool saveSucceeded: false
 
     function publishView() {
         lab.setView(viewZoom, dragX, dragY)
@@ -27,13 +30,23 @@ Window {
         dragY = dragY * ratio + (y - height / 2) * (1 - ratio)
         viewZoom = next
     }
+    function openPage(page) {
+        navigationDrawer.close()
+        if (page === "settings") {
+            mapServerUrl.text = mapServerSettings.serverUrl
+            mapServerPort.text = mapServerSettings.serverPort > 0
+                               ? String(mapServerSettings.serverPort) : ""
+            saveFeedback = ""
+        }
+        activePage = page
+    }
     onViewZoomChanged: publishView()
     onDragXChanged: publishView()
     onDragYChanged: publishView()
     Component.onCompleted: publishView()
 
-    // In baseline mode the grid is rendered by Qt Quick. In bgfx mode its
-    // background and GPU geometry come from bgfx, never from this QML Canvas.
+    // Keep the QML baseline for validation. In normal mode bgfx renders
+    // directly underneath these Qt Quick controls.
     Canvas {
         id: referenceMap
         anchors.fill: parent
@@ -70,12 +83,12 @@ Window {
         }
     }
 
-    // Pointer handlers work with Android touchscreen multitouch, stylus,
-    // mouse and touchpad. They share the same pan/zoom model as desktop.
-    // QML overlays are later siblings, so their Buttons retain input priority.
+    // Gestures are disabled whenever the hamburger drawer or another page
+    // is open, so they cannot accidentally pan the map behind a text field.
     Item {
         id: mapArea
         anchors.fill: parent
+        enabled: root.activePage === "map" && !navigationDrawer.opened
 
         TapHandler {
             onTapped: function(point) {
@@ -83,7 +96,6 @@ Window {
                                ", " + Math.round(point.position.y)
             }
         }
-
         DragHandler {
             id: panGesture
             target: null
@@ -104,7 +116,6 @@ Window {
                 root.dragY += deltaY
             }
         }
-
         PinchHandler {
             id: pinchGesture
             target: null
@@ -128,15 +139,12 @@ Window {
                 const newZoom = Math.max(0.3, Math.min(3, baseZoom * activeScale))
                 const ratio = newZoom / baseZoom
                 root.viewZoom = newZoom
-                // Keep the feature underneath the original fingers anchored,
-                // including translation of the gesture centroid.
                 root.dragX = baseX * ratio + anchorX * (1 - ratio) + activeTranslation.x
                 root.dragY = baseY * ratio + anchorY * (1 - ratio) + activeTranslation.y
             }
             onActiveScaleChanged: updatePinch()
             onActiveTranslationChanged: updatePinch()
         }
-
         WheelHandler {
             target: null
             onWheel: function(event) {
@@ -146,31 +154,148 @@ Window {
         }
     }
 
+    // Settings is a full page instead of a permanent panel over the map.
     Rectangle {
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 14 }
-        height: headerLayout.implicitHeight + 24
-        radius: 12
-        color: "#ff142533"
-        border.color: "#478292"
+        id: settingsPage
+        anchors.fill: parent
+        visible: root.activePage === "settings"
+        color: "#102535"
+
         ColumnLayout {
-            id: headerLayout
             anchors.fill: parent
-            anchors.margins: 12
-            spacing: 7
-            RowLayout {
+            anchors.topMargin: 76
+            anchors.leftMargin: 20
+            anchors.rightMargin: 20
+            anchors.bottomMargin: 20
+            spacing: 15
+
+            Label {
+                text: "Settings"
+                color: "#f3f8fa"
+                font.pixelSize: 26
+                font.bold: true
+            }
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#416a7b" }
+            ScrollView {
+                id: settingsScroll
                 Layout.fillWidth: true
-                Label { text: Qt.application.name; color: "white"; font.bold: true; font.pixelSize: 19 }
-                Item { Layout.fillWidth: true }
-                Label {
-                    text: lab.bgfxMode ? "BGFX UNDERLAY" : "QML BASELINE"
-                    color: "#9ce5da"
-                    font.pixelSize: 11
-                    font.bold: true
+                Layout.fillHeight: true
+                clip: true
+                contentWidth: availableWidth
+
+                ColumnLayout {
+                    width: settingsScroll.availableWidth
+                    spacing: 12
+                    Label {
+                        text: "Map server"
+                        color: "#a5e7d4"
+                        font.bold: true
+                        font.pixelSize: 19
+                    }
+                    Label {
+                        text: "Server URL"
+                        color: "#dce8ec"
+                        font.pixelSize: 14
+                    }
+                    TextField {
+                        id: mapServerUrl
+                        Layout.fillWidth: true
+                        placeholderText: "http://192.168.2.10"
+                        selectByMouse: true
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
+                        onTextEdited: root.saveFeedback = ""
+                    }
+                    Label {
+                        text: "Use http:// or https://. Enter the port separately."
+                        color: "#a4bbc4"
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: "Port"
+                        color: "#dce8ec"
+                        font.pixelSize: 14
+                    }
+                    TextField {
+                        id: mapServerPort
+                        Layout.fillWidth: true
+                        placeholderText: "e.g. 8080"
+                        selectByMouse: true
+                        maximumLength: 5
+                        inputMethodHints: Qt.ImhDigitsOnly | Qt.ImhNoPredictiveText
+                        validator: IntValidator { bottom: 1; top: 65535 }
+                        onTextEdited: root.saveFeedback = ""
+                    }
+                    Button {
+                        text: "Save map server"
+                        Layout.fillWidth: true
+                        enabled: mapServerUrl.text.trim().length > 0 && mapServerPort.acceptableInput
+                        onClicked: {
+                            root.saveSucceeded = mapServerSettings.save(
+                                        mapServerUrl.text, mapServerPort.text)
+                            root.saveFeedback = root.saveSucceeded
+                                              ? "Map server saved on this device."
+                                              : mapServerSettings.error
+                            if (root.saveSucceeded) {
+                                mapServerUrl.text = mapServerSettings.serverUrl
+                                mapServerPort.text = String(mapServerSettings.serverPort)
+                                mapServerUrl.focus = false
+                                mapServerPort.focus = false
+                            }
+                        }
+                    }
+                    Label {
+                        text: root.saveFeedback
+                        visible: text.length > 0
+                        color: root.saveSucceeded ? "#9de6bd" : "#ffb8ad"
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: mapServerSettings.configured
+                              ? "Saved endpoint: " + mapServerSettings.endpointUrl
+                              : "No map server configured yet."
+                        color: "#c5e2e7"
+                        font.pixelSize: 13
+                        wrapMode: Text.WrapAnywhere
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: "The endpoint is saved locally. Map-server requests are not implemented yet; the visible network is still synthetic test geometry."
+                        color: "#92b2be"
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
                 }
             }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
+        }
+    }
+
+    // All prototype instrumentation lives here, never above the normal map.
+    Rectangle {
+        id: diagnosticsPage
+        anchors.fill: parent
+        visible: root.activePage === "diagnostics"
+        color: "#102535"
+
+        Flickable {
+            id: diagnosticScroll
+            anchors.fill: parent
+            anchors.topMargin: 76
+            anchors.bottomMargin: 16
+            contentWidth: width
+            contentHeight: diagnosticColumn.implicitHeight + 32
+            flickableDirection: Flickable.VerticalFlick
+            clip: true
+            ColumnLayout {
+                id: diagnosticColumn
+                x: 16
+                width: Math.max(0, diagnosticScroll.width - 32)
+                spacing: 12
+                Label { text: "Diagnostics"; color: "#f3f8fa"; font.pixelSize: 26; font.bold: true }
+                Label { text: lab.bgfxMode ? "BGFX renderer" : "QML baseline"; color: "#a5e7d4"; font.pixelSize: 13 }
                 ComboBox {
                     id: workloadSelector
                     Layout.fillWidth: true
@@ -180,61 +305,85 @@ Window {
                 }
                 Button {
                     text: lab.benchmarkActive ? "Recording…" : "Record 15s"
+                    Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
                     onClicked: lab.startBenchmark()
+                }
+                Button {
+                    text: "Recreate GPU resources (test)"
+                    Layout.fillWidth: true
+                    enabled: lab.bgfxMode && !lab.benchmarkActive
+                    onClicked: lab.requestGpuRecreation()
+                }
+                Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Label { text: lab.details; color: "#f0f7f9"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
+                Label { text: "bgfx frames: " + lab.frames + " | " + root.lastTap; color: "#dbe9ed"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: lab.recoveryStatus; color: "#ffdb9e"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11 }
+                Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
+                Label { text: lab.sceneStats; color: "#e7c88c"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
+                Label { text: lab.benchmarkResult; color: "#ade9c8"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
+                Label {
+                    text: "Zoom: " + root.viewZoom.toFixed(2) + "× | Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY)
+                    color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Button { text: "−"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25) }
+                    Button { text: "Center"; Layout.fillWidth: true; onClicked: { root.dragX = 0; root.dragY = 0 } }
+                    Button { text: "+"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25) }
                 }
             }
         }
     }
 
-    ColumnLayout {
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 14 }
-        spacing: 8
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: Math.min(root.height * 0.42, statPanel.implicitHeight + 24)
-            radius: 12
-            color: "#ff152938"
-            border.color: "#478292"
-            clip: true
-            Flickable {
-                anchors.fill: parent
-                contentWidth: width
-                contentHeight: statPanel.implicitHeight + 24
-                flickableDirection: Flickable.VerticalFlick
-                clip: true
-                ColumnLayout {
-                    id: statPanel
-                    x: 12
-                    y: 12
-                    width: parent.width - 24
-                    spacing: 6
-                    Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                    Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
-                    Label { text: "bgfx frames: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                    Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                    Button {
-                        text: "Recreate GPU resources (test)"
-                        Layout.fillWidth: true
-                        visible: root.showPerformance && lab.bgfxMode
-                        enabled: lab.bgfxMode && !lab.benchmarkActive
-                        onClicked: lab.requestGpuRecreation()
-                    }
-                    Label { text: lab.recoveryStatus; color: "#ffdb9e"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: root.showPerformance }
-                    Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; visible: root.showPerformance }
-                    Label { text: lab.sceneStats; color: "#e7c88c"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; visible: root.showPerformance }
-                    Label { text: lab.benchmarkResult; color: "#ade9c8"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
-                    Label { text: "Zoom: " + root.viewZoom.toFixed(2) + "×  |  Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY); color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12 }
-                }
+    Drawer {
+        id: navigationDrawer
+        width: Math.min(root.width * 0.82, 310)
+        height: root.height
+        edge: Qt.LeftEdge
+        modal: true
+        background: Rectangle {
+            color: "#132d3e"
+            border.color: "#416a7b"
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 12
+            Label { text: "AOWIS"; color: "#f2faf9"; font.bold: true; font.pixelSize: 25; Layout.topMargin: 20 }
+            Label { text: "Mobile"; color: "#97c6ce"; font.pixelSize: 13 }
+            Rectangle { Layout.fillWidth: true; height: 1; color: "#416a7b" }
+            Button { text: "Map"; Layout.fillWidth: true; onClicked: root.openPage("map") }
+            Button { text: "Settings"; Layout.fillWidth: true; onClicked: root.openPage("settings") }
+            Button { text: "Diagnostics"; Layout.fillWidth: true; onClicked: root.openPage("diagnostics") }
+            Item { Layout.fillHeight: true }
+            Label {
+                text: "AOWIS Mobile"
+                Layout.fillWidth: true
+                color: "#87aebb"
+                font.pixelSize: 12
             }
         }
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Button { text: "−"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25) }
-            Button { text: "Center"; Layout.fillWidth: true; onClicked: { root.dragX = 0; root.dragY = 0 } }
-            Button { text: "+"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25) }
-            Button { text: root.showPerformance ? "Less" : "Metrics"; onClicked: root.showPerformance = !root.showPerformance }
+    }
+
+    // A single unobtrusive control on the map replaces the old diagnostic
+    // header and permanently expanded metrics/benchmark overlays.
+    Button {
+        id: hamburgerButton
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: 14
+        width: 52
+        height: 52
+        text: "☰"
+        font.pixelSize: 24
+        Accessible.name: "Open navigation menu"
+        background: Rectangle {
+            radius: 12
+            color: "#df142c3a"
+            border.color: "#538593"
         }
+        onClicked: navigationDrawer.open()
     }
 }

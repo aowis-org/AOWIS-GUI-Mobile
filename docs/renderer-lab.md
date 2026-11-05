@@ -57,7 +57,7 @@ or Metal QML backend.
 | File | Responsibility |
 | --- | --- |
 | `src/main.cpp` | Platform identity, startup, rendering mode, app state and refresh timer |
-| `qml/Main.qml` | Synthetic baseline, touch gestures, diagnostic status and overlays |
+| `qml/Main.qml` | Synthetic baseline, touch gestures, hamburger navigation, Settings and Diagnostics pages |
 | `src/render_lab.h/.cpp` | Qt/bgfx lifecycle, context borrowing, frame submission and diagnostic counters |
 | `src/gpu_scene_geometry.h/.cpp` | Baseline geometry, camera math, deterministic stress tile geometry and LOD selection |
 | `src/gpu_scene_renderer.h/.cpp` | bgfx shaders, bounded tile cache, visibility/LOD, submission and release |
@@ -71,8 +71,8 @@ or Metal QML backend.
 
 ## Implemented scalability harness (measurement results pending)
 
-Select **Demo**, **~1k**, **~10k**, **~100k**, or **~1M features** in the QML
-header. The largest preset models 577 × 577 nodes and right/down pipes:
+Open the hamburger menu → **Diagnostics** and select **Demo**, **~1k**,
+**~10k**, **~100k**, or **~1M features**. The largest preset models 577 × 577 nodes and right/down pipes:
 **332,929 nodes + 664,704 pipes = 997,633 features**. The counts are *logical*
 model features; only geometry inside the camera viewport is uploaded/drawn.
 They are not 1 million independently simulated hydraulic objects.
@@ -87,12 +87,12 @@ this stride and **visible versus total** node/pipe counts. This is a
 large-project *viewport navigation* benchmark, not an all-million-at-once
 rasterization test; culling and LOD are always active in stress presets.
 
-The display shows bgfx CPU submission duration, actual inter-frame interval,
+The Diagnostics page shows bgfx CPU submission duration, actual inter-frame interval,
 optional bgfx GPU time, draw counts, tile uploads, estimated retained GPU
 **vertex payload** bytes, and Linux/Android process RSS when `/proc/self/status`
 is accessible. GPU payload estimates are not complete VRAM totals.
 
-Press **Record 15s** after letting geometry upload/warm up. A 15-second
+On the Diagnostics page, press **Record 15s** after letting geometry upload/warm up. A 15-second
 capture saves individual frame observations as a CSV file under the app's
 private `benchmarks/` data directory and prints summary p50/p95/p99 frame
 interval and p95 CPU/GPU timings. Pause/background or scene-graph invalidation

@@ -57,6 +57,19 @@ See [field workflows](survey-workflows.md).
 The supplied water/gear icon is common across current targets. Touch UI is
 Qt Quick/QML, not a QWidget desktop port.
 
+## Implemented navigation and server configuration
+
+The map fills the app window with a small hamburger button; the previous
+permanent metrics and workload controls have moved to **Diagnostics** in the
+menu. The same diagnostic tools remain accessible for Android/Linux testing.
+
+**Settings → Map server** provides two fields: HTTP(S) server URL (without a
+port) and a numeric port (1–65535). Both values are validated in C++, saved
+through Qt's per-user settings, and restored on restart. A full endpoint URL
+is formed from those two entries. This is a *configuration-only* feature:
+no map-server HTTP client, tile requests, health check or connectivity status
+is implemented in Mobile yet. Saving does not imply that the server is online.
+
 ## Current implementation boundary
 
 The **existing** grid, colored segments and junctions are synthetic graphics

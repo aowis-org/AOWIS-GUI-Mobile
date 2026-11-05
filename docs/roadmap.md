@@ -64,6 +64,13 @@ Keep a single graphics engine, not duplicated mobile/desktop renderers.
 link the shared implementation, and relevant regression/performance tests
 remain green. Do not move the current desktop renderer before this validation.
 
+## Mobile map server settings (implemented configuration, integration pending)
+
+A minimal hamburger menu preserves the full-screen map and keeps renderer
+instrumentation in Diagnostics. Settings stores a validated HTTP(S) URL and
+separate TCP port via QSettings. Mobile does **not** yet make map server
+requests; that is part of connecting the actual map renderer and tile pipeline.
+
 ## Map and survey foundation
 
 Replace synthetic geometry with real AOWIS-MAP/source imagery and geographic
