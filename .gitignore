@@ -54,3 +54,7 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# Generated performance captures: do not accidentally commit device reports.
+# zip_mobile_project.sh explicitly includes safe benchmark report formats.
+/benchmarks/
