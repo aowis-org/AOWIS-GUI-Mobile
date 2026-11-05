@@ -36,6 +36,8 @@ that screen's HOST:PAIR_PORT. Paired devices can reconnect automatically.
   ANDROID_SERIAL            Choose a specific ADB serial if multiple exist.
   AOWIS_ANDROID_IMAGE       Override pinned Docker image.
   AOWIS_ANDROID_JOBS        Parallel jobs (default 8).
+  AOWIS_ANDROID_DEBUG_SIGNING_DIR  Persistent host debug keystore directory
+                                (default: XDG data home/aowis-gui-mobile/android-debug-signing).
   AOWIS_DOCKER_RUN_NETWORK  Container network (default host).
   AOWIS_DOCKER_BUILD_NETWORK Docker image-build network (default host).
 
@@ -217,16 +219,32 @@ if ! docker image inspect "$AOWIS_ANDROID_IMAGE" >/dev/null 2>&1; then
 fi
 
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/aowis-mobile/gradle"
-mkdir -p "$cache_root"
+# Android's debug APK is signed by Gradle with debug.keystore. A disposable
+# Docker HOME must never produce a new signing identity on every build.
+# Persist that keystore OUTSIDE the repository/build tree so cleans, renames,
+# snapshots and Docker image rebuilds leave it intact.
+data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+signing_dir="${AOWIS_ANDROID_DEBUG_SIGNING_DIR:-$data_home/aowis-gui-mobile/android-debug-signing}"
+[[ "$signing_dir" == /* ]] || die 'AOWIS_ANDROID_DEBUG_SIGNING_DIR must be an absolute path.'
+umask 077
+mkdir -p -- "$cache_root" "$signing_dir"
+chmod 700 -- "$signing_dir"
+if [[ -e "$signing_dir/.aowis-debug-keystore-created" && ! -s "$signing_dir/debug.keystore" ]]; then
+    die "Previously provisioned Android debug keystore is missing: $signing_dir/debug.keystore. Restore it from backup; refusing to silently change the APK signing identity."
+fi
+echo "Android debug signing identity: $signing_dir/debug.keystore"
 echo "=== Compiling Android APK with Docker: $AOWIS_ANDROID_IMAGE ==="
 docker run --rm --network="${AOWIS_DOCKER_RUN_NETWORK:-host}" \
     --user "$(id -u):$(id -g)" \
     -v "$project_dir:/project" -w /project \
     -v "$cache_root:/gradle-cache" \
+    -v "$signing_dir:/tmp/.android" \
     -e HOME=/tmp \
+    -e ANDROID_USER_HOME=/tmp/.android \
     -e GRADLE_USER_HOME=/gradle-cache \
     -e "AOWIS_QT_ANDROID_VERSION=$AOWIS_QT_ANDROID_VERSION" \
     -e "AOWIS_ANDROID_NDK_VERSION=$AOWIS_ANDROID_NDK_VERSION" \
+    -e "AOWIS_ANDROID_BUILD_TOOLS_VERSION=$AOWIS_ANDROID_BUILD_TOOLS_VERSION" \
     -e "AOWIS_ANDROID_BGFX=$bgfx" \
     -e "AOWIS_ANDROID_BUILD_NAME=$build_name" \
     -e "AOWIS_ANDROID_JOBS=$jobs" \
@@ -276,7 +294,17 @@ if [[ -z "$serial" ]]; then
 fi
 
 echo "=== Installing and launching on $serial ==="
-adb -s "$serial" install -r "$apk" || die "APK installation failed on $serial"
+if ! install_output="$(adb -s "$serial" install -r "$apk" 2>&1)"; then
+    printf '%s\n' "$install_output" >&2
+    if [[ "$install_output" == *INSTALL_FAILED_UPDATE_INCOMPATIBLE* ]]; then
+        echo 'The installed AOWIS package was signed with an older, different debug key.' >&2
+        echo 'The new key is persistent. To retain local app data, back it up before uninstalling.' >&2
+        echo "When ready: adb -s '$serial' uninstall org.aowis.mobile" >&2
+        echo 'Then rerun ./compile_android.sh --run. No automatic uninstall is performed.' >&2
+    fi
+    die "APK installation failed on $serial"
+fi
+printf '%s\n' "$install_output"
 adb -s "$serial" shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1 \
     || die "Launching AOWIS Mobile failed on $serial"
 echo '=== AOWIS Mobile launched ==='

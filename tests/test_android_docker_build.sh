@@ -66,7 +66,7 @@ esac
 MOCK_ADB
 chmod +x "$work/bin/docker" "$work/bin/adb"
 export PATH="$work/bin:$PATH" MOCK_LOG="$work/commands.log" MOCK_ROOT="$work/repo"
-export XDG_CACHE_HOME="$work/cache"
+export XDG_CACHE_HOME="$work/cache" XDG_DATA_HOME="$work/data"
 cd "$work/repo"
 
 fail() { echo "FAILED: $*" >&2; exit 1; }
@@ -84,6 +84,12 @@ run_case
 assert_log 'docker build '
 assert_log 'docker run '
 assert_not_log 'adb -s '
+# The signing key directory lives OUTSIDE the source tree and is mounted for
+# every Docker invocation, regardless of local checkout names or build mode.
+[[ -d "$work/data/aowis-gui-mobile/android-debug-signing" ]] || fail 'persistent signing dir not created'
+assert_log "$work/data/aowis-gui-mobile/android-debug-signing:/tmp/.android"
+assert_log '-e ANDROID_USER_HOME=/tmp/.android'
+assert_log '-e AOWIS_ANDROID_BUILD_TOOLS_VERSION=36.0.0'
 
 # Cached image, explicit build-only, with device: must not deploy.
 export FAKE_IMAGE_EXISTS=1 FAKE_DEVICE_COUNT=1
@@ -94,6 +100,7 @@ assert_not_log 'adb '
 
 # One authorized device deploys; baseline produces its own output.
 run_case --baseline
+assert_log "$work/data/aowis-gui-mobile/android-debug-signing:/tmp/.android"
 assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-baseline'
 assert_log 'adb -s mobile1 install -r'
 assert_log 'adb -s mobile1 shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
@@ -167,6 +174,15 @@ unset FAKE_PAIR_OK FAKE_MDNS FAKE_ADB_DEVICES
 rm -f "$MOCK_ROOT/wifi-connected"
 export FAKE_DEVICE_COUNT=1
 
+# Never regenerate a previously provisioned but missing keystore. This check
+# must fail on the host BEFORE starting a disposable Docker container.
+signing_dir="$work/data/aowis-gui-mobile/android-debug-signing"
+touch "$signing_dir/.aowis-debug-keystore-created"
+: > "$MOCK_LOG"
+if ./compile_android.sh --build-only > "$work/output.log" 2>&1; then fail 'lost debug key was accepted'; fi
+assert_not_log 'docker run '
+rm -f "$signing_dir/.aowis-debug-keystore-created"
+
 # No bgfx sources must fail before trying Docker (but baseline can work).
 rm "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h"
 : > "$MOCK_LOG"
@@ -197,6 +213,11 @@ grep -Fq 'target_link_libraries(aowis-mobile PRIVATE android)' "$root/CMakeLists
 grep -Fq -- '--target aowis-mobile_make_apk' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'Android APK build still uses old test target'
 grep -Fq 'QT_ANDROID_APP_NAME "AOWIS"' "$root/CMakeLists.txt" || fail 'Android launcher label changed'
 grep -Fq 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"' "$root/CMakeLists.txt" || fail 'Android package identity changed'
+
+grep -Fq 'keytool -genkeypair -noprompt' "$root/tools/qt-android/prepare_debug_signing.sh" || fail 'persistent debug certificate creation missing'
+grep -Fq 'APK signature DOES NOT match' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'APK certificate comparison missing'
+grep -Fq 'ANDROID_USER_HOME=/tmp/.android' "$root/compile_android.sh" || fail 'persistent Gradle signing location missing'
+grep -Fq 'prepare_debug_signing.sh' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'signing provisioning script not invoked'
 
 printf 'Android Docker entrypoint: 15+ scenarios + build dependency contracts passed\n'
 

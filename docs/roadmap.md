@@ -8,7 +8,7 @@ acceptance, not already shipped capabilities.
 
 ## Immediate priority 1 — GPU scalability and performance
 
-**Harness implemented; real-device acceptance still pending.** The app now
+**Harness implemented; first Linux/Android recordings available, full acceptance pending.** The app now
 provides deterministic ~1k/~10k/~100k/~1M node+pipe feature presets, visible
 tile geometry, bounded GPU cache, adaptive LOD, frame statistics and 15-second
 per-frame CSV captures (p50/p95/p99, CPU/GPU time when available, RSS and GPU
@@ -16,10 +16,16 @@ vertex payload estimates). Pure C++ tests cover counts, deterministic tile
 meshes, selection bounds and percentile calculations. The full million-feature
 scene is not allocated or rendered all at once; document visibility/LOD.
 
-**Remaining:** run the identical stationary and scripted pan/zoom workloads on
-Linux and a physical Android phone, including cold versus warmed-up scenes,
-multiple screen sizes, sustained operation, memory stability and thermal
-behavior. Store resulting CSV reports and record device specs, refresh rates,
+**Initial measurements (2026-11-05):** Desktop and Android 15-second CSVs
+are available for ~1k/~10k/~100k/~1M presets. Android p95 frame intervals
+are approximately 19.6–20.7 ms, desktop approximately 17.0–17.8 ms. The ~1M
+runs differ greatly in visible geometry, and one Android run contains a p99
+spike near 34.9 ms with tile uploads. Android GPU timings are unavailable and
+RSS reports zero; those measurements are not yet meaningful.
+
+**Remaining:** repeat controlled stationary and scripted pan/zoom workloads on
+Linux and Android, including cold versus warmed-up scenes, multiple screen
+sizes, sustained operation, memory stability and thermal behavior. Store resulting CSV reports and record device specs, refresh rates,
 visible items, driver and build configuration.
 
 **Accept when:** repeatable measurements identify stable operation or bounded,

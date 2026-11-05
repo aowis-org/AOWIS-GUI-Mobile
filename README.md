@@ -131,3 +131,5 @@ secrets, Git metadata and nested submodule contents. The `external/bgfx.cmake`
 submodule is pinned separately in Git.
 
 License: Apache-2.0.
+
+Android debug builds reuse a persistent signing key outside the checkout; see [Android build documentation](docs/android-renderer-test.md).

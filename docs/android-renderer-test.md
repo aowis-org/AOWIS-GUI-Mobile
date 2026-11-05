@@ -24,6 +24,31 @@ and its visible launcher label is **AOWIS**.
 ./prepare_android_docker.sh   # explicit image preparation/rebuild
 ```
 
+### Stable Android debug signing
+
+`compile_android.sh` keeps one persistent Android **debug signing key** on the
+host, outside the checkout and build directories:
+
+```text
+${XDG_DATA_HOME:-$HOME/.local/share}/aowis-gui-mobile/android-debug-signing/debug.keystore
+```
+
+The directory is mounted into Docker as `/tmp/.android`, and Gradle's Android
+user-home location is pinned there. The first build creates the key; later
+builds verify the existing key and compare its certificate to the APK's actual
+signature. Rebuilding Docker, removing CMake build directories or renaming the
+checkout does not change the signing identity. Back up this keystore: if it is
+lost, future updates to an installed APK cannot preserve the signing identity.
+You may override its location with `AOWIS_ANDROID_DEBUG_SIGNING_DIR` (absolute
+host path), but should not change it casually.
+
+**One-time transition:** APKs built by earlier disposable containers used an
+ephemeral debug key, so Android may reject the first update with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Back up all local app data first, then
+explicitly run `adb uninstall org.aowis.mobile` and reinstall. The script
+never uninstalls automatically; an uninstall deletes private app data.
+This is a development/debug certificate, not an app-store release key.
+
 The APK is produced at:
 
 ```text
@@ -64,8 +89,9 @@ intentionally do not enable legacy unauthenticated `adb tcpip 5555`.
 
 The synthetic bgfx grid, colored network lines and junctions appear under QML
 on a physical Android phone, matching the Linux scene. Basic map gestures
-have been reported working. **No comprehensive lifecycle or stress results
-have been recorded yet.** Do not interpret successful APK compilation as
+have been reported working. **Initial 15-second workload recordings were supplied for
+Linux and Android; comprehensive lifecycle and sustained stress acceptance
+remain open.** Do not interpret successful APK compilation as
 proof of rotation/resume behavior.
 
 ## Acceptance protocol: lifecycle and recovery (NEXT)
