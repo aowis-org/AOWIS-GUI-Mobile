@@ -128,10 +128,11 @@ if(AOWIS_MOBILE_WITH_BGFX)
             "Run ./git_submodule_init.sh --render or initialize the pinned Git submodule.")
     endif()
     set(AOWIS_RENDER_BUILD_MAP_CORE OFF CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_NETWORK_SCENE ON CACHE BOOL "" FORCE)
     add_subdirectory("${AOWIS_RENDER_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-render" EXCLUDE_FROM_ALL)
     target_sources(aowis-mobile PRIVATE
         src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
-    target_link_libraries(aowis-mobile PRIVATE AOWIS::RenderDevice AOWIS::RenderGeometry)
+    target_link_libraries(aowis-mobile PRIVATE AOWIS::RenderDevice AOWIS::RenderGeometry AOWIS::RenderNetwork)
     if(ANDROID)
         # bgfx's EGL backend calls ANativeWindow_setBuffersGeometry. This
         # function is provided by the Android NDK's libandroid, not EGL/GLES.
@@ -180,6 +181,12 @@ if(BUILD_TESTING)
             AOWIS::RenderGeometry)
         add_test(NAME aowis-mobile-shared-render-geometry
             COMMAND aowis-mobile-shared-render-geometry-tests)
+        add_executable(aowis-mobile-shared-render-network-input-tests
+            tests/shared_render_network_input_tests.cpp)
+        target_link_libraries(aowis-mobile-shared-render-network-input-tests PRIVATE
+            AOWIS::RenderNetwork)
+        add_test(NAME aowis-mobile-shared-render-network-input
+            COMMAND aowis-mobile-shared-render-network-input-tests)
     endif()
     add_executable(aowis-mobile-gpu-scene-tests
         tests/gpu_scene_geometry_tests.cpp
