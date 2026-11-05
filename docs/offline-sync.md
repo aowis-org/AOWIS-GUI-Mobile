@@ -1,113 +1,70 @@
-# Offline operation, local persistence and synchronization
+# Offline data and synchronization contract
 
-## Product requirements
+**Product requirement, not a current implementation:** Mobile must let a
+surveyor work with no network and retain local records, edits and media across
+app restarts. No on-device survey store or sync protocol exists in this source
+tree yet.
 
-**Agreed:** Work must continue in poor or absent Internet coverage. Recording
-an observation or saving a local edit must not depend on a round trip to a
-remote server. Losing a connection must not lose previously saved changes.
+## State the app must communicate
 
-Mobile must visibly distinguish:
-
-- **Local and saved:** durable on this device, not necessarily uploaded.
-- **Queued / unsynchronized:** waiting for transfer or reconciliation.
-- **Synchronized:** server has authoritatively acknowledged the applicable
-  operation or objects.
-- **Conflict / action needed:** the target changed or an operation was rejected;
-  local data is retained until explicitly resolved.
-
-A success toast or a matching SHA-256 is not by itself a server acknowledgement
-that a draft or branch HEAD advanced. Operation identity and authoritative
-status matter separately from content equality.
-
-## Proposed local storage and editing split
-
-An offline survey session needs durable geometry, type/field values, GPS
-metadata, attachments and a pending-operation ledger. A direct network edit
-needs an editable private working copy with MODEL action history.
-
-**Decision not yet made:** whether the phone runs a full native embedded
-private DVMDB, a lightweight mobile store that later imports into a personal
-DVMDB, or some carefully bounded combination. Selection criteria include
-Android/iOS packaging, durability under abrupt termination, working-copy
-semantics, storage use and usable offline conflict handling. A device that
-stores only an in-memory queue would **not** meet the product requirement.
-
-For a direct edit of a project hosted on a shared DVMDB, the intended AOWIS
-rule still applies: checkout into a personal editable repository, not a write
-straight to an arbitrary shared database. An on-device repository could
-become that personal source if the runtime and DVMDB integration support it.
-Do not silently change the personal-server designation just because Mobile
-starts without connectivity.
-
-## Basemap operation
-
-The app must be usable with explicitly downloaded offline map areas. **Proposed
-requirements:** user-selectable extent and detail level, estimated package
-size, download progress, integrity check, stored package inventory, deletion
-and map display with no network. Provider licensing/attribution must permit
-actual offline storage; ordinary transient HTTP raster cache contents should
-not be treated as a guaranteed offline region.
-
-AOWIS-SERVER-MAP already serves raster and terrain data, but mobile package
-creation/mounting and automatic offline area management are **not** currently
-an integrated capability. 2D surveying should still work when imagery is
-unavailable; user-collected features must remain accessible.
-
-## Edits, history and transfer
-
-DVMDB already distinguishes a mutable private working copy from an immutable
-local Commit and from a separately moving shared branch HEAD. Mobile should
-preserve those distinctions:
-
-1. Persist field change or meaningful model action locally.
-2. When connected, transmit only what the receiver needs, with an operation
-   identity and enough expected-state information to detect stale writers.
-3. Confirm acceptance and recover the result after a lost acknowledgement.
-4. Commit a direct working copy locally when requested; this must not
-   silently publish to a shared source.
-5. Fetch/publish/merge by explicit workflow as capabilities become available.
-
-**Existing elsewhere:** DVMDB has verified full/incremental revision bundles,
-private drafts, canonical MODEL event saves and conditional writes. A fully
-integrated whole-project Clone/Fetch/Publish/reconcile flow is not yet
-complete in the source inspected for this design. Mobile should not promise
-automatic bidirectional publication before that workflow exists.
-
-**Proposed performance direction:** viewport-scoped reads, content-addressed
-objects, small delta/event transfers and sparse receipts instead of fetching
-a whole `NetworkHydraulic` on each Undo/Redo or small edit. Hashes (including
-SHA-256) are useful for object verification and comparing a known resulting
-state, **not** a substitute for missing remote data, version checks, writer
-fencing, operation IDs or conflict resolution.
-
-## Conflict behavior
-
-- If a remote branch moved independently, preserve local commits or draft
-  work; offer reconciliation/merge rather than overwrite.
-- If two devices edited the same logical asset or geometry while offline,
-  request review of incompatible changes. Do not silently choose by timestamp.
-- Multiple observations of the same physical object can coexist as evidence.
-  Their spatial overlap is not by itself a synchronization conflict.
-- Upload of photos and related data must be recoverable and idempotent, with
-  a clear status when only part of the attachment batch is transferred.
-- A phone interrupted during sync must be able to retry without duplicating
-  accepted actions or turning the current draft into a second Commit.
-
-## Tests and acceptance
-
-The minimum offline test matrix should include:
-
-| Test | Required outcome |
+| State | Meaning |
 | --- | --- |
-| Start survey with no network, collect point/line/area | All data saved and viewable locally |
-| Kill app midway through a saved session; reopen | Completed saves and attachments preserved; unfinished draft recoverable |
-| Stop network during upload, reconnect and retry | No duplicate records or missing evidence |
-| Save locally while server is unavailable | No accidental direct write to shared source |
-| Two devices change same direct-edit target | Deterministic conflict, no silent loss |
-| Very large project with narrow map viewport | Bounded local work, no full-network reload per action |
-| Device reports poor GPS accuracy | Quality visible; manual placement remains available |
-| Clear offline map package | No deletion of survey observations or edits |
+| Locally saved | Durable on device, not necessarily transferred |
+| Pending sync | Local change/attachment awaits transfer or acknowledgement |
+| Synchronized | Authoritative remote has acknowledged the specific operation/state |
+| Conflict | Remote state differs or a write was refused; local work is retained |
 
-Additional engineering tests should exercise crash consistency, stale
-operation IDs, lease/fencing failures, attachment integrity and power loss
-at each durable-save boundary. These are **planned tests**, not test results.
+A hash match can verify content, but does not replace acknowledgement of a
+particular operation, revision or working-copy advance.
+
+## Observation store (proposed)
+
+The local survey store needs durable sessions, UUIDv7 observation identity,
+geometry, classification, capture provenance, photos/attachments and a retry
+ledger. Save should be atomic enough that a process kill never leaves an
+apparently saved observation with a missing required payload. Attachment
+integrity, interrupted transfers, duplicate upload attempts and device storage
+limits need explicit tests.
+
+The exact embedded engine is undecided: embedding DVMDB on Android is one
+candidate, but an alternative evidence store is valid if it respects the
+synchronization and provenance contract. Do not claim a Mobile DVMDB has
+already been ported or integrated.
+
+## Direct editing and DVMDB (agreed direction)
+
+A user designates a personal working DVMDB (embedded in Standalone or REST,
+according to platform). Projects on that server can be edited directly;
+projects on other servers are **checked out** before editing. Branch, HEAD,
+immutable Revision, Commit, undo/redo and publication semantics are DVMDB
+responsibilities. Editing invalid hydraulic simulations is allowed; broken
+structural references are not.
+
+Mobile must not invent a separate branch-history format or upload a full
+hydraulic network on every small edit/undo step. Sparse receipts/deltas,
+operation IDs, precondition checks, idempotent retries and clear server
+acknowledgements are preferred. How exactly this is implemented depends on
+DVMDB's tested protocol when Mobile integration begins.
+
+## Offline map data
+
+The map should download a defined geographic region from a licensed source,
+record package provenance/version and report available storage. Missing tiles
+should not stop a survey from saving geometry. AOWIS-SERVER-MAP's existing
+HTTP imagery/terrain cache is not automatically an offline region manager.
+Bulk offline downloads from public OSM tile infrastructure must not be assumed
+permitted; use an authorized provider or hosted packages.
+
+## Conflict and recovery requirements
+
+- Preserve the entire local change set when disconnected or on HTTP errors.
+- Retry safely without duplicating observations, attachments or commits.
+- Expose remote divergence and allow deliberate resolution; never silently
+  overwrite another device's edits.
+- Verify crash/restart recovery, partial attachments, repeated upload timeouts,
+  out-of-order responses and eventual synchronization.
+- Keep the observed field measurement and the accepted authoritative feature
+  distinct and linked.
+
+These capabilities are not blockers for proving the map renderer, but they are
+release blockers for any claim of reliable offline surveying or Direct Edit.

@@ -1,90 +1,71 @@
-# Product: field mapping and survey
+# Product: geographic field survey
 
-## Goal
+## Purpose
 
-**Agreed:** AOWIS Mobile is a map-centered field application for capturing,
-classifying, inspecting and editing geographic objects. Its first purpose is
-*surveying*, not recreating the desktop GUI or running a hydraulic simulation
-on a phone.
+**AOWIS-GUI-Mobile** is a map-first field tool for capturing, describing and
+editing geographic features. Its main job is to make surveying fast and
+reliable in the field, including without connectivity. It is **not** a smaller
+copy of desktop AOWIS-GUI or a hydraulic solver.
 
-The product should make this interaction short and repeatable:
-
-1. Open a map of the survey area, online or offline.
-2. Locate a feature using GPS, a map tap, manual geometry or a track.
-3. Choose a **point**, **line**, or **area** and identify what it represents.
-4. Supply relevant attributes and optional supporting evidence.
-5. Save locally, continue surveying, and synchronize when possible.
-
-Surveyors must also be able to select and update existing mapped objects.
+The intended short workflow is: open an area → position or draw a feature →
+classify it → attach details/evidence → save durably → synchronize when possible.
+Existing features can be selected and inspected as well.
 
 ## Domains
 
-| Domain | Initial intent | Important distinction |
+| Domain | Intended use | Domain constraint |
 | --- | --- | --- |
-| General geographic mapping | Points, lines, areas and configurable feature types | Independent survey or map features, not hydraulic assets by default |
-| OSM | OSM-like tagging/classification and, later, a capable OSM editor | External OSM identity, data model, policies and publication must be mediated by an adapter |
-| AOWIS Hydraulic Distribution | Locate and record water assets; edit real distribution objects when appropriate | Typed hydraulic entities, network references, real connectivity and engineering properties |
-| AOWIS Hydraulic Drainage | Future survey and editing of drainage objects | Will require its own domain model and topology |
+| General mapping / OSM-like surveying | Points of interest, roads, waterways, buildings, parcels and other features | OSM tags/IDs are external semantics; full OSM editing/upload is later |
+| Hydraulic Distribution | Survey and eventually directly edit pipes, valves, junctions, hydrants, tanks, reservoirs | Typed AOWIS MODEL objects and real node connectivity, not arbitrary polylines |
+| Hydraulic Drainage | Survey and later directly edit manholes, drains, culverts, channels and catchments | Future domain model and topology |
 
-Examples include valves, hydrants, junctions, pipes, tanks, reservoirs, roads,
-waterways, buildings, parcels, catchments, manholes and culverts. These examples
-are a product direction, **not** a claim that all corresponding MODEL entity
-types or mobile classification forms already exist.
+One geometry toolbar is shared across domains: **Point**, **Line**, **Area**,
+**Select/Edit**. A selected object's classification determines attributes,
+validation and any domain-specific connections. A polygon alone is not a
+catchment; a polyline alone is not a hydraulic pipe.
 
-## Shared core interactions
+## Two explicitly separate workflows
 
-**Agreed** as part of the survey tool:
+**Agreed:** Mobile supports both **Survey Observations** (field evidence that
+may be incomplete or uncertain) and **Direct Edit** (authorized changes to real
+AOWIS objects in a working copy). Observations must never silently mutate
+an authoritative hydraulic network. The review/integration step explicitly
+links evidence to a target object; the original observation remains traceable.
+See [field workflows](survey-workflows.md).
 
-- Full-screen or near-full-screen **2D map**, with layer/feature selection.
-- **Point**, **line**, **area**, and **select/edit** tools.
-- Choose the object's identity/type after capture, with an efficient way to
-  capture many objects of the same type.
-- GPS-based positioning and manual map placement.
-- View, inspect, edit and save classified objects.
-- **Both** direct AOWIS object editing and separate survey observations.
-- **Offline-first** field work, with durable unsynchronized changes.
-- A design that can grow into OSM editing and drainage, not special cases
-  embedded in a single water-network screen.
+## Intended user experience
 
-**Proposed early enhancements:** location accuracy display, repeated GPS
-sampling, GPS-track line/area capture, searchable type presets, photos,
-field notes, visible unsynced state and optional external GNSS/RTK receivers.
-See [field workflows](survey-workflows.md) for more detail.
+- A near-full-screen 2D map, compact status/layer controls, large touch targets,
+  searchable/recent object classifications and attribute bottom sheets.
+- Capture from device GPS, manual placement and eventually walks/traces or
+  external GNSS. Show reported accuracy rather than implying survey-grade
+  precision from a normal phone.
+- Clear distinction among **locally saved**, **not synchronized**, **synced**
+  and **conflict** states; keep all unsynced field data after a network failure.
+- Photos, notes and asset identifiers as evidence, with repeat-capture flows
+  for many objects of the same type.
+- Offline basemaps from licensed sources, prepared before leaving coverage.
 
-## Product boundaries
+## Platform identity
 
-- A geographic **polyline** is not automatically an AOWIS hydraulic pipe.
-  A real pipe must connect appropriate network entities.
-- An **observation** can describe a suspected or newly discovered asset even
-  when its network topology is unknown; direct hydraulic edits must maintain
-  the canonical model's reference rules.
-- A **map area** (polygon) is not automatically a hydraulic catchment, a
-  reservoir footprint, an OSM multipolygon or a drainage subcatchment.
-  Classification determines its domain semantics.
-- OSM editing does not mean storing AOWIS hydraulic engineering objects as
-  OSM-native entities.
-- Simulation/monitoring, complete desktop editing tools and full OSM upload
-  workflows are **not prerequisites** for the first useful field-survey app.
+| Environment | Visible name | Internal identity |
+| --- | --- | --- |
+| Android | **AOWIS** | `org.aowis.mobile` |
+| Linux desktop build of Mobile | **AOWIS Mobile** | `aowis-mobile` |
+| Future iOS | **AOWIS** | To be defined |
 
-## Platforms and UI
+The supplied water/gear icon is common across current targets. Touch UI is
+Qt Quick/QML, not a QWidget desktop port.
 
-**Proposed:** Android first, with iOS kept viable architecturally. Implement a
-touch-first application rather than port the existing desktop QWidget panels.
-Qt Quick/QML is the preferred UI direction, with shared AOWIS C++ logic where
-practical. The rendering choice remains subject to a real-device prototype.
+## Current implementation boundary
 
-The initial editor should be fast to operate with one hand, support landscape
-and tablet layouts, work in poor connectivity, and make the active workflow
-(Observation versus Direct Edit) unmistakable.
+The **existing** grid, colored segments and junctions are synthetic graphics
+for GPU integration tests. None represent captured sites or hydraulic assets.
+There are no survey forms, GPS permissions, offline DB, maps or sync yet.
+The rendering foundation has been exercised on Linux and Android. See
+[renderer integration](renderer-lab.md) and [roadmap](roadmap.md).
 
-## Scope of first useful release
-
-The first releasable survey experience should cover map/GPS positioning, point
-and line capture, area geometry, type selection, observation collection,
-reliable local persistence and offline basemaps. Direct distribution editing
-and server synchronization are high-priority follow-ons, with their contracts
-defined early enough not to require redesign of captured features.
-
-A full general OSM editor, drainage editor, sophisticated GNSS processing,
-collaborative task dispatch, 3D terrain rendering, and iOS release are later
-extensions. Ordering and acceptance criteria are in the [roadmap](roadmap.md).
+A first useful survey release should allow GPS/manual points, lines and areas,
+classification, reliable local observation saving and offline basemaps. Direct
+hydraulic edits, synchronization and richer OSM editing follow as the relevant
+shared dependencies become ready. Advanced 3D, RTK and drainage can come later.

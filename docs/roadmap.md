@@ -1,127 +1,101 @@
 # Implementation roadmap
 
-## Baseline
+The active application is **AOWIS-GUI-Mobile**: Qt Quick/QML, a working
+bgfx OpenGL/EGL underlay on Linux and Android, an instrumented synthetic
+network scene, and Docker Android builds. **No geographic survey feature is
+implemented yet.** The following milestones describe future work and
+acceptance, not already shipped capabilities.
 
-As of **2026-11-05**, the **AOWIS** application has a working Qt Quick
-shell and a bgfx direct-underlay diagnostic map on Linux and Android (verified
-on an Android phone). Its identity is `org.aowis.mobile` on Android and
-`aowis-mobile` on Linux. The QML-only comparison path remains available.
-This is a rendering foundation, **not yet a survey editor**: GPS, generic
-feature capture, local survey data, offline basemaps and synchronization are
-not implemented. See [rendering diagnostics](renderer-lab.md) for outstanding
-lifecycle, scalability and performance validation. The priorities below are
-future product deliverables, not claims of completed field functionality.
+## Immediate priority 1 — GPU scalability and performance
 
-The scope is intentionally a field-survey product. The complete desktop editor
-and community OSM editor are not requirements for the first usable APK.
+Add selectable deterministic synthetic scenes with approximately **1,000,
+10,000, 100,000 and (if practical) 1,000,000** points/segments. Exercise
+geometry creation/upload, steady-state pan/zoom, resize and sustained work.
+Track frame pacing percentiles, CPU/GPU time, draw counts, CPU memory, GPU
+buffer sizes and thermal behavior on Linux and physical Android devices.
+Keep test workload, visibility/culling settings and recorded device conditions
+explicit. A QML-only Canvas does not constitute an equivalent GPU benchmark.
 
-## Priority 1 — Runnable map shell
+**Accept when:** repeatable workloads and exported results demonstrate that
+performance is stable or reveal a bounded, actionable bottleneck, with no
+unexplained disappearing geometry, GPU errors or runaway memory.
 
-Build on the existing Android/Linux Qt Quick shell and verified bgfx underlay.
-Finish the real-device lifecycle, orientation, resize and scalability tests;
-replace synthetic test geometry with a proper map viewport and initial map
-source. Add a visible position indicator and map-coordinate selection. Keep
-mobile adapters iOS-compatible where practical. Extract the shared renderer
-only after lifecycle and architecture tests, not merely because the probe draws.
+## Immediate priority 2 — Android lifecycle and GPU recovery
 
-**Accept when:** the application launches reliably, pans/zooms smoothly,
-recovers after background/resume and exposes selected map coordinates.
+Test and improve background/foreground, rotation, screen lock, task switching,
+window resize, interrupted gestures and scene-graph invalidation. Add
+repeatable test instrumentation and deterministic resource ownership. Verify
+that Qt-owned EGL contexts and bgfx buffers are released/rebuilt correctly.
 
-## Priority 2 — Generic survey capture and durable observation storage
+**Accept when:** repeated real-device transitions leave both bgfx graphics
+and QML usable; no persistent black frame, GPU state corruption, crash, leak
+or lost input remains. Explicitly note cases where actual context loss could
+not be induced. See [Android acceptance procedure](android-renderer-test.md).
 
-Implement point/line/polygon drawing, selection, geometry correction and
-basic classification. Add a persistent local observation/session store with
-UUIDv7 identities, source/time/accuracy metadata, basic fields and map
-review. Integrate platform GPS plus manual placement. Support tentative
-classifications, including unknown assets. Prefer forms driven by type
-metadata rather than hardcoded per-object screens.
+## Next — Extract `AOWIS-GUI-Render`
 
-**Accept when:** a surveyor can record, classify, review, edit and retain
-points, lines and areas across process/device restarts without connectivity.
+After priorities 1 and 2 pass, create the shared rendering repository.
+Separate renderer/core/scenes from `AOWIS-GUI`'s QWidget implementation and
+`AOWIS-GUI-Mobile`'s Qt Quick surface adapter. Preserve desktop performance,
+2D/3D terrain/network visualization, shader behavior and WebAssembly builds.
+Keep a single graphics engine, not duplicated mobile/desktop renderers.
 
-## Priority 3 — Practical field workflow and offline basemaps
+**Accept when:** desktop native, desktop WASM and Android/Linux Mobile builds
+link the shared implementation, and relevant regression/performance tests
+remain green. Do not move the current desktop renderer before this validation.
 
-Add saved survey areas, downloadable offline basemaps from an authorized source,
-package status, a repeat-capture workflow, photo attachments, notes, and
-local save/unsynchronized indicators. Address location permission behavior,
-poor-accuracy warnings, interrupted traces, storage pressure and large data.
+## Map and survey foundation
 
-**Accept when:** a field session can be prepared online, performed entirely
-offline and reopened with all images, measurements and map data intact.
+Replace synthetic geometry with real AOWIS-MAP/source imagery and geographic
+coordinates; add GPS position, selection, point/line/area tools and a typed
+classification interface. Introduce generic geographic geometry (including
+areas) into the appropriate shared MODEL layer.
 
-## Priority 4 — AOWIS hydraulic distribution direct editing
+**Accept when:** a field user can navigate a real map, capture/select
+georeferenced shapes and classify them. No false hydraulic connectivity.
 
-Reuse canonical MODEL entity types and suitable editor services. Add a
-clear **Direct Edit** workspace for private working copies. Begin with safe,
-well-defined object selection, attributes, moving positions and a deliberately
-small set of creation/edit actions. Ensure pipe endpoints/topology and typed
-references remain valid; integrate meaningful action history and local Commit
-without requiring hydraulic solver validity.
+## Durable observations and offline workflow
 
-**Accept when:** a device can edit supported distribution objects through a
-private draft, Undo/Redo meaningful steps, commit a valid canonical snapshot,
-and restart without losing the saved state.
+Implement an actual local survey store, stable UUIDv7 identities, provenance,
+local save/restart recovery, photos/notes and offline map regions from licensed
+sources. Keep unsynced state explicit.
 
-## Priority 5 — DVMDB synchronization and observation integration
+**Accept when:** an offline field session survives application/device restart
+with geometry and attachments intact; no lost/duplicated evidence.
 
-Settle the mobile local repository architecture, implement sparse and
-recoverable transfer of survey data/attachments, and connect the established
-private/shared DVMDB lifecycle (checkout, draft, local Commit, Fetch, Publish
-and explicit reconciliation as server capabilities mature). Provide a review
-workflow to attach or integrate observations into existing/new typed objects
-without mutating the observation evidence.
+## Direct hydraulic editing and DVMDB sync
 
-**Accept when:** disconnected changes sync after reconnect without duplicate
-operations; remote divergence causes an explicit conflict; matching hashes
-verify known states but do not conceal missing changes; all objects and photos
-retain identity and provenance.
+Implement a safe subset of canonical distribution edits in a personal working
+DVMDB. Support durable autosave, undo/redo, commit of structurally coherent
+networks even when hydraulically invalid, checkout of remote projects and
+sparse/idempotent synchronization. Distinguish survey observations from
+accepted authoritative edits.
 
-## Later capabilities
+**Accept when:** a user can create/edit/commit/reopen a working network,
+reconcile conflicts deliberately, and recover from interrupted operations
+without discarding local changes. No per-gesture full-network re-downloads.
 
-- Expanded OSM editor: classification/tag presets, OSM object/version mapping,
-  review and compliant upload behavior.
-- Hydraulic Drainage survey and direct editor when its domain MODEL exists.
-- Advanced area functionality: polygon holes/multipolygons, snapping, topology
-  editing, catchment/site geometry and validation.
-- External high-accuracy GNSS/RTK acquisition and richer accuracy metadata.
-- 3D map/terrain mode, advanced survey forms, multi-device coordination,
-  survey assignment tools, tablets and full iOS release.
-- Localization consistent with AOWIS GUI language work, including RTL layouts
-  for Arabic where practical.
+## Later product extensions
 
-## Architectural decisions to settle during development
+Full OSM editing/upload adapters, Hydraulic Drainage, advanced polygon
+operations and catchments, external GNSS/RTK, 3D terrain, richer survey
+assignments, multilingual/RTL field forms, tablet-specific layout, and iOS.
 
-These are **open choices**, not missing requirements from the user:
+## Open decisions
 
-1. Can on-device DVMDB provide acceptable durability, packaging and size on
-   Android/iOS, or is a separate embedded store required for survey evidence?
-2. Where do generic geographic features, areas and observation records live
-   within MODEL/DVMDB projects and revision history?
-3. Which offline basemap format/provider can AOWIS distribute and store with
-   the required license terms and memory/disk limits?
-4. What is the minimum typed hydraulic operation set for Direct Edit v1?
-5. How are an observation, its original measured geometry, the target
-   authoritative geometry and any OSM feature mapped without identity loss?
-6. Which conflict/merge paths are truly ready in DVMDB when mobile sync ships?
+- Where canonical generic geometry/areas and observation types belong in
+  MODEL/DVMDB and how they are serialized/indexed.
+- Whether on-device DVMDB is practical or evidence needs another durable
+  store with an explicit synchronization adapter.
+- Licensed offline basemap provider/package format and download limits.
+- Supported Direct Edit operations and exact conflict-resolution semantics.
+- Real multi-view render-device ownership once `AOWIS-GUI-Render` is shared.
 
-Do not block the first Android map/GPS/observation implementation on the full
-answer to every later sync or OSM question, but preserve the conceptual
-boundaries so those features can be added without breaking the data model.
+## Release discipline
 
-## Quality gates
-
-For every milestone, add a unit/integration test target and a reproducible
-real-device check where hardware behavior matters. Test destructive paths,
-process kills, offline/online transitions, schema and UUID invariants,
-geometry validity, coordinate round trips and stale server state. Profile
-map performance and payload sizes; do not accept full-network downloads as
-the default for fine-grained edits or History navigation.
-
-Keep documentation current with *implemented product behavior*. Once code
-ships, replace proposed wording with verified contracts and move remaining
-work here; do not accumulate superseded patch-stage roadmaps.
-
-The Android GPU-underlay validation instructions are maintained in
-[Android renderer test](android-renderer-test.md). Basic real-device drawing
-and interaction are verified; repeated background/foreground, rotation,
-large-scene performance and recovery acceptance remain open.
+Test durable writes, crash/restart, process kill, invalid geometry, offline
+transitions, failed/duplicate sync operations and destructive operations.
+Benchmark actual payload sizes and real hardware. Keep the architecture
+pre-first-release clean: no historic migration framework, obsolete patch-stage
+roadmaps, or unused compatibility layers. Update docs to reflect *current*
+product behavior as each milestone is implemented.

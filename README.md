@@ -1,123 +1,108 @@
-# AOWIS Mobile
+# AOWIS-GUI-Mobile
 
-AOWIS Mobile is the planned **offline-first geographic field survey and mapping
-application** for the AOWIS ecosystem. The map is the main workspace: a surveyor
-can capture or edit points, lines and areas, identify what each feature
-represents, and work with both general geographic information and AOWIS
-hydraulic-distribution assets. Hydraulic drainage is a later domain.
+**AOWIS-GUI-Mobile** is the touch-first, offline-first field-survey application in
+AOWIS. Its intended workspace is a map where field users capture, classify and
+inspect **points, lines and areas**, either as **survey observations** or as
+**direct edits** to an authorized AOWIS working copy. General geographic/OSM-like
+surveying and hydraulic distribution share the geometry interface; hydraulic
+drainage is a future domain.
 
-Two complementary workflows are in scope:
+## What works today
 
-- **Direct editing:** make deliberate edits to actual objects in an editable
-  AOWIS working copy, following the typed model and its connectivity rules.
-- **Survey observations:** collect measured positions, classifications, photos
-  and notes without immediately changing authoritative geographic/hydraulic
-  objects; observations can subsequently be reviewed and integrated.
+The repository already builds and launches a **Qt Quick + bgfx** application on
+Linux and Android ARM64. bgfx draws real GPU geometry *under* QML controls using
+Qt's OpenGL/EGL context. The app has mouse/touch pan, pinch/wheel zoom, a QML
+baseline, frame diagnostics, and Android application-lifecycle counters.
+The Android APK builds in a pinned Docker toolchain on Arch Linux and has been
+launched on a physical Android phone. Linux rendering has also been exercised.
 
-These workflows share map navigation, geometry tools, GPS input, feature
-selection and attribute editing, but they **do not share the same persistence
-semantics**.
+**This is not yet a survey editor.** The visible grid, pipes and junctions are a
+synthetic rendering test scene—not actual georeferenced maps or saved network
+objects. There is no GPS capture, feature classification, point/line/area editor,
+offline map package, local observation store or DVMDB synchronization in this
+repository yet. Sustained rendering load and reliable Android context recovery
+have not yet passed acceptance tests.
 
-> **Current implementation (2026-11-05):** The runnable **AOWIS** application
-> uses Qt Quick with bgfx direct-underlay rendering on Linux and Android.
-> The GPU scene and QML interaction have been visually verified on both platforms,
-> including a real Android phone. The current on-screen map-like grid, hydraulic
-> lines and controls remain **development diagnostics**, not survey or hydraulic
-> editing functionality. GPS, OSM, field observations, areas, persistent editing
-> and synchronization have not yet been implemented.
+## Names and repository family
 
-## Build and run AOWIS
+| Purpose | Repository | User-facing name |
+| --- | --- | --- |
+| Desktop application | `AOWIS-GUI` | AOWIS |
+| Mobile application (this repo) | `AOWIS-GUI-Mobile` | **AOWIS Mobile** on Linux; **AOWIS** on Android |
+| Planned common rendering library | `AOWIS-GUI-Render` | Library, no launcher |
 
-On Arch Linux, the **native desktop build** uses the installed Qt 6
-(`qt6-base`, `qt6-declarative`), CMake and Ninja. With the temporary pinned bgfx
-submodule already initialized, build and launch the GPU underlay using:
+The Mobile executable/CMake target remains `aowis-mobile` and the Android
+package ID remains `org.aowis.mobile`. Neither is a user-facing title. The
+provided AOWIS icon is used by Linux/Android and has assets for future desktop
+platforms. Renaming the repository does **not** imply the renderer has already
+been extracted from Desktop GUI.
 
-```bash
-./compile_linux.sh               # optimized bgfx underlay build + launch
-./compile_linux.sh --build-only  # build without opening the application
-./compile_linux.sh --baseline    # QML-only comparison (separate build dir)
-./compile_linux.sh --tests       # additionally run the CPU geometry test
-```
+## Build
 
-For a new checkout, run `./tools/init_bgfx.sh` once before the default bgfx
-build. It is not needed for `--baseline`. The script builds only the mobile
-application target and its required dependencies by default; tests are opt-in.
-Build type defaults to `RelWithDebInfo` (override using `AOWIS_BUILD_TYPE=Debug`),
-and `AOWIS_LINUX_JOBS` controls parallel jobs. Builds stay in
-`build-linux-bgfx` or `build-linux-lab`, independently of Android's Docker build.
-
-For Android ARM64, use the **Docker toolchain** (the same build workflow
-pattern as GUI WebAssembly and Standalone Windows):
+Initialize the temporary pinned bgfx submodule for a new checkout:
 
 ```bash
-./tools/init_bgfx.sh               # once: temporary pinned bgfx source submodule
-./compile_android.sh               # prepare Docker image if missing; build APK
-./compile_android.sh --build-only  # build without installing on a phone
-./compile_android.sh --baseline    # compare QML-only build
-./compile_android.sh --run         # require one authorized USB or paired Wi-Fi device
-./compile_android.sh --devices     # show USB/Wi-Fi ADB devices without building
-./compile_android.sh --wifi        # prefer/reconnect paired wireless debugging
-./compile_android.sh --wifi-pair PHONE_IP:PAIR_PORT  # pair once, then build/deploy
+./tools/init_bgfx.sh
 ```
 
-The supplied AOWIS gear/drop artwork is the application icon for Android and
-all supported desktop targets. Its master and platform assets live under
-`assets/icons/`; Android launcher icons live under `android/res/`.
+Linux (installed Qt 6, CMake, Ninja, C++ compiler):
 
-No Qt installer, Qt account, Android Studio, Android SDK, NDK or Java installation
-on the host is necessary. The image downloads the official open-source Qt
-Android and matching host toolchains using `aqtinstall`, and Google's Android
-command-line SDK. **Docker** is required on the host; `adb` from Arch's
-`android-tools` is optional for device deployment. The first image build needs
-network access and disk space; subsequent compilations reuse the image and a
-persistent Gradle cache. Run `./prepare_android_docker.sh` to rebuild the
-image explicitly. See the [Android build and device-test guide](docs/android-renderer-test.md).
+```bash
+./compile_linux.sh                # build and launch bgfx underlay
+./compile_linux.sh --build-only   # build only
+./compile_linux.sh --baseline     # separate QML-only comparison build
+./compile_linux.sh --tests        # build and run C++ scene/camera tests
+```
 
-On Android, the launcher label is exactly **AOWIS** (package ID
-`org.aowis.mobile`). On Linux, the window title, application display name,
-header and desktop launcher label are **AOWIS Mobile**; the executable remains
-`aowis-mobile`.
-This supersedes the former `org.aowis.mobile.renderlab` package ID, so the
-previously installed probe may remain as a separate app until uninstalled.
-See [Rendering diagnostics and remaining integration tests](docs/renderer-lab.md).
-The diagnostic map is **not** a working mobile field editor yet.
+Android ARM64 (Docker on host; optional Arch `adb` for deployment):
 
-## Documentation
+```bash
+./compile_android.sh              # Docker build; deploy if one authorized device exists
+./compile_android.sh --build-only # APK without ADB
+./compile_android.sh --devices    # list USB / Wi-Fi ADB devices
+./compile_android.sh --run        # require device, install and launch
+./compile_android.sh --wifi       # prefer paired wireless device
+./compile_android.sh --wifi-pair PHONE_IP:PAIR_PORT
+./compile_android.sh --wifi-connect PHONE_IP:CONNECT_PORT
+```
 
-Start at [Documentation index](docs/README.md).
+No Qt Online Installer, host Android SDK/NDK or host Java installation is
+required for Android builds. ADB authorization/pairing still requires consent
+on the phone. The Docker toolchain is pinned; its first build downloads Qt and
+Android dependencies. See [Android build and device guide](docs/android-renderer-test.md)
+for setup, diagnostics and APK paths, and
+[renderer integration](docs/renderer-lab.md) for the current GPU design.
 
-- [Product scope and capabilities](docs/product.md)
-- [Field survey workflows and touch interface](docs/survey-workflows.md)
-- [Architecture and AOWIS integration](docs/architecture.md)
-- [Geographic features, observations and topology](docs/data-model.md)
-- [Offline operation and synchronization](docs/offline-sync.md)
-- [Implementation roadmap and acceptance criteria](docs/roadmap.md)
-- [Qt Quick / bgfx renderer laboratory](docs/renderer-lab.md)
-- [Android renderer build and device validation](docs/android-renderer-test.md)
+## What happens next
+
+**Next agreed work:** (1) configurable GPU scene sizes and credible Android/Linux
+performance measurements; (2) Android orientation, pause/resume, lock/unlock and
+EGL/scene-graph recovery tests. After these pass, define and extract the shared
+renderer into `AOWIS-GUI-Render` without regressing Desktop GUI/WASM behavior.
+The real mapping and survey tools follow that foundation.
+
+Read the [documentation index](docs/README.md) or the
+[current roadmap](docs/roadmap.md).
 
 ## Patch and source ZIP tooling
 
-Apply a mobile-only patch from the repository root:
+The current checked-in tooling accepts `aowis-mobile-<description>.zip` patches,
+even though the **canonical repository name** is now `AOWIS-GUI-Mobile`.
+The archive's top-level directory **must exactly match the local checkout
+directory name** (for example `AOWIS-GUI-Mobile/` after a local rename).
+The scripts derive that directory from the checkout; a repository rename does
+not by itself rename the accepted patch filename prefix or `../mobile.zip`.
+These tooling names are not the application identity.
 
 ```bash
 ./tools/apply_patch.sh ~/Downloads/aowis-mobile-<description>.zip
+./tools/zip_mobile_project.sh         # writes ../mobile.zip
 ```
 
-Patch ZIPs must contain files under `AOWIS-Mobile/` and use the
-`aowis-mobile-*.zip` filename prefix. Patches may contain an optional
-`AOWIS-Mobile/.aowis-patch-delete.txt` manifest with one repository-relative
-file path per line for removing obsolete files. The manifest is deleted after
-application. If a patch was applied by an older script, run
-`./tools/apply_patch.sh --finish` to process a pending manifest.
+Patch ZIPs may include `.aowis-patch-delete.txt` under the repository root for
+repository-relative file removals. Applying a patch refreshes timestamps and
+regenerates `mobile.zip`. The source snapshot excludes build outputs, secrets,
+Git metadata and nested submodule contents. The `external/bgfx.cmake` submodule
+is pinned separately in Git.
 
-A successful patch automatically refreshes `../mobile.zip`. To create the
-snapshot explicitly, or write to a different destination:
-
-```bash
-./tools/zip_mobile_project.sh
-./tools/zip_mobile_project.sh /path/to/mobile-source.zip
-```
-
-Snapshots include tracked and non-ignored untracked source files, without Git
-metadata, generated build outputs, credentials, or nested submodule contents.
-Submodules are maintained and archived as separate repositories.
+License: Apache-2.0.

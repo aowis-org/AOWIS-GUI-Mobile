@@ -1,38 +1,47 @@
-# AOWIS Mobile documentation
+# AOWIS-GUI-Mobile documentation
 
-**Status:** Product and architecture definition; implementation has not started.
-These pages describe the *current intended product*, not a log of discussions,
-legacy implementations, or completed development stages.
+The documentation distinguishes **implemented behavior**, **agreed product
+requirements**, and **designs not yet implemented**. The application is real and
+runs on Linux and Android, but its map currently shows a diagnostic GPU scene.
+A capability in a related repository is not automatically integrated here.
 
-| Document | Purpose |
+| Document | What it answers |
 | --- | --- |
-| [Product](product.md) | Purpose, domains, capabilities, and boundaries |
-| [Field workflows](survey-workflows.md) | Direct editing, observations, positioning, and the touch UX |
-| [Architecture](architecture.md) | Mobile application boundary and reuse of AOWIS components |
-| [Data model](data-model.md) | Shared geometry concepts, hydraulic topology, OSM mapping, and observations |
-| [Offline and sync](offline-sync.md) | Durable local work, offline basemaps, version control, conflict handling |
-| [Roadmap](roadmap.md) | Implementation priorities, acceptance cases, outstanding decisions |
+| [Product](product.md) | What Mobile is for, scope, platform naming and product boundaries |
+| [Field workflows](survey-workflows.md) | Observation versus Direct Edit; geometry/GPS capture and review |
+| [Architecture](architecture.md) | What exists, dependencies, planned library boundary |
+| [Data model](data-model.md) | Generic geometry, observations, domain objects and identities |
+| [Offline and sync](offline-sync.md) | Offline guarantees and proposed integration with DVMDB |
+| [Renderer integration](renderer-lab.md) | Actual Qt Quick/bgfx implementation, ownership and metrics |
+| [Android build and device tests](android-renderer-test.md) | Docker/ADB workflow, real-device checks and diagnostics |
+| [Roadmap](roadmap.md) | Current priorities and acceptance criteria |
 
-## Status conventions
+## Present status — 5 November 2026
 
-- **Agreed:** Explicitly settled product requirements and direction.
-- **Proposed:** Preferred engineering design that must still be implemented,
-  validated, and, where it affects product behavior, accepted.
-- **Future:** Intended capability not required for the initial survey release.
-- **Existing elsewhere:** Behavior present or documented in another AOWIS
-  repository; this does **not** mean it is integrated into Mobile.
+**Implemented and exercised:** Qt Quick app; OpenGL/OpenGL ES bgfx direct
+underlay with synthetic GPU lines/triangles; QML overlays and input; Android
+ARM64 Docker APK; USB and paired Wi-Fi ADB deployment flow; Linux build;
+platform-specific app labels and icon. GPU scene/camera unit tests exist.
+Real-world Linux and Android visual operation has been reported and shown.
 
-The roadmap is the source for what is actually in this repository. Do not
-confuse a description of an intended feature with an implemented feature.
+**Not yet accepted:** large-scene GPU/CPU/frame-pacing benchmarks; Android
+rotation/suspend/context-recreation durability. A single successful phone
+launch is not evidence of those cases.
 
-## Documentation maintenance
+**Not implemented:** real map tiles, geographic coordinate navigation, GPS,
+feature capture, areas, observations, hydraulic direct edits, durable offline
+survey storage, DVMDB synchronization, and OSM publication. iOS is an intended
+future platform, not a current build target.
 
-Update these pages when a product choice changes, when an implementation makes
-previously proposed behavior concrete, or when a limitation is discovered.
-Prefer a current contract and clear future work over accumulating patch-stage
-notes or redundant historical roadmaps. AOWIS is pre-first-release: there is
-no need to design migration compatibility for nonexistent mobile users.
+## Documentation rules
 
-- [Rendering diagnostics](renderer-lab.md): Qt Quick/bgfx implementation, build and validation protocol.
+- **Implemented:** directly supported by current Mobile code or reported build
+  and device results; distinguish source presence from device-tested behavior.
+- **Agreed:** what the product must eventually do (e.g., both editing modes).
+- **Proposed:** a design boundary or implementation approach that still needs
+  work or validation.
+- **Future:** outside current build and near-term acceptance priorities.
 
-- [Android renderer build and device validation](android-renderer-test.md) — packaging, touch and lifecycle checklist.
+Keep the docs about **the product and code as they exist**. Do not accumulate
+historic patch diaries, past build failures or superseded development plans.
+The [roadmap](roadmap.md) is the only forward implementation sequence.
