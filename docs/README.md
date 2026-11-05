@@ -32,3 +32,5 @@ previously proposed behavior concrete, or when a limitation is discovered.
 Prefer a current contract and clear future work over accumulating patch-stage
 notes or redundant historical roadmaps. AOWIS is pre-first-release: there is
 no need to design migration compatibility for nonexistent mobile users.
+
+- [Renderer laboratory](renderer-lab.md): Qt Quick/bgfx experiment, build and validation protocol.

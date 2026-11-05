@@ -18,10 +18,33 @@ These workflows share map navigation, geometry tools, GPS input, feature
 selection and attribute editing, but they **do not share the same persistence
 semantics**.
 
-> **Repository status (2026-11-05):** This is a design-and-tooling repository.
-> There is no mobile application, Qt build, data schema, GPS integration or
-> synchronization implementation here yet. The documentation records the
-> agreed product direction and clearly marked proposals for future work.
+> **Repository status (2026-11-05):** The repo contains a runnable-source
+> **Qt Quick rendering laboratory** and the initial, experimental bgfx underlay
+> code path. The experimental integration is **not yet runtime-verified**.
+> There is no survey/GPS/OSM/hydraulic editor, mobile data store or sync yet.
+
+## Renderer laboratory
+
+First build the QML-only baseline (no bgfx dependency required):
+
+```bash
+cmake -S . -B build-linux-lab -G Ninja -DAOWIS_MOBILE_WITH_BGFX=OFF
+cmake --build build-linux-lab -j 8
+./build-linux-lab/aowis-mobile-render-lab
+```
+
+For the **experimental** bgfx path, provision its temporary Git submodule,
+configure a separate build and opt into the renderer at launch:
+
+```bash
+./tools/init_bgfx.sh
+cmake -S . -B build-linux-bgfx -G Ninja -DAOWIS_MOBILE_WITH_BGFX=ON
+cmake --build build-linux-bgfx -j 8
+./build-linux-bgfx/aowis-mobile-render-lab --bgfx-underlay
+```
+
+See [Renderer lab details, limitations and test protocol](docs/renderer-lab.md).
+The lab is a GPU-integration experiment, **not** a working mobile map editor.
 
 ## Documentation
 
@@ -33,6 +56,7 @@ Start at [Documentation index](docs/README.md).
 - [Geographic features, observations and topology](docs/data-model.md)
 - [Offline operation and synchronization](docs/offline-sync.md)
 - [Implementation roadmap and acceptance criteria](docs/roadmap.md)
+- [Qt Quick / bgfx renderer laboratory](docs/renderer-lab.md)
 
 ## Patch and source ZIP tooling
 

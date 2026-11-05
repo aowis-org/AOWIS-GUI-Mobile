@@ -119,3 +119,13 @@ license-aware handling.
 Authentication, mobile device security and offline data protection require a
 separate implementation design before deployments with sensitive field data;
 repository role labels alone do not authorize callers.
+
+## Shared renderer extraction decision
+
+A separate `AOWIS-RENDER` library is the preferred eventual architecture so
+desktop Widgets and mobile QML can use a common rendering engine. **Do not
+extract it yet.** First evaluate the Qt Quick/bgfx presentation and device
+ownership in the isolated [renderer lab](renderer-lab.md). The shared library
+should not own the native window, QML or QWidget controls, or authoritative
+MODEL/DVMDB edits. Preserve desktop rendering and WASM behavior when the
+extraction is performed.

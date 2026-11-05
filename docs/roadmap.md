@@ -2,10 +2,12 @@
 
 ## Baseline
 
-As of **2026-11-05**, Mobile is a bare repository with patch/ZIP tooling and
-product/architecture documentation. There is no build, runnable app,
-instrumented device demo or mobile service integration. The milestones below
-are future deliverables, not completed patch stages.
+As of **2026-11-05**, Mobile includes patch/ZIP tooling, product
+documentation, and a minimal Qt Quick rendering lab with a QML-only baseline
+and an **unverified** experimental bgfx direct-underlay path. No real device
+test, survey feature, GPS, storage or synchronization implementation exists.
+Refer to [renderer lab](renderer-lab.md) for its acceptance criteria; the
+priorities below describe future product deliverables, not completed stages.
 
 The scope is intentionally a field-survey product. The complete desktop editor
 and community OSM editor are not requirements for the first usable APK.
@@ -15,8 +17,8 @@ and community OSM editor are not requirements for the first usable APK.
 Build a minimal Android Qt/CMake application with Qt Quick/QML controls and a
 2D map viewport. Integrate application lifecycle, touch pan/zoom, responsive
 layout, visible position indicator, and a mock/provider-backed map source.
-Test rendering on a real device before committing to reuse of bgfx via Qt
-Quick. Keep iOS-compatible interfaces where cheap to do so.
+Validate Qt Quick/bgfx composition and device lifecycle on real hardware
+before extracting a shared AOWIS renderer library. Keep iOS-compatible interfaces where cheap to do so.
 
 **Accept when:** the application launches reliably, pans/zooms smoothly,
 recovers after background/resume and exposes selected map coordinates.

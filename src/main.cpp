@@ -1,0 +1,69 @@
+#include "render_lab.h"
+
+#include <QCommandLineOption>
+#include <QCommandLineParser>
+#include <QDebug>
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QTimer>
+
+int main(int argc, char *argv[])
+{
+    // Select before the first QQuickWindow is created. For Android this asks
+    // Qt Quick to use OpenGL ES, for Linux desktop it requests OpenGL.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    QGuiApplication application(argc, argv);
+    QCoreApplication::setApplicationName(QStringLiteral("AOWIS Mobile Render Lab"));
+
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("Qt Quick / bgfx presentation ownership experiment"));
+    parser.addHelpOption();
+    QCommandLineOption experimental(QStringLiteral("bgfx-underlay"),
+        QStringLiteral("EXPERIMENTAL: run bgfx on Qt Quick's OpenGL render thread and surface"));
+    QCommandLineOption baseline(QStringLiteral("baseline"),
+        QStringLiteral("Force QML-only baseline without initializing bgfx"));
+    parser.addOption(experimental);
+    parser.addOption(baseline);
+    parser.process(application);
+#if defined(Q_OS_ANDROID) && AOWIS_LAB_WITH_BGFX
+    // Android launchers do not reliably forward arbitrary CLI arguments.
+    // ON builds therefore exercise the experiment on device by default.
+    const bool androidExperimentalDefault = true;
+#else
+    const bool androidExperimentalDefault = false;
+#endif
+    const bool useBgfx = !parser.isSet(baseline) &&
+        (parser.isSet(experimental) || androidExperimentalDefault);
+
+#if !AOWIS_LAB_WITH_BGFX
+    if (useBgfx)
+    {
+        qCritical("This binary was built with AOWIS_MOBILE_WITH_BGFX=OFF.");
+        return 2;
+    }
+#endif
+
+    RenderLab lab(useBgfx);
+    QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
+    engine.loadFromModule(QStringLiteral("AOWIS.RenderLab"), QStringLiteral("Main"));
+    if (engine.rootObjects().isEmpty())
+        return 1;
+
+    QQuickWindow *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
+    if (window == nullptr)
+    {
+        qCritical("QML root must be a Qt Quick Window");
+        return 1;
+    }
+    lab.attach(window);
+
+    QTimer refresh;
+    refresh.setInterval(16);
+    QObject::connect(&refresh, &QTimer::timeout, window, [window]() { window->update(); });
+    refresh.start();
+    return application.exec();
+}
