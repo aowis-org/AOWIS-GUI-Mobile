@@ -22,8 +22,9 @@ semantics**.
 > **Qt Quick rendering laboratory** and the initial, experimental bgfx underlay
 > code path. The initial ASCII underlay was visually verified on Linux;
 > the GPU vertex/shader underlay has also been **visually verified on Linux**.
-> Android build and device integration are now prepared but **not verified on
-> real Android hardware**.
+> The Android ARM64 APK **builds successfully** inside Docker (confirmed on
+> Arch Linux on 2026-11-05); launch and renderer behavior on a real Android
+> device are still awaiting verification.
 > There is no survey/GPS/OSM/hydraulic editor, mobile data store or sync yet.
 
 ## Renderer laboratory
@@ -54,8 +55,15 @@ pattern as GUI WebAssembly and Standalone Windows):
 ./compile_android.sh               # prepare Docker image if missing; build APK
 ./compile_android.sh --build-only  # build without installing on a phone
 ./compile_android.sh --baseline    # compare QML-only build
-./compile_android.sh --run         # require one authorized device
+./compile_android.sh --run         # require one authorized USB or paired Wi-Fi device
+./compile_android.sh --devices     # show USB/Wi-Fi ADB devices without building
+./compile_android.sh --wifi        # prefer/reconnect paired wireless debugging
+./compile_android.sh --wifi-pair PHONE_IP:PAIR_PORT  # pair once, then build/deploy
 ```
+
+The supplied AOWIS gear/drop artwork is the application icon for Android and
+all supported desktop targets. Its master and platform assets live under
+`assets/icons/`; Android launcher icons live under `android/res/`.
 
 No Qt installer, Qt account, Android Studio, Android SDK, NDK or Java installation
 on the host is necessary. The image downloads the official open-source Qt

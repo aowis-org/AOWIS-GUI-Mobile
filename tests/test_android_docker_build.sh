@@ -37,11 +37,29 @@ set -euo pipefail
 printf 'adb %s\n' "$*" >> "$MOCK_LOG"
 case "${1:-}" in
     devices)
-        case "${FAKE_DEVICE_COUNT:-0}" in
-            0) printf 'List of devices attached\n' ;;
-            1) printf 'List of devices attached\nmobile1\tdevice\n' ;;
-            2) printf 'List of devices attached\nmobile1\tdevice\nmobile2\tdevice\n' ;;
-        esac ;;
+        printf 'List of devices attached\n'
+        if [[ -n "${FAKE_ADB_DEVICES:-}" ]]; then
+            printf '%b\n' "$FAKE_ADB_DEVICES"
+        else
+            case "${FAKE_DEVICE_COUNT:-0}" in
+                0) : ;;
+                1) printf 'mobile1\tdevice usb:1-2 model:Phone\n' ;;
+                2) printf 'mobile1\tdevice usb:1-2\nmobile2\tdevice usb:1-3\n' ;;
+            esac
+        fi
+        if [[ -s "$MOCK_ROOT/wifi-connected" ]]; then
+            printf '%s\tdevice product:wifi\n' "$(cat "$MOCK_ROOT/wifi-connected")"
+        fi ;;
+    mdns)
+        [[ "${2:-}" == services ]] || exit 20
+        printf '%b\n' "${FAKE_MDNS:-}" ;;
+    pair)
+        [[ "${FAKE_PAIR_OK:-1}" == 1 ]] || exit 26
+        printf 'Successfully paired to %s\n' "$2" ;;
+    connect)
+        [[ "${FAKE_CONNECT_OK:-1}" == 1 ]] || exit 27
+        printf '%s' "$2" > "$MOCK_ROOT/wifi-connected"
+        printf 'connected to %s\n' "$2" ;;
     -s)
         if [[ "${3:-}" == get-state ]]; then printf 'device\n'; fi ;;
 esac
@@ -54,6 +72,7 @@ cd "$work/repo"
 fail() { echo "FAILED: $*" >&2; exit 1; }
 run_case() {
     : > "$MOCK_LOG"
+    rm -f "$MOCK_ROOT/wifi-connected"
     ./compile_android.sh "$@" > "$work/output.log" 2>&1 || { cat "$work/output.log"; fail "compile_android.sh $*"; }
 }
 assert_log() { grep -Fq -- "$1" "$MOCK_LOG" || fail "missing log entry: $1"; }
@@ -98,6 +117,56 @@ if ./compile_android.sh > "$work/output.log" 2>&1; then fail 'Docker build failu
 assert_not_log 'adb -s '
 unset FAKE_RUN_OK
 
+# Normal auto-selection must prefer USB when the same phone is paired on Wi-Fi.
+export FAKE_ADB_DEVICES='usb01\tdevice usb:2-2 model:Handset\n192.168.10.7:38821\tdevice product:wifi'
+unset FAKE_DEVICE_COUNT
+run_case --run
+assert_log 'adb -s usb01 install -r'
+assert_not_log 'adb -s 192.168.10.7:38821 install'
+run_case --run --wifi
+assert_log 'adb -s 192.168.10.7:38821 install -r'
+
+# An unauthorized USB device must never be chosen. Paired Wi-Fi remains usable.
+export FAKE_ADB_DEVICES='usb01\tunauthorized usb:2-2\n192.168.10.7:38821\tdevice product:wifi'
+run_case --run
+assert_log 'adb -s 192.168.10.7:38821 install -r'
+
+# --devices reports state without Docker or requiring bgfx initialization.
+: > "$MOCK_LOG"
+./compile_android.sh --devices > "$work/output.log" 2>&1 || fail '--devices failed'
+assert_not_log 'docker '
+grep -Fq 'unauthorized' "$work/output.log" || fail 'unauthorized state not displayed'
+
+# Android 11+ mDNS reconnect for a previously paired wireless device.
+export FAKE_ADB_DEVICES='' FAKE_DEVICE_COUNT=0
+export FAKE_MDNS='adb-test._adb-tls-connect._tcp. 192.168.10.7:38821'
+run_case --run --wifi
+assert_log 'adb mdns services'
+assert_log 'adb connect 192.168.10.7:38821'
+assert_log 'adb -s 192.168.10.7:38821 install -r'
+
+# One-time pairing is user-authorized and uses the separate pairing endpoint.
+run_case --run --wifi-pair 192.168.10.7:35999
+assert_log 'adb pair 192.168.10.7:35999'
+assert_log 'adb connect 192.168.10.7:38821'
+
+# --wifi-connect works when mDNS is blocked on the local network.
+export FAKE_MDNS=''
+run_case --run --wifi-connect 192.168.10.7:38821
+assert_log 'adb connect 192.168.10.7:38821'
+assert_log 'adb -s 192.168.10.7:38821 install -r'
+
+# A failed pair must stop before building. Never bypass phone authorization.
+export FAKE_PAIR_OK=0
+: > "$MOCK_LOG"
+if ./compile_android.sh --wifi-pair 192.168.10.7:35999 > "$work/output.log" 2>&1; then
+    fail 'failed pairing accepted'
+fi
+assert_not_log 'docker run '
+unset FAKE_PAIR_OK FAKE_MDNS FAKE_ADB_DEVICES
+rm -f "$MOCK_ROOT/wifi-connected"
+export FAKE_DEVICE_COUNT=1
+
 # No bgfx sources must fail before trying Docker (but baseline can work).
 rm "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h"
 : > "$MOCK_LOG"
@@ -126,5 +195,5 @@ grep -Eq '^[[:space:]]+LIBRARY DESTINATION lib$' "$root/CMakeLists.txt" || fail 
 # Android NDK exports it from libandroid.so; GLES/EGL alone cannot resolve it.
 grep -Fq 'target_link_libraries(aowis-mobile-render-lab PRIVATE android)' "$root/CMakeLists.txt" || fail 'bgfx Android native-window library link missing'
 
-printf 'Android Docker entrypoint: 8 scenarios + build dependency contracts passed\n'
+printf 'Android Docker entrypoint: 15+ scenarios + build dependency contracts passed\n'
 

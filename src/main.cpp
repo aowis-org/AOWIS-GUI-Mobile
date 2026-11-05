@@ -4,6 +4,7 @@
 #include <QCommandLineParser>
 #include <QDebug>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -17,6 +18,7 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     QGuiApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("AOWIS Mobile Render Lab"));
+    application.setWindowIcon(QIcon(QStringLiteral(":/aowis/icon.png")));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("Qt Quick / bgfx presentation ownership experiment"));
@@ -67,6 +69,7 @@ int main(int argc, char *argv[])
     window->setPersistentSceneGraph(false);
     window->setPersistentGraphics(false);
 #endif
+    window->setIcon(QIcon(QStringLiteral(":/aowis/icon.png")));
     lab.attach(window);
 
     QTimer refresh;

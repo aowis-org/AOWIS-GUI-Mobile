@@ -12,13 +12,35 @@ qt_standard_project_setup(REQUIRES 6.5)
 
 option(AOWIS_MOBILE_WITH_BGFX "Build the experimental bgfx/Qt Quick direct-underlay path" ON)
 
+# Keep application artwork shared across build targets; platform-specific
+# launcher/file icons are derived from assets/icons/aowis-source.png.
+set(AOWIS_WINDOWS_ICON_RESOURCE "")
+if(WIN32)
+    set(AOWIS_WINDOWS_ICON_RESOURCE packaging/windows/aowis.rc)
+endif()
 qt_add_executable(aowis-mobile-render-lab
+    ${AOWIS_WINDOWS_ICON_RESOURCE}
     src/main.cpp
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
     src/gpu_scene_geometry.h
 )
+
+set_source_files_properties(assets/icons/aowis.png PROPERTIES QT_RESOURCE_ALIAS icon.png)
+qt_add_resources(aowis-mobile-render-lab "aowis_application_icon"
+    PREFIX "/aowis"
+    FILES assets/icons/aowis.png
+)
+
+if(APPLE AND NOT ANDROID)
+    set_source_files_properties(assets/icons/aowis.icns PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(aowis-mobile-render-lab PRIVATE assets/icons/aowis.icns)
+    set_target_properties(aowis-mobile-render-lab PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_ICON_FILE aowis.icns)
+endif()
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 qt_add_qml_module(aowis-mobile-render-lab
@@ -33,7 +55,9 @@ qt_add_qml_module(aowis-mobile-render-lab
 if(ANDROID)
     set_target_properties(aowis-mobile-render-lab PROPERTIES
         QT_ANDROID_PACKAGE_NAME "org.aowis.mobile.renderlab"
-        QT_ANDROID_APP_NAME "AOWIS Renderer Lab"
+        QT_ANDROID_APP_NAME "AOWIS Mobile"
+        QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+        QT_ANDROID_APP_ICON "@mipmap/ic_launcher"
         QT_ANDROID_VERSION_CODE 1
         QT_ANDROID_VERSION_NAME "0.1"
     )
@@ -116,6 +140,16 @@ install(TARGETS aowis-mobile-render-lab
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
+
+# Linux desktop integration: the same icon is visible in Qt windows and in
+# desktop launchers after installation. Android packages mipmap PNGs directly.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+    install(FILES packaging/linux/org.aowis.mobile.desktop
+        DESTINATION share/applications)
+    install(FILES assets/icons/aowis.png
+        DESTINATION share/icons/hicolor/512x512/apps
+        RENAME org.aowis.mobile.png)
+endif()
 
 # Pure C++ geometry/camera test: no bgfx, Qt, or GPU context required.
 include(CTest)
