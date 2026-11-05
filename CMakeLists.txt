@@ -131,7 +131,7 @@ if(AOWIS_MOBILE_WITH_BGFX)
     add_subdirectory("${AOWIS_RENDER_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-render" EXCLUDE_FROM_ALL)
     target_sources(aowis-mobile PRIVATE
         src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
-    target_link_libraries(aowis-mobile PRIVATE AOWIS::RenderDevice)
+    target_link_libraries(aowis-mobile PRIVATE AOWIS::RenderDevice AOWIS::RenderGeometry)
     if(ANDROID)
         # bgfx's EGL backend calls ANativeWindow_setBuffersGeometry. This
         # function is provided by the Android NDK's libandroid, not EGL/GLES.
@@ -171,6 +171,16 @@ endif()
 # Pure C++ geometry/camera test: no bgfx, Qt, or GPU context required.
 include(CTest)
 if(BUILD_TESTING)
+    if(AOWIS_MOBILE_WITH_BGFX)
+        # Compile and run against the production geometry headers from the
+        # pinned Render submodule (not local Mobile copies). No GPU required.
+        add_executable(aowis-mobile-shared-render-geometry-tests
+            tests/shared_render_geometry_tests.cpp)
+        target_link_libraries(aowis-mobile-shared-render-geometry-tests PRIVATE
+            AOWIS::RenderGeometry)
+        add_test(NAME aowis-mobile-shared-render-geometry
+            COMMAND aowis-mobile-shared-render-geometry-tests)
+    endif()
     add_executable(aowis-mobile-gpu-scene-tests
         tests/gpu_scene_geometry_tests.cpp
         src/gpu_scene_geometry.cpp

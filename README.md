@@ -182,3 +182,14 @@ Android debug builds reuse a persistent signing key outside the checkout; see [A
 Android lifecycle validation: `./tools/test_android_lifecycle.sh --cycles 12`
 checks background/resume and downloads private recovery logs; see
 [Android device tests](docs/android-renderer-test.md).
+
+## Shared production map geometry
+
+The pinned `external/AOWIS-GUI-Render` submodule exports
+`AOWIS::RenderGeometry` (continuous Mercator camera, globe icon visibility,
+terrain-height cache and imagery fallback UV transforms) without Qt Widgets
+or GUI network-model dependencies. `aowis-mobile-shared-render-geometry`
+tests this public API alongside the existing Mobile lab camera/geometry tests.
+The Mobile renderer still shows its established Qt Quick/bgfx stress scene;
+this patch does not replace that scene or modify the Android EGL lifecycle.
+
