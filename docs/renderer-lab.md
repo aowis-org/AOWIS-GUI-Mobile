@@ -15,9 +15,9 @@ of GPU line-rendering behavior.
 
 **Current implementation:** real GPU geometry has replaced that ASCII probe.
 It uses pinned vertex-color shaders, retained vertex buffers, and bgfx draw
-submissions. The GPU geometry build and visual composition on real hardware
-are **not yet verified**. Do not interpret source tests or frame counters as a
-GPU integration pass. No desktop GUI renderer extraction has been undertaken.
+submissions. The GPU geometry and composition have been visually confirmed on Linux
+and on an Android phone. These checks are not yet a performance or lifecycle
+validation. No desktop GUI renderer extraction has been undertaken.
 
 ## Dependencies and reproducible build
 
@@ -32,19 +32,20 @@ resources. It does not compile shaders at runtime, invoke shaderc during the
 build, or use shader binaries generated against unrelated bgfx versions.
 These are temporary test shaders and **not** the AOWIS-RENDER shader library.
 
-Linux:
+Linux (Arch Qt 6, CMake, Ninja):
 
 ```bash
-# Provision bgfx only if it is not already initialized.
-./tools/init_bgfx.sh
-cmake -S . -B build-linux-bgfx -G Ninja -DAOWIS_MOBILE_WITH_BGFX=ON
-cmake --build build-linux-bgfx -j 8
-ctest --test-dir build-linux-bgfx --output-on-failure
-./build-linux-bgfx/aowis-mobile-render-lab --bgfx-underlay
+# Provision bgfx once in a new checkout: ./tools/init_bgfx.sh
+./compile_linux.sh               # build only app + dependencies, then launch
+./compile_linux.sh --build-only  # no launch
+./compile_linux.sh --baseline    # QML only, independent build directory
+./compile_linux.sh --tests       # opt-in geometry tests
 ```
 
-For QML without bgfx, run the executable without `--bgfx-underlay`, or build
-with `-DAOWIS_MOBILE_WITH_BGFX=OFF` in a separate build directory.
+The default `RelWithDebInfo` build is optimized. Set `AOWIS_BUILD_TYPE=Debug`
+for a debug build, or `AOWIS_LINUX_JOBS=8` to bound parallelism. The default
+build excludes tests and optional bgfx tooling; `--tests` adds only the geometry
+test. Its `build-linux-bgfx` directory is not shared with Android.
 
 The experiment requires Qt 6.5+ Core/Gui/Qml/Quick/QuickControls2, C++20,
 CMake >=3.21, Ninja, a compatible GPU and an **EGL-backed Qt OpenGL context**.
@@ -55,7 +56,7 @@ Android uses the Qt-provided Android kit, SDK/NDK and packaging. With bgfx ON,
 Android starts the experiment by default; `--baseline` is available on
 launchers that support custom arguments. Shader binaries are packaged inside
 the executable's Qt resource section, not loaded from the source checkout.
-Android build/install tooling has been added; **no Android compilation or real-device run has yet been verified**. See [the device test procedure](android-renderer-test.md).
+The Android Docker build and direct QML/bgfx underlay have been verified on a real phone; repeated lifecycle and large-scene performance tests remain outstanding. See [the device test procedure](android-renderer-test.md).
 
 ## Actual render pipeline
 
@@ -140,7 +141,7 @@ Unit tests prove only scene/camera math, not GPU rendering.
 
 This repository remains a deliberately disposable integration laboratory.
 
-## Android milestone (prepared, not device-verified)
+## Android milestone (first device presentation verified)
 
 The same real-geometry Qt Quick + bgfx underlay now has an Android debug APK
 build script and installer, an auto-generated Qt Android package identity, a

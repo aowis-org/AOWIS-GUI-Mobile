@@ -22,30 +22,30 @@ semantics**.
 > **Qt Quick rendering laboratory** and the initial, experimental bgfx underlay
 > code path. The initial ASCII underlay was visually verified on Linux;
 > the GPU vertex/shader underlay has also been **visually verified on Linux**.
-> The Android ARM64 APK **builds successfully** inside Docker (confirmed on
-> Arch Linux on 2026-11-05); launch and renderer behavior on a real Android
-> device are still awaiting verification.
+> The Android ARM64 APK **builds successfully** entirely inside Docker on
+> Arch Linux, and the same Qt Quick/bgfx probe has now been **visually verified
+> on a real Android phone** (2026-11-05).
 > There is no survey/GPS/OSM/hydraulic editor, mobile data store or sync yet.
 
 ## Renderer laboratory
 
-First build the QML-only baseline (no bgfx dependency required):
+On Arch Linux, the **native desktop build** uses the installed Qt 6
+(`qt6-base`, `qt6-declarative`), CMake and Ninja. With the temporary pinned bgfx
+submodule already initialized, build and launch the GPU underlay using:
 
 ```bash
-cmake -S . -B build-linux-lab -G Ninja -DAOWIS_MOBILE_WITH_BGFX=OFF
-cmake --build build-linux-lab -j 8
-./build-linux-lab/aowis-mobile-render-lab
+./compile_linux.sh               # optimized bgfx underlay build + launch
+./compile_linux.sh --build-only  # build without opening the application
+./compile_linux.sh --baseline    # QML-only comparison (separate build dir)
+./compile_linux.sh --tests       # additionally run the CPU geometry test
 ```
 
-For the **experimental** bgfx path, provision its temporary Git submodule,
-configure a separate build and opt into the renderer at launch:
-
-```bash
-./tools/init_bgfx.sh
-cmake -S . -B build-linux-bgfx -G Ninja -DAOWIS_MOBILE_WITH_BGFX=ON
-cmake --build build-linux-bgfx -j 8
-./build-linux-bgfx/aowis-mobile-render-lab --bgfx-underlay
-```
+For a new checkout, run `./tools/init_bgfx.sh` once before the default bgfx
+build. It is not needed for `--baseline`. The script builds only the mobile
+application target and its required dependencies by default; tests are opt-in.
+Build type defaults to `RelWithDebInfo` (override using `AOWIS_BUILD_TYPE=Debug`),
+and `AOWIS_LINUX_JOBS` controls parallel jobs. Builds stay in
+`build-linux-bgfx` or `build-linux-lab`, independently of Android's Docker build.
 
 For Android ARM64, use the **Docker toolchain** (the same build workflow
 pattern as GUI WebAssembly and Standalone Windows):
