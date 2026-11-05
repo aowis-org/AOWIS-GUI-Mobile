@@ -46,9 +46,25 @@ cmake --build build-linux-bgfx -j 8
 ./build-linux-bgfx/aowis-mobile-render-lab --bgfx-underlay
 ```
 
-For an Android arm64 device, follow the [Android build and device-test guide](docs/android-renderer-test.md).
-It includes Qt Android kit/SDK/NDK prerequisites, build, `adb` install,
-touch, orientation and lifecycle checks.
+For Android ARM64, use the **Docker toolchain** (the same build workflow
+pattern as GUI WebAssembly and Standalone Windows):
+
+```bash
+./tools/init_bgfx.sh               # once: temporary pinned bgfx source submodule
+./compile_android.sh               # prepare Docker image if missing; build APK
+./compile_android.sh --build-only  # build without installing on a phone
+./compile_android.sh --baseline    # compare QML-only build
+./compile_android.sh --run         # require one authorized device
+```
+
+No Qt installer, Qt account, Android Studio, Android SDK, NDK or Java installation
+on the host is necessary. The image downloads the official open-source Qt
+Android and matching host toolchains using `aqtinstall`, and Google's Android
+command-line SDK. **Docker** is required on the host; `adb` from Arch's
+`android-tools` is optional for device deployment. The first image build needs
+network access and disk space; subsequent compilations reuse the image and a
+persistent Gradle cache. Run `./prepare_android_docker.sh` to rebuild the
+image explicitly. See the [Android build and device-test guide](docs/android-renderer-test.md).
 
 See [Renderer lab details, limitations and test protocol](docs/renderer-lab.md).
 The lab is a GPU-integration experiment, **not** a working mobile map editor.

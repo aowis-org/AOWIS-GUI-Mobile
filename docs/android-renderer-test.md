@@ -6,50 +6,72 @@ vertex/shader geometry and visible QML overlays was visually confirmed on
 2026-11-05. This procedure tests the same code on Android, where EGL, GPU
 backend, device pixel ratio and lifecycle can behave differently.
 
-## Prerequisites
+## Building on Arch Linux (Docker)
 
-- A physical Android device with USB debugging enabled, and `adb` in `PATH`.
-- Installed Qt **Android** arm64-v8a kit (Qt 6.5 or newer, matching your
-  desktop Qt environment where possible), Android SDK, matching Android NDK,
-  Ninja and CMake. The host Linux kit cannot produce an Android APK.
-- `./tools/init_bgfx.sh` already run to initialize the pinned bgfx.cmake,
-  bgfx, bx and bimg submodules. Source builds are offline after provisioning.
-
-## Build the GPU experiment
-
-Run from AOWIS-Mobile repository root (change paths to your actual versions):
+**No Qt Online Installer.** Like the existing AOWIS GUI WASM and Standalone
+Windows cross-builds, the Android toolchain lives entirely inside a Docker
+image. The host needs Docker, Git and the initialized bgfx source submodule.
+For USB deployment only, install Arch's `android-tools` (ADB); `android-udev`
+may be useful for USB device permissions.
 
 ```bash
-export AOWIS_ANDROID_QT_CMAKE="$HOME/Qt/<qt-version>/android_arm64_v8a/bin/qt-cmake"
-export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
-export ANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/<installed-ndk-version>"
-
-./tools/build_android_lab.sh
-./tools/run_android_lab.sh
+sudo pacman -S --needed docker android-tools
+sudo systemctl enable --now docker
+# Log in again after adding yourself to the docker group, if needed.
+# Alternatively run Docker with appropriate privileges; avoid sudo-ing the
+# project script because that would create root-owned build files.
+./tools/init_bgfx.sh
+./compile_android.sh
 ```
 
-`build_android_lab.sh` configures a separate `build-android-bgfx` directory,
-builds the Qt/bgfx native library, and then packages a **debug APK** using
-Qt's `apk` CMake target. No manual Android Manifest or Gradle modifications are
-required: Qt generates its own Activity and deployment metadata, including the
-`org.aowis.mobile.renderlab` package name. The stock Activity leaves
-orientation unspecified for rotate testing and retains Qt's configuration
-change handling. The application starts bgfx underlay by default in Android
-BGFX-enabled builds, because custom CLI arguments are not provided by the
-Android launcher.
-
-For a QML-only comparison build, use a **different** directory:
+`./compile_android.sh` automatically invokes `./prepare_android_docker.sh`
+when the pinned image does not exist. You can prepare/rebuild it explicitly:
 
 ```bash
-AOWIS_ANDROID_BGFX=OFF ./tools/build_android_lab.sh
-./tools/run_android_lab.sh build-android-baseline
+./prepare_android_docker.sh
 ```
 
-Both variants use the same Android package ID, so installing the second
-replaces the first; no live backend toggling or GPU reinitialization is needed.
-Use `AOWIS_ANDROID_BUILD_DIR` if you prefer an explicit build directory. The
-install script accepts either a build directory containing a single APK or an
-exact `.apk` path. If it finds multiple APKs, pass a specific file instead.
+The image uses **Ubuntu 24.04**, Qt **6.12.0** for Linux host tools and
+Android ARM64, JDK **21**, Android SDK API **36**, Build Tools **36.0.0**,
+and Android NDK **27.2.12479018**. Versions are declared in
+`tools/qt-android/toolchain_versions.sh`. Provisioning uses the open-source
+`aqtinstall` command-line downloader for official Qt archives, not the Qt GUI
+installer or a Qt account. Google's command-line-tools archive is SHA-256
+verified against the published checksum. The build process accepts Android
+SDK license terms when provisioning; please review those terms before building.
+
+The image build requires an internet connection for the downloads and enough
+storage for Qt, SDK, NDK and Docker layers. First APK build also downloads
+Gradle dependencies into `~/.cache/aowis-mobile/gradle`; subsequent builds
+reuse that cache. No Android Qt, Java, CMake, Android SDK or NDK installation
+is needed on the Arch host. `AOWIS_DOCKER_BUILD_NETWORK` and
+`AOWIS_DOCKER_RUN_NETWORK` (default `host` on Linux) can be overridden.
+
+## Build and deploy the rendering lab
+
+```bash
+./compile_android.sh               # build; install/launch on one authorized device
+./compile_android.sh --build-only  # build without deployment
+./compile_android.sh --baseline    # QML-only comparison build
+./compile_android.sh --run         # fail if no authorized Android device
+```
+
+The script builds only `aowis-mobile-render-lab_make_apk`, with native tests,
+bgfx examples and unrelated tools disabled. Output is written under
+`build-android-bgfx/` or `build-android-baseline/`, with the debug APK under
+`android-build/build/outputs/apk/debug/`. Docker runs using the invoking host
+UID/GID, so output files remain writable by the developer. The ADB install
+and launch happen **on the host**; USB devices are not mounted into Docker.
+Set `ANDROID_SERIAL` to choose one of multiple authorized devices.
+
+Both lab variants have the same package ID (`org.aowis.mobile.renderlab`),
+so installing one replaces the other. On Android the bgfx underlay is selected
+automatically in the GPU build. If `--run` is specified, deployment must
+succeed; by default, a missing device just leaves the APK on disk.
+
+The host's Qt installation and default Java selection are irrelevant. In
+particular, an Arch default of Java 8 will **not** affect the Docker build.
+Run `./compile_android.sh --help` for command-line options.
 
 ## Device acceptance checklist
 

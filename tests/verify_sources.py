@@ -55,7 +55,7 @@ checks = [
     ("background pauses frame timer", "refresh.stop()" in main and "applicationStateChanged" in main),
     ("render lifecycle diagnostics", "sceneGraphStarts" in source and "sceneGraphStops" in source and "bgfxInitializations" in source),
     ("Android manifest via Qt", 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile.renderlab"' in cmake),
-    ("Android build tooling exists", (root / "tools/build_android_lab.sh").is_file() and (root / "tools/run_android_lab.sh").is_file()),
+    ("Android Docker build tooling exists", (root / "compile_android.sh").is_file() and (root / "prepare_android_docker.sh").is_file() and (root / "tools/qt-android/Dockerfile").is_file()),
     ("same bgfx pin", "v1.159.9485-574" in setup),
     ("style: no auto type inference", all(not re.search(r"\bauto\b", (root / name).read_text()) for name in [
         "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
