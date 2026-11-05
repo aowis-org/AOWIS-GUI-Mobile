@@ -13,6 +13,7 @@ namespace
     };
 
     constexpr float kPi = 3.14159265358979323846f;
+    constexpr float kStressSpacing = 14.0f;
 
     uint32_t rgba(uint8_t red, uint8_t green, uint8_t blue)
     {
@@ -62,6 +63,23 @@ namespace
                        center.y + radius * std::sin(nextTheta)}, color);
         }
     }
+
+    void square(std::vector<AowisMobileGpu::Vertex> &out, Point center,
+                float radius, uint32_t color)
+    {
+        const Point a = {center.x - radius, center.y - radius};
+        const Point b = {center.x + radius, center.y - radius};
+        const Point c = {center.x - radius, center.y + radius};
+        const Point d = {center.x + radius, center.y + radius};
+        push(out, a, color); push(out, b, color); push(out, c, color);
+        push(out, c, color); push(out, b, color); push(out, d, color);
+    }
+
+    float stressPosition(int index, int side)
+    {
+        return (float(index) - float(side - 1) * 0.5f) * kStressSpacing;
+    }
+
 }
 
 AowisMobileGpu::Scene AowisMobileGpu::createScene()
@@ -119,4 +137,103 @@ AowisMobileGpu::Camera AowisMobileGpu::makeCamera(
     const double halfHeight = double(std::max(1, pixelHeight)) / 2.0;
     return {float((-halfWidth - x) / scale), float((halfWidth - x) / scale),
             float((-halfHeight - y) / scale), float((halfHeight - y) / scale)};
+}
+
+
+AowisMobileGpu::StressProfile AowisMobileGpu::stressProfile(int preset)
+{
+    // The numbers refer to nodes + edges, not only nodes or uploaded vertices.
+    const int side = preset == 1 ? 19 : preset == 2 ? 58 :
+                     preset == 3 ? 183 : preset == 4 ? 577 : 0;
+    const uint64_t nodes = uint64_t(side) * uint64_t(side);
+    const uint64_t pipes = side > 0 ? 2 * uint64_t(side) * uint64_t(side - 1) : 0;
+    return {side, nodes, pipes, nodes + pipes};
+}
+
+AowisMobileGpu::TileSelection AowisMobileGpu::visibleStressTiles(
+    const Camera &camera, const StressProfile &profile)
+{
+    TileSelection result;
+    if (profile.side < 1)
+        return result;
+
+    const double first = double(stressPosition(0, profile.side));
+    // Include a neighbour around screen edges for links crossing the boundary.
+    const int minColumn = std::clamp(int(std::floor((double(camera.left) - first) / kStressSpacing)) - 1,
+                                     0, profile.side - 1);
+    const int maxColumn = std::clamp(int(std::ceil((double(camera.right) - first) / kStressSpacing)) + 1,
+                                     0, profile.side - 1);
+    const int minRow = std::clamp(int(std::floor((double(camera.top) - first) / kStressSpacing)) - 1,
+                                  0, profile.side - 1);
+    const int maxRow = std::clamp(int(std::ceil((double(camera.bottom) - first) / kStressSpacing)) + 1,
+                                  0, profile.side - 1);
+    // No overlap => no GPU work at all (including when far outside the model).
+    if (camera.right < first || camera.left > stressPosition(profile.side - 1, profile.side) ||
+        camera.bottom < first || camera.top > stressPosition(profile.side - 1, profile.side))
+        return result;
+
+    for (int stride = 1; stride <= 1024; stride *= 2)
+    {
+        const int tileWidth = kStressTileSide * stride;
+        const int beginX = minColumn / tileWidth;
+        const int endX = maxColumn / tileWidth;
+        const int beginY = minRow / tileWidth;
+        const int endY = maxRow / tileWidth;
+        const int count = (endX - beginX + 1) * (endY - beginY + 1);
+        if (count > kMaximumVisibleTiles && stride < 1024)
+            continue;
+        result.stride = stride;
+        result.tiles.reserve(size_t(count));
+        for (int row = beginY; row <= endY; ++row)
+            for (int column = beginX; column <= endX; ++column)
+                result.tiles.push_back({column, row, stride});
+        return result;
+    }
+    return result;
+}
+
+AowisMobileGpu::StressMesh AowisMobileGpu::createStressTile(
+    const StressProfile &profile, const StressTile &tile)
+{
+    StressMesh mesh;
+    if (profile.side == 0 || tile.stride < 1 || tile.column < 0 || tile.row < 0)
+        return mesh;
+    const int beginColumn = tile.column * kStressTileSide * tile.stride;
+    const int beginRow = tile.row * kStressTileSide * tile.stride;
+    if (beginColumn >= profile.side || beginRow >= profile.side)
+        return mesh;
+    const int endColumn = std::min(profile.side, beginColumn + kStressTileSide * tile.stride);
+    const int endRow = std::min(profile.side, beginRow + kStressTileSide * tile.stride);
+    mesh.nodes.reserve(6 * kStressTileSide * kStressTileSide);
+    mesh.pipes.reserve(12 * kStressTileSide * kStressTileSide);
+    const uint32_t mainPipe = rgba(70, 187, 202);
+    const uint32_t secondaryPipe = rgba(205, 159, 89);
+    const uint32_t nodeColor = rgba(152, 232, 214);
+    for (int row = beginRow; row < endRow; row += tile.stride)
+    {
+        for (int column = beginColumn; column < endColumn; column += tile.stride)
+        {
+            const Point position = {stressPosition(column, profile.side),
+                                    stressPosition(row, profile.side)};
+            square(mesh.nodes, position, 2.6f * std::sqrt(float(tile.stride)), nodeColor);
+            ++mesh.nodeCount;
+            // All edges are deterministic. No random generator, no duplicated
+            // edges at tile boundaries, and no CPU work outside visible tiles.
+            if (column + tile.stride < profile.side)
+            {
+                segment(mesh.pipes, position,
+                        {stressPosition(column + tile.stride, profile.side), position.y},
+                        2.0f, mainPipe);
+                ++mesh.pipeCount;
+            }
+            if (row + tile.stride < profile.side)
+            {
+                segment(mesh.pipes, position,
+                        {position.x, stressPosition(row + tile.stride, profile.side)},
+                        2.0f, secondaryPipe);
+                ++mesh.pipeCount;
+            }
+        }
+    }
+    return mesh;
 }

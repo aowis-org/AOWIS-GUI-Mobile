@@ -21,10 +21,12 @@ A capability in a related repository is not automatically integrated here.
 **Implemented and exercised:** Qt Quick app; OpenGL/OpenGL ES bgfx direct
 underlay with synthetic GPU lines/triangles; QML overlays and input; Android
 ARM64 Docker APK; USB and paired Wi-Fi ADB deployment flow; Linux build;
-platform-specific app labels and icon. GPU scene/camera unit tests exist.
+platform-specific app labels and icon. GPU scene/camera and deterministic stress/percentile tests exist. A
+selectable large-network benchmark harness and on-device CSV capture are
+implemented but device performance has not yet been characterized.
 Real-world Linux and Android visual operation has been reported and shown.
 
-**Not yet accepted:** large-scene GPU/CPU/frame-pacing benchmarks; Android
+**Not yet accepted:** measured large-scene GPU/CPU/frame-pacing results; Android
 rotation/suspend/context-recreation durability. A single successful phone
 launch is not evidence of those cases.
 

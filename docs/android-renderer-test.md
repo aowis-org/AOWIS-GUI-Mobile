@@ -91,11 +91,19 @@ changed. **A test that never caused resource recreation cannot prove context
 recovery.** Missing functionality or difficult-to-force context loss should
 remain an explicit open test.
 
-## Acceptance protocol: performance (NEXT)
+## Acceptance protocol: performance (HARNESS READY; RESULTS PENDING)
 
-Once the stress-scene presets exist, run the same geometry size and script of
+Select Demo/~1k/~10k/~100k/~1M in the top bar. Wait until tile uploads settle
+then tap **Record 15s** for a per-frame CSV and p50/p95/p99 frame intervals.
+Presets describe total model features (nodes + pipes), whereas the UI reports
+currently visible sampled nodes/pipes, LOD and tile count. The private CSV
+location appears in the results and logcat. Use `adb shell run-as org.aowis.mobile`
+for debug-package retrieval where supported; no extra Android permission is
+needed.
+
+Run the same geometry size and script of
 pan/zoom interactions on Linux and Android. Record frame interval median,
-p95/p99 and dropped frames; app CPU, bgfx GPU timing if valid, RSS, GPU
+p95/p99 and inferred frame misses relative to the device refresh period; app CPU, bgfx GPU timing if valid, RSS, GPU
 resource sizes, draw calls, startup and sustained/thermal behavior. Compare a
 cold run and a warmed-up run. State visible-object count and whether culling
 is active. Record platform display refresh rate and resolution.
@@ -107,7 +115,7 @@ similar geometry, visual output and input workloads.
 ## Diagnostics
 
 ```bash
-adb logcat -v time | grep --line-buffered 'AOWIS render lab'
+adb logcat -v time | grep --line-buffered -E 'AOWIS render lab|AOWIS Mobile benchmark'
 adb devices -l
 ```
 

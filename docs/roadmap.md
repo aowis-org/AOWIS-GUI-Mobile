@@ -8,17 +8,24 @@ acceptance, not already shipped capabilities.
 
 ## Immediate priority 1 — GPU scalability and performance
 
-Add selectable deterministic synthetic scenes with approximately **1,000,
-10,000, 100,000 and (if practical) 1,000,000** points/segments. Exercise
-geometry creation/upload, steady-state pan/zoom, resize and sustained work.
-Track frame pacing percentiles, CPU/GPU time, draw counts, CPU memory, GPU
-buffer sizes and thermal behavior on Linux and physical Android devices.
-Keep test workload, visibility/culling settings and recorded device conditions
-explicit. A QML-only Canvas does not constitute an equivalent GPU benchmark.
+**Harness implemented; real-device acceptance still pending.** The app now
+provides deterministic ~1k/~10k/~100k/~1M node+pipe feature presets, visible
+tile geometry, bounded GPU cache, adaptive LOD, frame statistics and 15-second
+per-frame CSV captures (p50/p95/p99, CPU/GPU time when available, RSS and GPU
+vertex payload estimates). Pure C++ tests cover counts, deterministic tile
+meshes, selection bounds and percentile calculations. The full million-feature
+scene is not allocated or rendered all at once; document visibility/LOD.
 
-**Accept when:** repeatable workloads and exported results demonstrate that
-performance is stable or reveal a bounded, actionable bottleneck, with no
-unexplained disappearing geometry, GPU errors or runaway memory.
+**Remaining:** run the identical stationary and scripted pan/zoom workloads on
+Linux and a physical Android phone, including cold versus warmed-up scenes,
+multiple screen sizes, sustained operation, memory stability and thermal
+behavior. Store resulting CSV reports and record device specs, refresh rates,
+visible items, driver and build configuration.
+
+**Accept when:** repeatable measurements identify stable operation or bounded,
+actionable performance limits, without unexplained geometry loss, GPU errors
+or runaway memory. Do not claim accepted solely because the synthetic renderer
+builds and runs.
 
 ## Immediate priority 2 — Android lifecycle and GPU recovery
 

@@ -4,13 +4,14 @@ set -euo pipefail
 # Patch ZIPs may replace this script during execution. Keep the entire operation
 # in a function so Bash parses it before unzip overwrites the on-disk file.
 main() {
-    local script_dir project_root project_parent project_name patch_name patch
+    local script_dir project_root patch_name patch
     local manifest entry relative component current target
 
     script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
     project_root="$(cd -- "$script_dir/.." && pwd -P)"
-    project_parent="$(dirname -- "$project_root")"
-    project_name="$(basename -- "$project_root")"
+    # An archive namespace is not the local checkout directory name.
+    # Keep patches portable across arbitrary checkout locations and names.
+    local archive_root="AOWIS-GUI-Mobile"
     manifest="$project_root/.aowis-patch-delete.txt"
 
     # Disallow symbolic links anywhere along a relative path, including the
@@ -107,12 +108,12 @@ main() {
     # Inspect all archive entries before changing the checkout.
     local file_count=0
     while IFS= read -r entry; do
-        [[ "$entry" == "$project_name/" ]] && continue
-        if [[ "$entry" != "$project_name/"* ]]; then
+        [[ "$entry" == "$archive_root/" ]] && continue
+        if [[ "$entry" != "$archive_root/"* ]]; then
             printf 'Invalid patch path: %s\n' "$entry" >&2
             return 1
         fi
-        relative="${entry#"$project_name/"}"
+        relative="${entry#"$archive_root/"}"
         [[ "$relative" == */ ]] && relative="${relative%/}"
         if ! validate_relative_path "$relative"; then
             printf 'Invalid or symlinked patch path: %s\n' "$entry" >&2
@@ -144,14 +145,20 @@ main() {
         return 1
     fi
     while IFS= read -r entry; do
-        [[ "$entry" == "$project_name/" ]] && continue
-        relative="${entry#"$project_name/"}"
+        [[ "$entry" == "$archive_root/" ]] && continue
+        relative="${entry#"$archive_root/"}"
         target="$project_root/$relative"
         if [[ "$entry" == */ ]]; then
             mkdir -p -- "$target"
         else
             mkdir -p -- "$(dirname -- "$target")"
-            cp -p -- "$staging/$entry" "$target"
+            # Replace files atomically by rename, rather than truncating the
+            # existing inode. This matters when a patch updates this script
+            # while Bash is still executing the original script file.
+            local temporary_target
+            temporary_target="$(mktemp "$(dirname -- "$target")/.aowis-patch.XXXXXXXX")"
+            cp -p -- "$staging/$entry" "$temporary_target"
+            mv -f -- "$temporary_target" "$target"
         fi
         # Refresh both files and directories for make/Ninja dependency checks.
         touch -c -m -- "$target"

@@ -83,8 +83,8 @@ cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
 cmake --build "$BUILD_DIR" --target aowis-mobile --parallel "$JOBS"
 
 if "$run_tests"; then
-    cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests --parallel "$JOBS"
-    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-gpu-scene$'
+    cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests --parallel "$JOBS"
+    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-gpu-(scene|stress)$'
 fi
 
 if "$build_only"; then

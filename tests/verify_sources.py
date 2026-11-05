@@ -9,7 +9,8 @@ required = [
     "CMakeLists.txt", "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
     "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
     "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
-    "tests/gpu_scene_geometry_tests.cpp", "qml/Main.qml",
+    "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp",
+    "src/performance_samples.cpp", "src/performance_samples.h", "qml/Main.qml",
     "tools/init_bgfx.sh", "docs/renderer-lab.md",
 ]
 for path in required:
@@ -39,7 +40,7 @@ checks = [
     ("retained GPU vertex buffers", "bgfx::createVertexBuffer" in scene),
     ("GPU draw submissions", "bgfx::submit" in scene and "BGFX_STATE_PT_LINES" in scene),
     ("pan/zoom through GPU camera matrix", "setViewTransform" in scene and "makeCamera" in scene),
-    ("no CPU regeneration in rendering callback", "createScene()" not in source and "createScene()" not in scene.split("void GpuSceneRenderer::render")[1]),
+    ("no CPU regeneration in rendering callback", "createScene()" not in source and "createScene()" not in scene.split("GpuSceneMetrics GpuSceneRenderer::render")[1]),
     ("continuous 2-vertex line segments", "push(target, {coordinate, -6144.0f}" in geometry),
     ("mesh triangles for pipes and nodes", "scene.pipeTriangles" in geometry and "scene.nodeTriangles" in geometry),
     ("real CPU timings labeled correctly", "submitMicroseconds" in source and "frameIntervalMicroseconds" in source),
@@ -47,6 +48,15 @@ checks = [
     ("QML displays performance diagnostics", "lab.timings" in qml),
     ("no bgfx ASCII renderer remains", "dbgTextPrintf" not in source and "dbgTextClear" not in source),
     ("unit geometry test", "aowis-mobile-gpu-scene" in cmake),
+    ("stress preset / determinism tests", "aowis-mobile-gpu-stress" in cmake and
+     "createStressTile" in geometry and "visibleStressTiles" in geometry),
+    ("bounded viewport tiles and LOD", "kMaximumCachedTiles" in scene and
+     "kMaximumVisibleTiles" in geometry and "stride *= 2" in geometry),
+    ("performance CSV and percentiles", "QSaveFile" in source and
+     "percentile(intervals, 0.99)" in source and "frame_interval" not in source and
+     "interval_us,submit_us,gpu_us" in source),
+    ("QML presets and timed capture", "ComboBox {" in qml and
+     "lab.setWorkload(index)" in qml and "lab.startBenchmark()" in qml),
     ("render-thread cleanup", "sceneGraphInvalidated" in source and "gpuScene->release()" in source),
     ("Android default test mode", "androidExperimentalDefault = true" in main),
     ("QML controls", "DragHandler {" in qml and "PinchHandler {" in qml and "TapHandler {" in qml and "WheelHandler {" in qml),
@@ -76,7 +86,9 @@ checks = [
     ("style: no auto type inference", all(not re.search(r"\bauto\b", (root / name).read_text()) for name in [
         "src/main.cpp", "src/render_lab.cpp", "src/render_lab.h",
         "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
-        "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h", "tests/gpu_scene_geometry_tests.cpp"
+        "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
+        "src/performance_samples.cpp", "src/performance_samples.h",
+        "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp"
     ])),
 ]
 for name, ok in checks:

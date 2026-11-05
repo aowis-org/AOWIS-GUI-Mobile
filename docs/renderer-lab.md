@@ -29,7 +29,8 @@ coordinates, and none of the map services or hydraulic MODEL data are used.
    desktop or OpenGL ES on Android, with `BGFX_CONFIG_MULTITHREADED=0`.
 5. `GpuSceneRenderer` allocates retained GPU vertex buffers and loads matching
    pinned vertex-color shaders (`glsl` / `essl`) via Qt resources. The renderer
-   draws major/minor grid lines, pipe triangles and junction disks.
+   draws major/minor grid lines, pipe triangles and junction disks in the
+   small demo. The stress scene generates deterministic pipe/node tiles.
 6. Pan/zoom data is passed from QML to render thread via atomics and applied
    in the camera transform, without rebuilding vertex buffers per gesture.
 7. `bgfx::frame(BGFX_FRAME_FLUSH)` submits without a bgfx-owned swap; Qt owns
@@ -48,48 +49,81 @@ or Metal QML backend.
 | `src/main.cpp` | Platform identity, startup, rendering mode, app state and refresh timer |
 | `qml/Main.qml` | Synthetic baseline, touch gestures, diagnostic status and overlays |
 | `src/render_lab.h/.cpp` | Qt/bgfx lifecycle, context borrowing, frame submission and diagnostic counters |
-| `src/gpu_scene_geometry.h/.cpp` | Static line/triangle geometry and camera calculations |
-| `src/gpu_scene_renderer.h/.cpp` | bgfx shaders, buffers, draw submission and resource release |
+| `src/gpu_scene_geometry.h/.cpp` | Baseline geometry, camera math, deterministic stress tile geometry and LOD selection |
+| `src/gpu_scene_renderer.h/.cpp` | bgfx shaders, bounded tile cache, visibility/LOD, submission and release |
+| `src/performance_samples.h/.cpp` | Dependency-free frame-metric percentile calculations |
+| `tests/gpu_scene_stress_tests.cpp` | Deterministic geometry/visibility/cache-budget/percentile tests |
 | `tests/gpu_scene_geometry_tests.cpp` | Dependency-free CPU tests for geometry/camera |
 | `CMakeLists.txt` | Linux/Android Qt targets, bgfx dependency, shader resources and Qt icons |
 
-## Current instrumentation
+## Implemented scalability harness (measurement results pending)
 
-The UI shows bgfx frame count, submission CPU duration, frame interval,
-optional bgfx GPU time, draw calls and lifecycle counters (app pause/resume,
-scene-graph starts/stops, bgfx initializations). A 16 ms timer requests updates
-while the app is active; Android uses non-persistent graphics/scene-graph
-settings to *request* resource release while hidden.
+Select **Demo**, **~1k**, **~10k**, **~100k**, or **~1M features** in the QML
+header. The largest preset models 577 × 577 nodes and right/down pipes:
+**332,929 nodes + 664,704 pipes = 997,633 features**. The counts are *logical*
+model features; only geometry inside the camera viewport is uploaded/drawn.
+They are not 1 million independently simulated hydraulic objects.
 
-These numbers are **not** a full performance profile:
+The test is deterministic: grid topology, colors, positions and tile keys are
+functions of the preset and integer coordinates. The full scene is *never*
+materialized as a million-object CPU vector. GPU geometry is generated in
+32 × 32-node tiles, with **at most 64 visible tiles** and a **96-tile resident
+cache**. When a large/zoomed-out viewport needs more tiles, an explicit
+sampling stride (LOD 1:2, 1:4, etc.) reduces submitted detail. The UI exposes
+this stride and **visible versus total** node/pipe counts. This is a
+large-project *viewport navigation* benchmark, not an all-million-at-once
+rasterization test; culling and LOD are always active in stress presets.
 
-- Submission duration is CPU time spent on rendering submission, not complete
-  application CPU utilization.
-- Driver-reported GPU timing may be unavailable or incomplete; it does not
-  include Qt composition, display scan-out or battery consumption.
-- Frame interval is not equivalent to end-to-end input-to-photon latency.
-- The scene uses very few static vertices/draws, so current FPS is not
-  predictive for real city-scale networks or terrain maps.
+The display shows bgfx CPU submission duration, actual inter-frame interval,
+optional bgfx GPU time, draw counts, tile uploads, estimated retained GPU
+**vertex payload** bytes, and Linux/Android process RSS when `/proc/self/status`
+is accessible. GPU payload estimates are not complete VRAM totals.
 
-Do not claim context-loss recovery merely because the application resumed once.
-The [Android device checklist](android-renderer-test.md) and
-[roadmap](roadmap.md) specify the next acceptance work.
+Press **Record 15s** after letting geometry upload/warm up. A 15-second
+capture saves individual frame observations as a CSV file under the app's
+private `benchmarks/` data directory and prints summary p50/p95/p99 frame
+interval and p95 CPU/GPU timings. Pause/background or scene-graph invalidation
+discards the interrupted capture. The report includes logical workload,
+visible/drawn geometry, LOD, draw calls, upload counts, CPU RSS endpoints and
+vertex-buffer estimates. The screen and console display its location.
 
-## Near-term validation
+**Do not interpret an unrun harness as passing the benchmark.** No phone
+thermal, power, large-scene frame percentile or memory stability numbers have
+yet been measured and independently confirmed. bgfx GPU timing can be
+unavailable; it does not encompass Qt composition or display scanout.
 
-**First:** add deterministic scene-size presets (1k, 10k, 100k, up to 1M
-objects when feasible) plus logs of frame pacing percentiles, CPU/GPU
-rendering, memory and thermal behavior. Keep the same scene and controls on
-Linux and Android. Ensure build-time geometry creation does not contaminate
-steady-state frame measurements; report draw calls, visible objects and
-whether culling/LOD is enabled. A QML-only Canvas is *not* a like-for-like
-large-scene GPU comparison unless it draws equivalent geometry.
+## Reproducible benchmark procedure
 
-**Second:** exercise real Android rotation, Home/resume, screen lock, app
-switching and repeated resource invalidation/recreation. Count, log and
-assert live recovery rather than relying on counters alone. Test on-device
-GPU state integrity and absence of retained resource leaks.
+1. Run the same build mode, resolution, display-refresh setting and device
+   orientation on both platforms. Record phone/CPU/GPU model, OS and Qt build.
+2. Choose a workload, wait for **uploads/frame: 0** and stable RSS. Note the
+   visible nodes/pipes and LOD stride. Pan/zoom to a reproducible view.
+3. Press **Record 15s**; perform a consistent pan/zoom sequence (or leave the
+   scene stationary for a steady-state measurement). Do not change presets.
+4. Record p50/p95/p99 frame interval, p95 CPU/GPU, RSS and cache usage. Repeat
+   on each preset. Do a second run after warm-up and compare initial uploads
+   against steady-state capture.
+5. Check real-device thermal, power consumption and sustained performance
+   separately; these are not provided by the app's current metrics.
 
-Only after this evidence should the Qt Quick adapter be promoted to the
-planned `AOWIS-GUI-Render` boundary. Desktop `AOWIS-GUI` and its WASM
-integration must continue to work unchanged during extraction.
+For Android debug APKs, the CSV is stored under the app-private data path
+printed in the UI/logcat. Retrieve using `adb shell run-as org.aowis.mobile`
+and `adb exec-out run-as org.aowis.mobile cat <relative-file>` where supported;
+otherwise retain the console summary and on-screen numbers. Do not change
+file permissions or require storage permissions just for benchmarks.
+
+## Limitations and next acceptance
+
+The benchmark currently measures a deterministic, relatively uniform network
+with simple triangles, not real terrain imagery, mixed object types, complex
+labels or survey transactions. Its adaptive LOD intentionally omits individual
+pipes/nodes when zoomed out. Pixel correctness, power and thermal performance
+require tests on real hardware. The QML-only Canvas is not an equivalent
+large-scene GPU baseline because it draws different geometry.
+
+**Next agreed priority:** Android lifecycle/recovery under load: rotation,
+background/resume, screen lock and induced scene-graph/EGL recreation. Verify
+that tile buffers and shaders are released/rebuilt without persistent black
+frames, stale geometry or accumulation of RSS. See the
+[Android device checklist](android-renderer-test.md). Only then consider
+extraction into `AOWIS-GUI-Render`, preserving Desktop GUI and WASM behavior.

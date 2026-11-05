@@ -1,9 +1,19 @@
 #include "render_lab.h"
+#include "gpu_scene_geometry.h"
 #if AOWIS_LAB_WITH_BGFX
 #include "gpu_scene_renderer.h"
 #endif
 
 #include <QDebug>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QSysInfo>
+#include <QTextStream>
+#include <QMutexLocker>
+#include <QList>
 #include <QOpenGLContext>
 #include <QSGRendererInterface>
 #include <QSize>
@@ -12,6 +22,40 @@
 #include <algorithm>
 #include <cstdint>
 #include <chrono>
+#include <vector>
+
+namespace
+{
+    int64_t steadyMicroseconds()
+    {
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    }
+
+    QString formatMs(int64_t microseconds)
+    {
+        return microseconds < 0 ? QStringLiteral("N/A")
+            : QString::number(double(microseconds) / 1000.0, 'f', 2);
+    }
+
+    uint64_t rssKilobytes()
+    {
+        QFile file(QStringLiteral("/proc/self/status"));
+        if (!file.open(QIODevice::ReadOnly))
+            return 0;
+        while (!file.atEnd())
+        {
+            const QByteArray line = file.readLine();
+            if (line.startsWith("VmRSS:"))
+            {
+                const QList<QByteArray> fields = line.simplified().split(' ');
+                return fields.size() >= 2 ? fields.at(1).toULongLong() : 0;
+            }
+        }
+        return 0;
+    }
+}
+
 
 #if AOWIS_LAB_WITH_BGFX
 #include <bgfx/bgfx.h>
@@ -104,7 +148,9 @@ void RenderLab::setApplicationActive(bool active)
         this->resumes.fetch_add(1);
     else
         this->pauses.fetch_add(1);
-    qInfo("AOWIS render lab: application %s", active ? "active" : "inactive");
+    if (!active)
+        this->finishBenchmark(true);
+    qInfo("AOWIS Mobile: application %s", active ? "active" : "inactive");
     emit statusChanged();
 }
 
@@ -114,6 +160,166 @@ void RenderLab::setView(double zoom, double panX, double panY)
     this->viewZoom.store(std::clamp(zoom, 0.3, 3.0), std::memory_order_relaxed);
     this->viewPanX.store(std::clamp(panX, -4096.0, 4096.0), std::memory_order_relaxed);
     this->viewPanY.store(std::clamp(panY, -4096.0, 4096.0), std::memory_order_relaxed);
+}
+
+QString RenderLab::sceneStats() const
+{
+    const int preset = this->workload.load(std::memory_order_relaxed);
+    if (preset == 0)
+        return QStringLiteral("Scene: small GPU demonstration (8 nodes / 7 pipes)");
+    const AowisMobileGpu::StressProfile profile = AowisMobileGpu::stressProfile(preset);
+    const uint64_t kb = rssKilobytes();
+    const QString rss = kb == 0 ? QStringLiteral("N/A")
+        : QStringLiteral("%1 MiB").arg(double(kb) / 1024.0, 0, 'f', 1);
+    return QStringLiteral("Network: %1 nodes + %2 pipes = %3 total\n"
+                          "Visible: %4 nodes / %5 pipes | %6 tiles | LOD 1:%7\n"
+                          "GPU cache: %8 tiles / %9 MiB vertex data | uploads/frame: %10 | RSS: %11")
+        .arg(QString::number(static_cast<qulonglong>(profile.nodes))).arg(QString::number(static_cast<qulonglong>(profile.pipes)))
+        .arg(QString::number(static_cast<qulonglong>(profile.features)))
+        .arg(this->nodesDrawn.load()).arg(this->pipesDrawn.load())
+        .arg(this->visibleTiles.load()).arg(this->lodStride.load())
+        .arg(this->cachedTiles.load())
+        .arg(double(this->gpuVertexBytes.load()) / (1024.0 * 1024.0), 0, 'f', 1)
+        .arg(this->tileUploads.load()).arg(rss);
+}
+
+bool RenderLab::benchmarkActive() const
+{
+    QMutexLocker locker(&this->benchmarkMutex);
+    return this->capturing;
+}
+
+QString RenderLab::benchmarkResult() const
+{
+    return this->lastBenchmarkResult;
+}
+
+void RenderLab::setWorkload(int preset)
+{
+    if (preset < 0 || preset > 4)
+        return;
+    {
+        QMutexLocker locker(&this->benchmarkMutex);
+        if (this->capturing)
+            return; // Workload must remain fixed for a benchmark sample.
+    }
+    this->workload.store(preset, std::memory_order_relaxed);
+    this->lastBenchmarkResult.clear();
+    emit statusChanged();
+}
+
+void RenderLab::startBenchmark()
+{
+    if (!this->requestedBgfx || !this->applicationActive.load() ||
+        this->phase.load() != Phase::Rendering)
+        return;
+    {
+        QMutexLocker locker(&this->benchmarkMutex);
+        if (this->capturing)
+            return;
+        this->capturing = true;
+        this->captureSamples.clear();
+        this->captureSamples.reserve(1200);
+        this->captureStartUs = steadyMicroseconds();
+        this->captureStartRssKb = rssKilobytes();
+        this->captureInvalidated.store(false);
+    }
+    this->lastBenchmarkResult = QStringLiteral("Recording 15 seconds; keep workload unchanged");
+    const uint64_t token = ++this->captureToken;
+    QTimer::singleShot(15000, this, [this, token]() {
+        if (this->captureToken == token)
+            this->finishBenchmark(false);
+    });
+    emit statusChanged();
+}
+
+void RenderLab::finishBenchmark(bool interrupted)
+{
+    std::vector<AowisMobileBench::FrameSample> samples;
+    uint64_t startRssKb = 0;
+    {
+        QMutexLocker locker(&this->benchmarkMutex);
+        if (!this->capturing)
+            return;
+        this->capturing = false;
+        samples.swap(this->captureSamples);
+        startRssKb = this->captureStartRssKb;
+    }
+    if (interrupted)
+    {
+        this->lastBenchmarkResult = QStringLiteral("Capture interrupted by application pause; discarded");
+        emit statusChanged();
+        return;
+    }
+    if (samples.size() < 10)
+    {
+        this->lastBenchmarkResult = QStringLiteral("Not enough frames captured; no report saved");
+        emit statusChanged();
+        return;
+    }
+
+    const uint64_t endRssKb = rssKilobytes();
+    const std::vector<int64_t> intervals = AowisMobileBench::intervals(samples);
+    const std::vector<int64_t> submits = AowisMobileBench::submissions(samples);
+    const std::vector<int64_t> gpus = AowisMobileBench::gpuTimes(samples);
+    const int64_t median = AowisMobileBench::percentile(intervals, 0.5);
+    const int64_t p95 = AowisMobileBench::percentile(intervals, 0.95);
+    const int64_t p99 = AowisMobileBench::percentile(intervals, 0.99);
+    const int64_t cpu95 = AowisMobileBench::percentile(submits, 0.95);
+    const int64_t gpu95 = AowisMobileBench::percentile(gpus, 0.95);
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/benchmarks");
+    if (!QDir().mkpath(directory))
+    {
+        this->lastBenchmarkResult = QStringLiteral("Cannot create benchmark output directory");
+        emit statusChanged();
+        return;
+    }
+    const QString name = QStringLiteral("network-%1-%2.csv")
+        .arg(this->workload.load())
+        .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz")));
+    const QString output = directory + QStringLiteral("/") + name;
+    QSaveFile file(output);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        this->lastBenchmarkResult = QStringLiteral("Cannot open CSV report for writing");
+        emit statusChanged();
+        return;
+    }
+    QTextStream stream(&file);
+    const AowisMobileGpu::StressProfile profile = AowisMobileGpu::stressProfile(this->workload.load());
+    stream << "# AOWIS Mobile GPU benchmark, 15 s, steady_clock; CPU/GPU timing as reported by bgfx\n";
+    stream << "# Device: " << QSysInfo::prettyProductName() << "\n";
+    stream << "# Preset: " << this->workload.load() << "; logical nodes=" << static_cast<qulonglong>(profile.nodes)
+           << "; logical pipes=" << static_cast<qulonglong>(profile.pipes)
+           << "; total=" << static_cast<qulonglong>(profile.features) << "\n";
+    stream << "# Visible-only GPU tiles; bounded tile cache; adaptive LOD; background captures discarded\n";
+    stream << "# Process RSS beginning KB=" << startRssKb
+           << "; end KB=" << endRssKb << " (may include Qt/driver allocations)\n";
+    stream << "# p50_interval_us=" << median << "; p95_interval_us=" << p95
+           << "; p99_interval_us=" << p99 << "; p95_cpu_submit_us=" << cpu95
+           << "; p95_gpu_us=" << gpu95 << "\n";
+    stream << "elapsed_us,interval_us,submit_us,gpu_us,draws,visible_tiles,uploads,lod_stride,"
+              "nodes_drawn,pipes_drawn,vertex_buffer_bytes\n";
+    for (const AowisMobileBench::FrameSample &sample : samples)
+        stream << sample.elapsedUs << ',' << sample.frameIntervalUs << ',' << sample.submitUs
+               << ',' << sample.gpuUs << ',' << sample.draws << ',' << sample.tiles
+               << ',' << sample.uploads << ',' << sample.stride << ','
+               << sample.nodesDrawn << ',' << sample.pipesDrawn << ','
+               << sample.vertexBytes << '\n';
+    stream.flush();
+    if (!file.commit())
+    {
+        this->lastBenchmarkResult = QStringLiteral("Failed to save CSV report");
+        emit statusChanged();
+        return;
+    }
+    this->lastBenchmarkResult = QStringLiteral("%1 frames | interval p50/p95/p99: %2 / %3 / %4 ms\n"
+        "CPU p95: %5 ms | GPU p95: %6 ms | CSV: %7")
+        .arg(qulonglong(samples.size())).arg(formatMs(median)).arg(formatMs(p95))
+        .arg(formatMs(p99)).arg(formatMs(cpu95)).arg(formatMs(gpu95)).arg(output);
+    qInfo().noquote() << "AOWIS Mobile benchmark:" << this->lastBenchmarkResult;
+    emit statusChanged();
 }
 
 void RenderLab::attach(QQuickWindow *window)
@@ -238,9 +444,7 @@ void RenderLab::renderOnRenderThread()
         this->lastWidth.store(width);
         this->lastHeight.store(height);
     }
-    const std::chrono::steady_clock::time_point tick = std::chrono::steady_clock::now();
-    const int64_t nowMicroseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-        tick.time_since_epoch()).count();
+    const int64_t nowMicroseconds = steadyMicroseconds();
     if (this->lastFrameTimestampMicroseconds != 0)
         this->frameIntervalMicroseconds.store(
             nowMicroseconds - this->lastFrameTimestampMicroseconds, std::memory_order_relaxed);
@@ -248,12 +452,22 @@ void RenderLab::renderOnRenderThread()
 
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     const double devicePixelRatio = this->window->devicePixelRatio();
-    this->gpuScene->render(width, height, devicePixelRatio,
-                           this->viewZoom.load(std::memory_order_relaxed),
-                           this->viewPanX.load(std::memory_order_relaxed),
-                           this->viewPanY.load(std::memory_order_relaxed));
+    const GpuSceneMetrics sceneMetrics = this->gpuScene->render(
+        width, height, devicePixelRatio,
+        this->viewZoom.load(std::memory_order_relaxed),
+        this->viewPanX.load(std::memory_order_relaxed),
+        this->viewPanY.load(std::memory_order_relaxed),
+        this->workload.load(std::memory_order_relaxed));
+    this->visibleTiles.store(sceneMetrics.visibleTiles, std::memory_order_relaxed);
+    this->cachedTiles.store(sceneMetrics.residentTiles, std::memory_order_relaxed);
+    this->tileUploads.store(sceneMetrics.uploadsThisFrame, std::memory_order_relaxed);
+    this->lodStride.store(sceneMetrics.stride, std::memory_order_relaxed);
+    this->nodesDrawn.store(sceneMetrics.sampledNodes, std::memory_order_relaxed);
+    this->pipesDrawn.store(sceneMetrics.sampledPipes, std::memory_order_relaxed);
+    this->gpuVertexBytes.store(sceneMetrics.gpuVertexBytes, std::memory_order_relaxed);
     // Do not present bgfx's borrowed context: Qt Quick owns swap/presentation.
     bgfx::frame(BGFX_FRAME_FLUSH);
+    this->gpuMicroseconds.store(-1, std::memory_order_relaxed);
     const bgfx::Stats *stats = bgfx::getStats();
     if (stats != nullptr)
     {
@@ -270,11 +484,31 @@ void RenderLab::renderOnRenderThread()
     this->submitMicroseconds.store(elapsed, std::memory_order_relaxed);
     this->window->endExternalCommands();
     this->renderedFrames.fetch_add(1, std::memory_order_relaxed);
+    {
+        QMutexLocker locker(&this->benchmarkMutex);
+        if (this->capturing)
+        {
+            AowisMobileBench::FrameSample sample;
+            sample.elapsedUs = nowMicroseconds - this->captureStartUs;
+            sample.frameIntervalUs = this->frameIntervalMicroseconds.load();
+            sample.submitUs = elapsed;
+            sample.gpuUs = this->gpuMicroseconds.load();
+            sample.draws = this->drawCalls.load();
+            sample.tiles = sceneMetrics.visibleTiles;
+            sample.uploads = sceneMetrics.uploadsThisFrame;
+            sample.stride = sceneMetrics.stride;
+            sample.nodesDrawn = sceneMetrics.sampledNodes;
+            sample.pipesDrawn = sceneMetrics.sampledPipes;
+            sample.vertexBytes = sceneMetrics.gpuVertexBytes;
+            this->captureSamples.push_back(sample);
+        }
+    }
 #endif
 }
 
 void RenderLab::shutdownOnRenderThread()
 {
+    this->captureInvalidated.store(true);
 #if AOWIS_LAB_WITH_BGFX
     if (this->initialized)
     {
@@ -296,9 +530,18 @@ void RenderLab::shutdownOnRenderThread()
     this->frameIntervalMicroseconds.store(0);
     this->gpuMicroseconds.store(-1);
     this->drawCalls.store(0);
+    this->visibleTiles.store(0);
+    this->cachedTiles.store(0);
+    this->tileUploads.store(0);
+    this->lodStride.store(1);
+    this->nodesDrawn.store(0);
+    this->pipesDrawn.store(0);
+    this->gpuVertexBytes.store(0);
 }
 
 void RenderLab::refreshStatus()
 {
+    if (this->captureInvalidated.exchange(false))
+        this->finishBenchmark(true);
     emit statusChanged();
 }

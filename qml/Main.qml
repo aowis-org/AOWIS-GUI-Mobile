@@ -14,6 +14,7 @@ Window {
     property real dragX: 0
     property real dragY: 0
     property string lastTap: "Touch or click the map"
+    property bool showPerformance: true
 
     function publishView() {
         lab.setView(viewZoom, dragX, dragY)
@@ -151,18 +152,37 @@ Window {
         radius: 12
         color: "#ff142533"
         border.color: "#478292"
-        RowLayout {
+        ColumnLayout {
             id: headerLayout
             anchors.fill: parent
             anchors.margins: 12
-            spacing: 8
-            Label { text: Qt.application.name; color: "white"; font.bold: true; font.pixelSize: 19 }
-            Item { Layout.fillWidth: true }
-            Label {
-                text: lab.bgfxMode ? "BGFX UNDERLAY" : "QML BASELINE"
-                color: "#9ce5da"
-                font.pixelSize: 11
-                font.bold: true
+            spacing: 7
+            RowLayout {
+                Layout.fillWidth: true
+                Label { text: Qt.application.name; color: "white"; font.bold: true; font.pixelSize: 19 }
+                Item { Layout.fillWidth: true }
+                Label {
+                    text: lab.bgfxMode ? "BGFX UNDERLAY" : "QML BASELINE"
+                    color: "#9ce5da"
+                    font.pixelSize: 11
+                    font.bold: true
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                ComboBox {
+                    id: workloadSelector
+                    Layout.fillWidth: true
+                    enabled: lab.bgfxMode && !lab.benchmarkActive
+                    model: ["Demo", "~1k features", "~10k features", "~100k features", "~1M features"]
+                    onActivated: function(index) { lab.setWorkload(index) }
+                }
+                Button {
+                    text: lab.benchmarkActive ? "Recording…" : "Record 15s"
+                    enabled: lab.bgfxMode && !lab.benchmarkActive
+                    onClicked: lab.startBenchmark()
+                }
             }
         }
     }
@@ -172,20 +192,32 @@ Window {
         spacing: 8
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: statPanel.implicitHeight + 24
+            implicitHeight: Math.min(root.height * 0.42, statPanel.implicitHeight + 24)
             radius: 12
             color: "#ff152938"
             border.color: "#478292"
-            ColumnLayout {
-                id: statPanel
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-                spacing: 6
-                Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
-                Label { text: "bgfx frames: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
-                Label { text: "Zoom: " + root.viewZoom.toFixed(2) + "×  |  Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY); color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12 }
+            clip: true
+            Flickable {
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: statPanel.implicitHeight + 24
+                flickableDirection: Flickable.VerticalFlick
+                clip: true
+                ColumnLayout {
+                    id: statPanel
+                    x: 12
+                    y: 12
+                    width: parent.width - 24
+                    spacing: 6
+                    Label { text: lab.status; color: "#a1ebd6"; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                    Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
+                    Label { text: "bgfx frames: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                    Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                    Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; visible: root.showPerformance }
+                    Label { text: lab.sceneStats; color: "#e7c88c"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; visible: root.showPerformance }
+                    Label { text: lab.benchmarkResult; color: "#ade9c8"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
+                    Label { text: "Zoom: " + root.viewZoom.toFixed(2) + "×  |  Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY); color: "#e3edee"; Layout.fillWidth: true; font.pixelSize: 12 }
+                }
             }
         }
         RowLayout {
@@ -194,6 +226,7 @@ Window {
             Button { text: "−"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25) }
             Button { text: "Center"; Layout.fillWidth: true; onClicked: { root.dragX = 0; root.dragY = 0 } }
             Button { text: "+"; Layout.fillWidth: true; onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25) }
+            Button { text: root.showPerformance ? "Less" : "Metrics"; onClicked: root.showPerformance = !root.showPerformance }
         }
     }
 }

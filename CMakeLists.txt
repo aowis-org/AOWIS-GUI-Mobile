@@ -26,6 +26,8 @@ qt_add_executable(aowis-mobile
     src/render_lab.h
     src/gpu_scene_geometry.cpp
     src/gpu_scene_geometry.h
+    src/performance_samples.cpp
+    src/performance_samples.h
 )
 
 set_source_files_properties(assets/icons/aowis.png PROPERTIES QT_RESOURCE_ALIAS icon.png)
@@ -158,6 +160,13 @@ if(BUILD_TESTING)
     add_executable(aowis-mobile-gpu-scene-tests
         tests/gpu_scene_geometry_tests.cpp
         src/gpu_scene_geometry.cpp
+        src/performance_samples.cpp
     )
     add_test(NAME aowis-mobile-gpu-scene COMMAND aowis-mobile-gpu-scene-tests)
+    add_executable(aowis-mobile-gpu-stress-tests
+        tests/gpu_scene_stress_tests.cpp
+        src/gpu_scene_geometry.cpp
+        src/performance_samples.cpp
+    )
+    add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
 endif()

@@ -13,6 +13,9 @@ The repository already builds and launches a **Qt Quick + bgfx** application on
 Linux and Android ARM64. bgfx draws real GPU geometry *under* QML controls using
 Qt's OpenGL/EGL context. The app has mouse/touch pan, pinch/wheel zoom, a QML
 baseline, frame diagnostics, and Android application-lifecycle counters.
+Selectable synthetic networks (~1k to ~1M total node/pipe features) use
+viewport tiles, bounded GPU buffers and explicit LOD sampling. A 15-second
+benchmark saves frame-level CSV and frame-pacing percentiles.
 The Android APK builds in a pinned Docker toolchain on Arch Linux and has been
 launched on a physical Android phone. Linux rendering has also been exercised.
 
@@ -20,8 +23,9 @@ launched on a physical Android phone. Linux rendering has also been exercised.
 synthetic rendering test scene—not actual georeferenced maps or saved network
 objects. There is no GPS capture, feature classification, point/line/area editor,
 offline map package, local observation store or DVMDB synchronization in this
-repository yet. Sustained rendering load and reliable Android context recovery
-have not yet passed acceptance tests.
+repository yet. The stress harness has not yet been
+benchmarked on real hardware, and Android context recovery has not yet passed
+acceptance tests.
 
 ## Names and repository family
 
@@ -51,7 +55,7 @@ Linux (installed Qt 6, CMake, Ninja, C++ compiler):
 ./compile_linux.sh                # build and launch bgfx underlay
 ./compile_linux.sh --build-only   # build only
 ./compile_linux.sh --baseline     # separate QML-only comparison build
-./compile_linux.sh --tests        # build and run C++ scene/camera tests
+./compile_linux.sh --tests        # run scene/camera and stress/percentile tests
 ```
 
 Android ARM64 (Docker on host; optional Arch `adb` for deployment):
@@ -75,9 +79,9 @@ for setup, diagnostics and APK paths, and
 
 ## What happens next
 
-**Next agreed work:** (1) configurable GPU scene sizes and credible Android/Linux
-performance measurements; (2) Android orientation, pause/resume, lock/unlock and
-EGL/scene-graph recovery tests. After these pass, define and extract the shared
+**Next agreed work:** (1) run repeatable stress measurements on Linux and
+Android using the new scene presets and CSV capture; (2) Android orientation,
+pause/resume, lock/unlock and EGL/scene-graph recovery tests. After these pass, define and extract the shared
 renderer into `AOWIS-GUI-Render` without regressing Desktop GUI/WASM behavior.
 The real mapping and survey tools follow that foundation.
 
@@ -86,23 +90,44 @@ Read the [documentation index](docs/README.md) or the
 
 ## Patch and source ZIP tooling
 
-The current checked-in tooling accepts `aowis-mobile-<description>.zip` patches,
-even though the **canonical repository name** is now `AOWIS-GUI-Mobile`.
-The archive's top-level directory **must exactly match the local checkout
-directory name** (for example `AOWIS-GUI-Mobile/` after a local rename).
-The scripts derive that directory from the checkout; a repository rename does
-not by itself rename the accepted patch filename prefix or `../mobile.zip`.
-These tooling names are not the application identity.
+Tooling is **independent of the local checkout directory name**. The checkout
+may be located anywhere and called anything; the scripts locate the Git project
+root relative to themselves. Neither the patch validator nor source ZIP
+creation compares archive paths with the checkout folder name.
+
+Patches retain the `aowis-mobile-<description>.zip` filename convention and
+contain repository-relative paths underneath the **fixed logical archive
+namespace** `AOWIS-GUI-Mobile/`. That namespace identifies the repository in
+the archive; it is not a required local directory name.
 
 ```bash
 ./tools/apply_patch.sh ~/Downloads/aowis-mobile-<description>.zip
-./tools/zip_mobile_project.sh         # writes ../mobile.zip
+./tools/zip_mobile_project.sh     # writes ../mobile.zip
 ```
 
-Patch ZIPs may include `.aowis-patch-delete.txt` under the repository root for
-repository-relative file removals. Applying a patch refreshes timestamps and
-regenerates `mobile.zip`. The source snapshot excludes build outputs, secrets,
-Git metadata and nested submodule contents. The `external/bgfx.cmake` submodule
-is pinned separately in Git.
+The generated `mobile.zip` uses the same stable logical archive namespace,
+regardless of what the checkout directory is called. Apply scripts copy files
+relative to their own repository root, not to a derived directory name.
+
+**One-time upgrade from the old patch script:** if the installed script still
+validates patches against the checkout's folder name, extract the replacement
+script first, then run the ordinary patch command. This also avoids a bug in
+the older script when it overwrites its own executable during execution:
+
+```bash
+PATCH=~/Downloads/aowis-mobile-checkout-independent-patch-tooling.zip
+unzip -p "$PATCH" AOWIS-GUI-Mobile/tools/apply_patch.sh > tools/apply_patch.sh.new
+chmod +x tools/apply_patch.sh.new
+mv -f tools/apply_patch.sh.new tools/apply_patch.sh
+./tools/apply_patch.sh "$PATCH"
+```
+
+This upgrade procedure does not depend on the local checkout directory name.
+
+Patch ZIPs may include `AOWIS-GUI-Mobile/.aowis-patch-delete.txt` containing
+repository-relative file removals. Applying a patch refreshes file timestamps
+and regenerates `mobile.zip`. The source snapshot excludes build outputs,
+secrets, Git metadata and nested submodule contents. The `external/bgfx.cmake`
+submodule is pinned separately in Git.
 
 License: Apache-2.0.
