@@ -94,11 +94,49 @@ Linux and Android; comprehensive lifecycle and sustained stress acceptance
 remain open.** Do not interpret successful APK compilation as
 proof of rotation/resume behavior.
 
-## Acceptance protocol: lifecycle and recovery (NEXT)
+## Android lifecycle recovery testing (harness implemented; device results pending)
+
+After installing the latest debug APK (`./compile_android.sh --run`),
+select **~100k** or **~1M** in the app and move its camera away from the
+initial position. Then run the non-destructive, repeatable ADB test:
+
+```bash
+./tools/test_android_lifecycle.sh --cycles 12
+# Or: ./tools/test_android_lifecycle.sh --serial DEVICE_SERIAL --cycles 20
+./tools/test_android_lifecycle.sh --pull-only
+```
+
+This presses Home and resumes the installed application for each cycle, checks
+that its PID has not silently changed, and retrieves:
+
+- `benchmarks/lifecycle/<device>-<UTC>/summary.txt`: device, cycles and process restarts;
+- `events.csv`: app state, scene-graph events, first-frame recovery, timeouts,
+  renderer reinitialization, resident tiles, vertex bytes and process RSS;
+- `memory.csv`: `dumpsys meminfo` total PSS sampled after each cycle, when available;
+- `meminfo.txt` and `logcat-filtered.txt`: supporting diagnostics.
+
+The application tracks **first bgfx frame after** resume, surface resize or
+active scene-graph invalidation. The on-screen Recovery panel shows successful,
+stalled and late recoveries, the slowest observed recovery and any scene-graph
+invalidation without a current OpenGL context. It records each event to
+private app storage immediately, rather than keeping only in-memory counters.
+
+Tap **Recreate GPU resources (test)** in the scrolled Metrics panel to force
+bgfx shutdown/reinitialization on Qt's current render thread without restarting
+the application. Do this repeatedly in each stress preset. This validates GPU
+resource teardown/recreation **with a valid context**, not a genuine Android
+EGL_CONTEXT_LOST event. Compare `bgfx inits` and the recovery report.
+
+A recovery timeout is recorded after **five seconds while the application is
+active and its window exposed**. Screen-off/background intervals are not
+counted. The ADB script fails on a process restart, a timeout, or if no recovery
+event is recorded during the run. It cannot prove visual correctness, that an EGL context was truly
+lost, or that native GPU allocations were completely freed; those remain
+real-device checks.
 
 Record phone model, Android version, GPU/driver and app version. Retain
-screenshots and logs for any failure. Perform each case with the bgfx scene
-visible and panned/zoomed away from default:
+screenshots and logs for any failure. Perform each manual case with the bgfx
+scene visible and panned/zoomed away from default:
 
 | Test | Action | Passing behavior |
 | --- | --- | --- |
@@ -109,6 +147,10 @@ visible and panned/zoomed away from default:
 | Resource reinitialization | Trigger Qt scene-graph invalidation where possible | GPU resources released/recreated once per valid lifecycle |
 | Gesture interruption | Pinch/pan immediately before background/rotation | Controls never get stuck or jump uncontrollably |
 | Extended run | Pan/zoom for a sustained session | No accumulating GPU/CPU memory or thermal collapse |
+
+The automated test covers Home/resume. In addition, manually repeat rotation,
+screen lock/unlock, heavy-app switching and gesture interruption on the phone;
+do not assume ADB Home cycles cover those different paths.
 
 Run at least 10 repeated transitions for each ordinary lifecycle path,
 then longer mixed-use trials. A Qt persistence hint does not guarantee actual
@@ -141,7 +183,7 @@ similar geometry, visual output and input workloads.
 ## Diagnostics
 
 ```bash
-adb logcat -v time | grep --line-buffered -E 'AOWIS render lab|AOWIS Mobile benchmark'
+adb logcat -v time | grep --line-buffered -E 'AOWIS lifecycle:|AOWIS render lab|AOWIS Mobile benchmark'
 adb devices -l
 ```
 

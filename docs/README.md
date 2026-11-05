@@ -26,8 +26,9 @@ selectable large-network benchmark harness and on-device CSV capture are
 implemented but device performance has not yet been characterized.
 Real-world Linux and Android visual operation has been reported and shown.
 
-**Not yet accepted:** measured large-scene GPU/CPU/frame-pacing results; Android
-rotation/suspend/context-recreation durability. A single successful phone
+**Not yet accepted:** sustained large-scene GPU/CPU/frame-pacing results; Android
+rotation/suspend/context-recreation durability. A recovery watchdog and
+repeatable ADB Home/resume runner exist but are not yet device-validated. A single successful phone
 launch is not evidence of those cases.
 
 **Not implemented:** real map tiles, geographic coordinate navigation, GPS,

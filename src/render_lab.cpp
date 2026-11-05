@@ -139,6 +139,130 @@ QString RenderLab::lifecycle() const
         .arg(this->bgfxInitializations.load());
 }
 
+QString RenderLab::recoveryStatus() const
+{
+    const int64_t nowUs = steadyMicroseconds();
+    const QString progress = this->recoveryWatchdog.pending()
+        ? QStringLiteral("waiting %1 ms").arg(this->recoveryWatchdog.ageUs(nowUs) / 1000)
+        : QStringLiteral("idle");
+    return QStringLiteral("Recovery: %1 | OK %2 / stalled %3 / late %4\n"
+                          "Worst: %5 ms | release without GL: %6 | %7\n"
+                          "%8")
+        .arg(progress).arg(this->recoveries).arg(this->recoveryTimeouts)
+        .arg(this->lateRecoveries).arg(formatMs(this->worstRecoveryUs))
+        .arg(this->absentGlContextOnRelease.load(std::memory_order_relaxed))
+        .arg(this->lastRecoveryMessage)
+        .arg(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+             + QStringLiteral("/lifecycle/events.csv"));
+}
+
+void RenderLab::recordLifecycleEvent(const QString &event, int64_t durationUs)
+{
+    // GUI thread only; persist individual events so a subsequent process crash
+    // does not erase previous observations. All event strings are constants.
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/lifecycle");
+    if (!QDir().mkpath(directory))
+    {
+        qWarning("AOWIS lifecycle: cannot create event directory");
+        return;
+    }
+    QFile file(directory + QStringLiteral("/events.csv"));
+    const bool first = !file.exists() || file.size() == 0;
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
+    {
+        qWarning("AOWIS lifecycle: cannot write event log");
+        return;
+    }
+    QTextStream stream(&file);
+    if (first)
+        stream << "utc,event,duration_us,app_active,exposed,frames,sg_init,sg_release,"
+                  "bgfx_init,missing_gl_release,preset,tiles,vertex_bytes,rss_kb,width,height\n";
+    stream << QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs) << ','
+           << event << ',' << durationUs << ',' << (this->applicationActive.load() ? 1 : 0) << ','
+           << (this->window != nullptr && this->window->isExposed() ? 1 : 0) << ','
+           << this->renderedFrames.load() << ',' << this->sceneGraphStarts.load() << ','
+           << this->sceneGraphStops.load() << ',' << this->bgfxInitializations.load() << ','
+           << this->absentGlContextOnRelease.load() << ',' << this->workload.load() << ','
+           << this->cachedTiles.load() << ',' << this->gpuVertexBytes.load() << ','
+           << rssKilobytes() << ',' << (this->window != nullptr ? this->window->width() : 0)
+           << ',' << (this->window != nullptr ? this->window->height() : 0) << '\n';
+    stream.flush();
+    if (!file.flush())
+        qWarning("AOWIS lifecycle: event log flush failed");
+    qInfo().noquote() << "AOWIS lifecycle:" << event
+                      << "duration_us=" << durationUs
+                      << "bgfx_inits=" << this->bgfxInitializations.load()
+                      << "frames=" << this->renderedFrames.load();
+}
+
+void RenderLab::beginRecovery(const QString &reason, int64_t eventUs)
+{
+    if (!this->requestedBgfx)
+        return;
+    this->recoveryReason = reason;
+    this->recoveryWatchdog.arm(eventUs);
+    this->lastRecoveryMessage = QStringLiteral("Expecting a new bgfx frame after %1").arg(reason);
+    this->recordLifecycleEvent(QStringLiteral("watch_") + reason);
+}
+
+void RenderLab::inspectRecovery()
+{
+    if (!this->requestedBgfx)
+        return;
+    // sceneGraphInvalidated runs on Qt's render thread. Consume its atomic
+    // timestamp on the GUI thread, without touching GUI objects there.
+    const uint32_t releases = this->sceneGraphStops.load(std::memory_order_relaxed);
+    if (releases != this->observedInvalidations)
+    {
+        this->observedInvalidations = releases;
+        const int64_t timestampUs = this->lastSceneGraphInvalidationUs.load();
+        if (timestampUs != 0 && this->invalidationWasActive.load())
+            this->beginRecovery(QStringLiteral("scene_graph_recreate"), timestampUs);
+        this->recordLifecycleEvent(QStringLiteral("scene_graph_released"));
+    }
+    int64_t lastFrameUs = this->lastCompletedFrameUs.load(std::memory_order_acquire);
+    if (this->recoveryReason == QStringLiteral("explicit_gpu_recreate") &&
+        this->lastFrameGpuGeneration.load(std::memory_order_relaxed)
+            <= this->explicitRecreateStartingGeneration)
+        lastFrameUs = 0; // Old-generation frames do not count as recovery.
+    const AowisMobileLifecycle::Outcome outcome = this->recoveryWatchdog.poll(
+        steadyMicroseconds(), lastFrameUs,
+        this->applicationActive.load(), this->window != nullptr && this->window->isExposed());
+    if (outcome == AowisMobileLifecycle::Outcome::Recovered ||
+        outcome == AowisMobileLifecycle::Outcome::LateRecovered)
+    {
+        if (outcome == AowisMobileLifecycle::Outcome::LateRecovered)
+            ++this->lateRecoveries;
+        else
+            ++this->recoveries;
+        const int64_t duration = this->recoveryWatchdog.lastDurationUs();
+        this->worstRecoveryUs = std::max(this->worstRecoveryUs, duration);
+        this->lastRecoveryMessage = QStringLiteral("%1: frame recovered in %2 ms")
+            .arg(this->recoveryReason).arg(formatMs(duration));
+        this->recordLifecycleEvent(outcome == AowisMobileLifecycle::Outcome::LateRecovered
+                                   ? QStringLiteral("late_recovery") : QStringLiteral("recovered"), duration);
+    }
+    else if (outcome == AowisMobileLifecycle::Outcome::TimedOut)
+    {
+        ++this->recoveryTimeouts;
+        this->lastRecoveryMessage = QStringLiteral("STALLED after %1; no bgfx frame in 5 seconds")
+            .arg(this->recoveryReason);
+        this->recordLifecycleEvent(QStringLiteral("timeout"));
+    }
+}
+
+void RenderLab::noteSurfaceResize()
+{
+    if (!this->requestedBgfx || !this->applicationActive.load())
+        return;
+    // Width/height can change separately during rotation. Defer checking
+    // until geometry has settled, while retaining the first transition time.
+    if (this->recoveryReason == QStringLiteral("resize") && this->recoveryWatchdog.pending())
+        return;
+    this->beginRecovery(QStringLiteral("resize"), steadyMicroseconds());
+}
+
 void RenderLab::setApplicationActive(bool active)
 {
     const bool wasActive = this->applicationActive.exchange(active);
@@ -149,7 +273,13 @@ void RenderLab::setApplicationActive(bool active)
     else
         this->pauses.fetch_add(1);
     if (!active)
+    {
         this->finishBenchmark(true);
+        this->recoveryWatchdog.cancel();
+    }
+    else
+        this->beginRecovery(QStringLiteral("resume"), steadyMicroseconds());
+    this->recordLifecycleEvent(active ? QStringLiteral("app_active") : QStringLiteral("app_inactive"));
     qInfo("AOWIS Mobile: application %s", active ? "active" : "inactive");
     emit statusChanged();
 }
@@ -192,6 +322,21 @@ bool RenderLab::benchmarkActive() const
 QString RenderLab::benchmarkResult() const
 {
     return this->lastBenchmarkResult;
+}
+
+void RenderLab::requestGpuRecreation()
+{
+    // This is a deliberate RESOURCE lifecycle test while Qt's context is
+    // valid. It does not pretend to simulate an externally lost EGL context.
+    if (!this->requestedBgfx || !this->applicationActive.load() ||
+        this->phase.load() != Phase::Rendering ||
+        this->recreateGpuRequested.exchange(true))
+        return;
+    this->finishBenchmark(true);
+    this->explicitRecreateStartingGeneration = this->bgfxInitializations.load();
+    this->beginRecovery(QStringLiteral("explicit_gpu_recreate"), steadyMicroseconds());
+    if (this->window != nullptr)
+        this->window->update();
 }
 
 void RenderLab::setWorkload(int preset)
@@ -340,7 +485,11 @@ void RenderLab::attach(QQuickWindow *window)
                      window, [this]() { this->renderOnRenderThread(); }, Qt::DirectConnection);
     QObject::connect(window, &QQuickWindow::sceneGraphInvalidated,
                      window, [this]() {
+                         this->invalidationWasActive.store(this->applicationActive.load());
+                         this->lastSceneGraphInvalidationUs.store(steadyMicroseconds());
                          this->sceneGraphStops.fetch_add(1);
+                         if (QOpenGLContext::currentContext() == nullptr)
+                             this->absentGlContextOnRelease.fetch_add(1);
                          this->shutdownOnRenderThread();
                          qInfo("AOWIS render lab: Qt scenegraph invalidated");
                      }, Qt::DirectConnection);
@@ -421,6 +570,15 @@ void RenderLab::renderOnRenderThread()
     // A Qt-owned GL context and render pass are active at this signal.
     // Quarantine all bgfx calls inside the external command state fence.
     this->window->beginExternalCommands();
+    if (this->recreateGpuRequested.exchange(false))
+    {
+        // Only the Qt Quick render thread calls bgfx::shutdown/init, and only
+        // while Qt's EGL context is current. This tests reinitialization of
+        // the shader programs and entire retained tile cache on demand.
+        this->shutdownOnRenderThread();
+        this->phase.store(Phase::AwaitingSceneGraph);
+        qInfo("AOWIS lifecycle: explicit GPU resource recreation");
+    }
     if (!this->initialized)
     {
         this->initializeOnRenderThread();
@@ -484,6 +642,8 @@ void RenderLab::renderOnRenderThread()
     this->submitMicroseconds.store(elapsed, std::memory_order_relaxed);
     this->window->endExternalCommands();
     this->renderedFrames.fetch_add(1, std::memory_order_relaxed);
+    this->lastFrameGpuGeneration.store(this->bgfxInitializations.load(), std::memory_order_relaxed);
+    this->lastCompletedFrameUs.store(steadyMicroseconds(), std::memory_order_release);
     {
         QMutexLocker locker(&this->benchmarkMutex);
         if (this->capturing)
@@ -541,6 +701,7 @@ void RenderLab::shutdownOnRenderThread()
 
 void RenderLab::refreshStatus()
 {
+    this->inspectRecovery();
     if (this->captureInvalidated.exchange(false))
         this->finishBenchmark(true);
     emit statusChanged();

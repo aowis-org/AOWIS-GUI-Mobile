@@ -6,6 +6,7 @@
 #include <QString>
 
 #include "performance_samples.h"
+#include "lifecycle_watchdog.h"
 
 #include <vector>
 #include <QTimer>
@@ -22,6 +23,7 @@ class RenderLab final : public QObject
     Q_PROPERTY(quint64 frames READ frames NOTIFY statusChanged)
     Q_PROPERTY(QString timings READ timings NOTIFY statusChanged)
     Q_PROPERTY(QString lifecycle READ lifecycle NOTIFY statusChanged)
+    Q_PROPERTY(QString recoveryStatus READ recoveryStatus NOTIFY statusChanged)
     Q_PROPERTY(QString sceneStats READ sceneStats NOTIFY statusChanged)
     Q_PROPERTY(bool benchmarkActive READ benchmarkActive NOTIFY statusChanged)
     Q_PROPERTY(QString benchmarkResult READ benchmarkResult NOTIFY statusChanged)
@@ -36,14 +38,17 @@ public:
     quint64 frames() const;
     QString timings() const;
     QString lifecycle() const;
+    QString recoveryStatus() const;
     QString sceneStats() const;
     bool benchmarkActive() const;
     QString benchmarkResult() const;
     void setApplicationActive(bool active);
+    void noteSurfaceResize();
     void attach(QQuickWindow *window);
     Q_INVOKABLE void setView(double zoom, double panX, double panY);
     Q_INVOKABLE void setWorkload(int preset);
     Q_INVOKABLE void startBenchmark();
+    Q_INVOKABLE void requestGpuRecreation();
 
 signals:
     void statusChanged();
@@ -66,6 +71,9 @@ private:
     void shutdownOnRenderThread();
     void refreshStatus();
     void finishBenchmark(bool interrupted);
+    void beginRecovery(const QString &reason, int64_t eventUs);
+    void inspectRecovery();
+    void recordLifecycleEvent(const QString &name, int64_t durationUs = -1);
 
     const bool requestedBgfx;
     std::atomic<Phase> phase;
@@ -89,12 +97,27 @@ private:
     std::atomic<uint32_t> bgfxInitializations{0};
     std::atomic<uint32_t> resumes{0};
     std::atomic<uint32_t> pauses{0};
+    std::atomic<int64_t> lastCompletedFrameUs{0};
+    std::atomic<uint32_t> lastFrameGpuGeneration{0};
+    uint32_t explicitRecreateStartingGeneration = 0; // GUI thread only.
+    std::atomic<int64_t> lastSceneGraphInvalidationUs{0};
+    std::atomic<bool> invalidationWasActive{false};
+    std::atomic<uint32_t> absentGlContextOnRelease{0};
+    AowisMobileLifecycle::Watchdog recoveryWatchdog; // GUI thread only.
+    QString recoveryReason; // GUI thread only.
+    QString lastRecoveryMessage = QStringLiteral("Awaiting first active frame");
+    uint32_t observedInvalidations = 0; // GUI thread only.
+    uint32_t recoveries = 0; // GUI thread only.
+    uint32_t recoveryTimeouts = 0; // GUI thread only.
+    uint32_t lateRecoveries = 0; // GUI thread only.
+    int64_t worstRecoveryUs = 0; // GUI thread only.
     std::atomic<bool> applicationActive{false};
     int64_t lastFrameTimestampMicroseconds = 0; // Render thread only.
     mutable QMutex benchmarkMutex;
     bool capturing = false; // Protected by benchmarkMutex.
     uint64_t captureToken = 0; // GUI thread only.
     std::atomic<bool> captureInvalidated{false};
+    std::atomic<bool> recreateGpuRequested{false};
     uint64_t captureStartRssKb = 0; // Mutex-protected.
     int64_t captureStartUs = 0; // Protected by benchmarkMutex.
     std::vector<AowisMobileBench::FrameSample> captureSamples; // Mutex-protected.

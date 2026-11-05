@@ -133,3 +133,7 @@ submodule is pinned separately in Git.
 License: Apache-2.0.
 
 Android debug builds reuse a persistent signing key outside the checkout; see [Android build documentation](docs/android-renderer-test.md).
+
+Android lifecycle validation: `./tools/test_android_lifecycle.sh --cycles 12`
+checks background/resume and downloads private recovery logs; see
+[Android device tests](docs/android-renderer-test.md).

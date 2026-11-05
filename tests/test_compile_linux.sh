@@ -88,11 +88,11 @@ printf 'PASS: targeted optimized bgfx build and launch\n'
 AOWIS_BUILD_TYPE=Debug "$TMP_DIR/repo/compile_linux.sh" --build-only --tests
 assert_contains '-DCMAKE_BUILD_TYPE=Debug'
 assert_contains '-DBUILD_TESTING=ON'
-assert_contains '--target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests --parallel 3'
-assert_contains '^aowis-mobile-gpu-(scene|stress)$'
+assert_contains '--target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests aowis-mobile-lifecycle-tests --parallel 3'
+assert_contains '^aowis-mobile-(gpu-(scene|stress)|lifecycle)$'
 assert_contains 'ctest --test-dir '
 assert_not_contains 'run '
-printf 'PASS: optional geometry + stress tests and build type override\n'
+printf 'PASS: optional geometry, stress and lifecycle tests and build type override\n'
 
 : > "$AOWIS_LINUX_TEST_LOG"
 "$TMP_DIR/repo/compile_linux.sh" --baseline

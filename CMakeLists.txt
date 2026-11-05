@@ -28,6 +28,8 @@ qt_add_executable(aowis-mobile
     src/gpu_scene_geometry.h
     src/performance_samples.cpp
     src/performance_samples.h
+    src/lifecycle_watchdog.cpp
+    src/lifecycle_watchdog.h
 )
 
 set_source_files_properties(assets/icons/aowis.png PROPERTIES QT_RESOURCE_ALIAS icon.png)
@@ -169,4 +171,8 @@ if(BUILD_TESTING)
         src/performance_samples.cpp
     )
     add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
+    add_executable(aowis-mobile-lifecycle-tests
+        tests/lifecycle_watchdog_tests.cpp src/lifecycle_watchdog.cpp)
+    target_include_directories(aowis-mobile-lifecycle-tests PRIVATE src)
+    add_test(NAME aowis-mobile-lifecycle COMMAND aowis-mobile-lifecycle-tests)
 endif()

@@ -213,6 +213,14 @@ Window {
                     Label { text: lab.details; color: "white"; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
                     Label { text: "bgfx frames: " + lab.frames + "   |   " + root.lastTap; color: "#e3edee"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                     Label { text: lab.timings; color: "#b7dadf"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                    Button {
+                        text: "Recreate GPU resources (test)"
+                        Layout.fillWidth: true
+                        visible: root.showPerformance && lab.bgfxMode
+                        enabled: lab.bgfxMode && !lab.benchmarkActive
+                        onClicked: lab.requestGpuRecreation()
+                    }
+                    Label { text: lab.recoveryStatus; color: "#ffdb9e"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: root.showPerformance }
                     Label { text: lab.lifecycle; color: "#94bfc7"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; visible: root.showPerformance }
                     Label { text: lab.sceneStats; color: "#e7c88c"; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; visible: root.showPerformance }
                     Label { text: lab.benchmarkResult; color: "#ade9c8"; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }

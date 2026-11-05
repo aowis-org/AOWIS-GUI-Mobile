@@ -35,9 +35,14 @@ builds and runs.
 
 ## Immediate priority 2 — Android lifecycle and GPU recovery
 
-Test and improve background/foreground, rotation, screen lock, task switching,
-window resize, interrupted gestures and scene-graph invalidation. Add
-repeatable test instrumentation and deterministic resource ownership. Verify
+**Recovery instrumentation and an ADB Home/resume runner are implemented;
+real-device lifecycle acceptance remains pending.** Background/foreground,
+rotation, screen lock, task switching, window resize, interrupted gestures and
+scene-graph invalidation need on-device testing. The GUI records first-frame
+recovery/timeout and scene-graph ownership counters, persists lifecycle events,
+and `tools/test_android_lifecycle.sh` tests repeated Home/resume, detects
+process restarts and retrieves logs/memory samples. Pure C++ tests validate
+the watchdog deadline and suspended-window semantics. Verify with hardware
 that Qt-owned EGL contexts and bgfx buffers are released/rebuilt correctly.
 
 **Accept when:** repeated real-device transitions leave both bgfx graphics

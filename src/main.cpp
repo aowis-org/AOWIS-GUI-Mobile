@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
 #endif
     window->setIcon(QIcon(QStringLiteral(":/aowis/icon.png")));
     lab.attach(window);
+    QObject::connect(window, &QWindow::widthChanged, &lab, [&lab](int) { lab.noteSurfaceResize(); });
+    QObject::connect(window, &QWindow::heightChanged, &lab, [&lab](int) { lab.noteSurfaceResize(); });
 
     QTimer refresh;
     refresh.setInterval(16);

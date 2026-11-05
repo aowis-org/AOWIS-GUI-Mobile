@@ -10,7 +10,9 @@ required = [
     "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
     "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
     "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp",
-    "src/performance_samples.cpp", "src/performance_samples.h", "qml/Main.qml",
+    "src/performance_samples.cpp", "src/performance_samples.h",
+        "src/lifecycle_watchdog.cpp", "src/lifecycle_watchdog.h",
+        "tests/lifecycle_watchdog_tests.cpp", "qml/Main.qml",
     "tools/init_bgfx.sh", "docs/renderer-lab.md",
 ]
 for path in required:
@@ -64,6 +66,15 @@ checks = [
     ("scene graph rebuild hints on Android", "setPersistentSceneGraph(false)" in main and "setPersistentGraphics(false)" in main),
     ("background pauses frame timer", "refresh.stop()" in main and "applicationStateChanged" in main),
     ("render lifecycle diagnostics", "sceneGraphStarts" in source and "sceneGraphStops" in source and "bgfxInitializations" in source),
+    ("watchdog records first recovered frame", "lastCompletedFrameUs.store" in source and
+     "recoveryWatchdog.poll" in source and "recoveryTimeouts" in source),
+    ("explicit GPU resource reinitialization", "requestGpuRecreation()" in source and
+     "recreateGpuRequested.exchange(false)" in source and "requestGpuRecreation()" in qml),
+    ("real lifecycle ADB test", (root / "tools/test_android_lifecycle.sh").is_file() and
+     "KEYCODE_HOME" in (root / "tools/test_android_lifecycle.sh").read_text() and
+     "exec-out run-as" in (root / "tools/test_android_lifecycle.sh").read_text()),
+    ("recovery event log and on-screen status", "events.csv" in source and
+     "lab.recoveryStatus" in qml),
     ("Android manifest via Qt", 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"' in cmake),
     ("app binary identity", "qt_add_executable(aowis-mobile" in cmake and
      "qt_add_qml_module(aowis-mobile" in cmake),
@@ -88,6 +99,8 @@ checks = [
         "src/gpu_scene_geometry.cpp", "src/gpu_scene_geometry.h",
         "src/gpu_scene_renderer.cpp", "src/gpu_scene_renderer.h",
         "src/performance_samples.cpp", "src/performance_samples.h",
+        "src/lifecycle_watchdog.cpp", "src/lifecycle_watchdog.h",
+        "tests/lifecycle_watchdog_tests.cpp",
         "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp"
     ])),
 ]

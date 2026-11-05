@@ -36,6 +36,16 @@ coordinates, and none of the map services or hydraulic MODEL data are used.
 7. `bgfx::frame(BGFX_FRAME_FLUSH)` submits without a bgfx-owned swap; Qt owns
    final presentation. Scene-graph invalidation releases bgfx resources.
 
+The application also records first-frame recovery after app activation, active
+scene-graph invalidation and resize. A five-second watchdog checks that a new
+bgfx frame actually completes once the window is active and exposed. The log
+in `AppDataLocation/lifecycle/events.csv` survives process restarts; the GUI
+shows timeout/recovery counts and any invalidations without a current GL
+context. The development-only **Recreate GPU resources** button explicitly destroys and
+rebuilds the bgfx scene inside Qt's active GL context. It does not simulate
+actual context loss. This is **instrumentation awaiting physical-device acceptance**, not
+proof that arbitrary lost-EGL recovery is safe.
+
 **Caveat:** Both bgfx and Qt manage GPU state. Rendering inside Qt's active
 OpenGL pass is an experimental coupling; context recreation, driver variants,
 Qt upgrades and multiple independent map windows remain risks. The current
@@ -52,6 +62,9 @@ or Metal QML backend.
 | `src/gpu_scene_geometry.h/.cpp` | Baseline geometry, camera math, deterministic stress tile geometry and LOD selection |
 | `src/gpu_scene_renderer.h/.cpp` | bgfx shaders, bounded tile cache, visibility/LOD, submission and release |
 | `src/performance_samples.h/.cpp` | Dependency-free frame-metric percentile calculations |
+| `src/lifecycle_watchdog.h/.cpp` | Dependency-free first-frame recovery deadline logic |
+| `tools/test_android_lifecycle.sh` | ADB Home/resume loops and private lifecycle CSV retrieval |
+| `tests/lifecycle_watchdog_tests.cpp` | Recovery, timeout, hidden-window and late-recovery tests |
 | `tests/gpu_scene_stress_tests.cpp` | Deterministic geometry/visibility/cache-budget/percentile tests |
 | `tests/gpu_scene_geometry_tests.cpp` | Dependency-free CPU tests for geometry/camera |
 | `CMakeLists.txt` | Linux/Android Qt targets, bgfx dependency, shader resources and Qt icons |
