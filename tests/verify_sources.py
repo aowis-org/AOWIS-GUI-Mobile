@@ -15,7 +15,7 @@ required = [
     "tests/language_settings_tests.cpp",
     "tests/appearance_settings_tests.cpp",
     "src/unit_profile_settings.cpp", "src/unit_profile_settings.h",
-    "src/unit_registry/aowis/model/units/unit_profile.h",
+    "tools/init_model.sh",
     "qml/UnitSettingsPage.qml", "tests/unit_profile_settings_tests.cpp",
     "tests/unit_registry_contract_tests.cpp", "tests/test_unit_settings.py",
     "tests/map_server_settings_tests.cpp",
@@ -123,7 +123,7 @@ checks = [
      (root / "src/appearance_settings.cpp").read_text() and
      'colorSchemeChanged' in (root / "src/appearance_settings.cpp").read_text() and
      'aowis-mobile-appearance-settings-tests' in cmake),
-    ("MODEL-backed display unit settings", "unitProfileSettings" in main and
+    ("MODEL-backed display unit settings", "AOWIS::Model" in cmake and "unitProfileSettings" in main and
      "aowis-mobile-unit-profile-settings-tests" in cmake and
      "unitProfileSettings.listProfiles" in qml and "UnitSettingsPage {" in qml),
     ("settings regression test", 'aowis-mobile-map-server-settings-tests' in cmake and
@@ -151,7 +151,7 @@ checks = [
     "tests/language_settings_tests.cpp",
     "tests/appearance_settings_tests.cpp",
     "src/unit_profile_settings.cpp", "src/unit_profile_settings.h",
-    "src/unit_registry/aowis/model/units/unit_profile.h",
+    "tools/init_model.sh",
     "qml/UnitSettingsPage.qml", "tests/unit_profile_settings_tests.cpp",
     "tests/unit_registry_contract_tests.cpp", "tests/test_unit_settings.py",
     "tests/map_server_settings_tests.cpp",

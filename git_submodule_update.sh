@@ -10,15 +10,16 @@ cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_update.sh [--render | --all | --help]
+Usage: ./git_submodule_update.sh [--render | --model | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
-  --render     Same as the default; leave bgfx.cmake untouched.
-  --all        Advance Render and initialize bgfx.cmake at its recorded pin.
+  --render     Same as the default; leave bgfx.cmake and MODEL untouched.
+  --model      Advance only AOWIS-SERVER-MODEL to its tracked remote branch.
+  --all        Advance Render and MODEL, then initialize bgfx.cmake at its pin.
                Never advance bgfx.cmake or its nested third-party submodules.
   --help       Show this help.
 
-Review and commit the changed external/AOWIS-GUI-Render gitlink explicitly.
+Review and commit any changed Render/MODEL gitlinks explicitly.
 To change the third-party bgfx.cmake release, use tools/init_bgfx.sh and
 validate Linux/Android before committing its gitlink.
 HELP
@@ -33,6 +34,8 @@ die() {
     die "Expected a Git working-tree root at $project_dir"
 
 include_bgfx=false
+update_model=false
+update_render=true
 case "${1:-}" in
     '')
         [[ $# -eq 0 ]] || { usage >&2; exit 2; }
@@ -40,9 +43,15 @@ case "${1:-}" in
     --render)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         ;;
+    --model)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        update_render=false
+        update_model=true
+        ;;
     --all)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         include_bgfx=true
+        update_model=true
         ;;
     --help|-h)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -56,7 +65,7 @@ case "${1:-}" in
 esac
 
 render_path='external/AOWIS-GUI-Render'
-if [[ "$(git ls-files --stage -- "$render_path")" != '160000 '* ]]; then
+if "$update_render" && [[ "$(git ls-files --stage -- "$render_path")" != '160000 '* ]]; then
     die "Missing Git submodule gitlink for $render_path. First run 'git submodule add https://github.com/aowis-org/AOWIS-GUI-Render.git $render_path' and commit the gitlink and .gitmodules."
 fi
 
@@ -67,12 +76,18 @@ if "$include_bgfx"; then
 fi
 
 git submodule sync --recursive
-# Only the AOWIS-owned direct dependency follows a remote branch. No
-# --recursive here: recursive --remote would advance third-party repositories.
-git submodule update --init --remote --checkout -- "$render_path"
-# If Render itself gains nested dependencies, initialize their pinned gitlinks
-# without following upstream tips.
-git -C "$render_path" submodule update --init --recursive --checkout
-
-printf 'Updated %s to %s. Review and commit the changed gitlink.\n' \
-    "$render_path" "$(git -C "$render_path" rev-parse --short HEAD)"
+# Advance only selected first-party submodules; leave third-party commits pinned.
+if "$update_render"; then
+    git submodule update --init --remote --checkout -- "$render_path"
+    git -C "$render_path" submodule update --init --recursive --checkout
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$render_path" "$(git -C "$render_path" rev-parse --short HEAD)"
+fi
+if "$update_model"; then
+    model_path='external/AOWIS-SERVER-MODEL'
+    [[ "$(git ls-files --stage -- "$model_path")" == '160000 '* ]] ||
+        die 'MODEL gitlink missing. Run ./tools/init_model.sh once.'
+    git submodule update --init --remote --checkout -- "$model_path"
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$model_path" "$(git -C "$model_path" rev-parse --short HEAD)"
+fi

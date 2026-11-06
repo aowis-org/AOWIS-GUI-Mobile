@@ -47,6 +47,18 @@ assert_not_contains() {
     fi
 }
 
+# All builds use the MODEL submodule (even the QML-only baseline).
+: > "$AOWIS_LINUX_TEST_LOG"
+if "$TMP_DIR/repo/compile_linux.sh" --baseline --build-only > "$TMP_DIR/error.log" 2>&1; then
+    echo 'Expected failure for missing MODEL submodule' >&2; exit 1
+fi
+grep -F 'tools/init_model.sh' "$TMP_DIR/error.log" >/dev/null
+[[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
+mkdir -p "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units"
+touch "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
+      "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
+printf 'PASS: MODEL is required for baseline and bgfx builds\n'
+
 # Baseline must work without any bgfx sources.
 : > "$AOWIS_LINUX_TEST_LOG"
 "$TMP_DIR/repo/compile_linux.sh" --baseline --build-only

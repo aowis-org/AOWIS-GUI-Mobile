@@ -22,6 +22,7 @@ Environment:
 Requires CMake, Ninja, and host Qt 6 (Core, Gui, Qml, Quick, QuickControls2, Positioning, Sensors).
 On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative qt6-positioning qt6-sensors
 For bgfx and the shared renderer: ./git_submodule_init.sh.
+For MODEL registration (once): ./tools/init_model.sh.
 HELP
 }
 
@@ -52,6 +53,12 @@ JOBS="${AOWIS_LINUX_JOBS:-$(nproc)}"
     printf 'AOWIS Mobile Linux: AOWIS_LINUX_JOBS must be a positive integer.\n' >&2
     exit 1
 }
+
+if [[ ! -f "$PROJECT_DIR/external/AOWIS-SERVER-MODEL/CMakeLists.txt" ||
+      ! -f "$PROJECT_DIR/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h" ]]; then
+    printf 'AOWIS Mobile Linux: MODEL submodule missing. Run ./tools/init_model.sh once.\n' >&2
+    exit 1
+fi
 
 BUILD_DIR="$PROJECT_DIR/build-linux-bgfx"
 BGFX=ON

@@ -3,19 +3,21 @@ set -euo pipefail
 
 # Check out the exact commits recorded by this Mobile repository (including
 # bgfx.cmake's nested bgfx/bx/bimg gitlinks). Never follow remote branches.
-# Usage: ./git_submodule_init.sh [--render | --bgfx | --help]
+# Usage: ./git_submodule_init.sh [--render | --bgfx | --model | --help]
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_init.sh [--render | --bgfx | --help]
+Usage: ./git_submodule_init.sh [--render | --bgfx | --model | --help]
 
-  (no option)  Initialize Render and bgfx.cmake, including nested submodules,
-               at exactly the commits recorded in the Git superprojects.
+  (no option)  Initialize MODEL, Render and bgfx.cmake, including nested
+               submodules, at exactly the recorded Git commits.
   --render     Initialize only AOWIS-GUI-Render and its pinned dependencies.
   --bgfx       Initialize only bgfx.cmake and its pinned bgfx/bx/bimg.
+  --model      Initialize only the pinned AOWIS-SERVER-MODEL gitlink.
+               For first registration, run ./tools/init_model.sh.
   --help       Show this help.
 
 Run this script after cloning, or to restore submodules to recorded revisions.
@@ -33,12 +35,13 @@ die() {
 
 render_path='external/AOWIS-GUI-Render'
 bgfx_path='external/bgfx.cmake'
+model_path='external/AOWIS-SERVER-MODEL'
 paths=()
 
 case "${1:-}" in
     '')
         [[ $# -eq 0 ]] || { usage >&2; exit 2; }
-        paths=("$render_path" "$bgfx_path")
+        paths=("$model_path" "$render_path" "$bgfx_path")
         ;;
     --render)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -47,6 +50,10 @@ case "${1:-}" in
     --bgfx)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         paths=("$bgfx_path")
+        ;;
+    --model)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        paths=("$model_path")
         ;;
     --help|-h)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -64,7 +71,7 @@ esac
 # the missing submodule. Register it using 'git submodule add' in the real repo.
 for path in "${paths[@]}"; do
     if [[ "$(git ls-files --stage -- "$path")" != '160000 '* ]]; then
-        die "Missing Git submodule gitlink for $path. Register it with 'git submodule add', then commit the gitlink and .gitmodules."
+        die "Missing Git submodule gitlink for $path. For MODEL run ./tools/init_model.sh once; otherwise register it with 'git submodule add'."
     fi
 done
 

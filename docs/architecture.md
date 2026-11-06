@@ -20,10 +20,9 @@ validates the fields returned by providers. It never persists or transfers
 coordinates. The QML Settings panel and compact status pill consume its
 reactive properties.
 
-`UnitProfileSettings` is another renderer-independent Qt adapter. It uses a
-source-identical, header-only copy of AOWIS MODEL's canonical unit registry,
-built-in profiles and inheritance rules (see `src/unit_registry/README.md`).
-The full MODEL library is not yet linked in Mobile. The active unit profile
+`UnitProfileSettings` is another renderer-independent Qt adapter. It uses the
+canonical registry, built-in profiles and inheritance rules directly from the
+pinned `external/AOWIS-SERVER-MODEL` submodule (`AOWIS::Model`). The active unit profile
 and custom profile overrides are per-device display settings. Profile changes
 notify Qt Quick controls immediately; the GPS accuracy/altitude/speed
 readouts use those profiles. See [display units](units.md).
@@ -38,13 +37,14 @@ with host ADB. **Android is a working build target**; iOS is not.
 | --- | --- | --- |
 | `AOWIS-GUI` | Desktop QWidget application, current production-oriented map/editor stack | Separate existing repository; no renderer extraction yet |
 | `AOWIS-GUI-Mobile` | Touch UI, platform adapters, survey workflow, mobile deployment | This repository |
-| `AOWIS-GUI-Render` | Shared rendering and map-scene engine | **Planned**, not created/integrated as part of this source snapshot |
-| `AOWIS-SERVER-MODEL` | Canonical domain structures, typed hydraulic entities, future generic geographic types | Existing elsewhere, not linked into Mobile |
+| `AOWIS-GUI-Render` | Shared rendering and map-scene engine | Pinned submodule; selected rendering components already consumed by Mobile |
+| `AOWIS-SERVER-MODEL` | Canonical domain structures and unit registry | Pinned Git submodule; `AOWIS::Model` linked into Mobile |
 | `AOWIS-SERVER-MAP` | Map/terrain service and caching | Existing elsewhere, not linked into Mobile |
 | `AOWIS-SERVER-DVMDB` | Native project/branch/revision storage and working-copy semantics | Existing elsewhere, not linked into Mobile |
 
-Renaming repositories is independent of migrating code. The current Mobile scene still does not consume MODEL, MAP or DVMDB network
-data; the display-unit adapter does use MODEL's unit-profile metadata.
+The Mobile scene still does not consume MAP/DVMDB network data, but it links
+MODEL for its canonical domain types and unit profiles. Its current scene remains
+synthetic geometry rather than a project network.
 
 ## Planned shared renderer boundary
 

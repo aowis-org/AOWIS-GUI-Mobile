@@ -7,12 +7,15 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/bgfx.cmake/bgfx/include/bgfx" \
-    "$work/repo/external/AOWIS-GUI-Render" "$work/bin" "$work/cache"
+    "$work/repo/external/AOWIS-GUI-Render" \
+    "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units" "$work/bin" "$work/cache"
 cp "$root/compile_android.sh" "$root/prepare_android_docker.sh" "$work/repo/"
 cp "$root/tools/qt-android/"*.sh "$work/repo/tools/qt-android/"
 cp "$root/tools/launch_android_app.sh" "$work/repo/tools/"
 touch "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" \
-    "$work/repo/external/AOWIS-GUI-Render/CMakeLists.txt"
+    "$work/repo/external/AOWIS-GUI-Render/CMakeLists.txt" \
+    "$work/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
+    "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
 cat > "$work/bin/docker" <<'MOCK_DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -107,6 +110,7 @@ assert_log 'docker build '
 assert_log 'docker run '
 assert_log ':/aowis-render:ro'
 assert_log 'AOWIS_ANDROID_RENDER_SOURCE_DIR=/aowis-render'
+assert_log '-e LANG=C.UTF-8 -e LC_ALL=C.UTF-8'
 assert_not_log 'adb -s '
 # The signing key directory lives OUTSIDE the source tree and is mounted for
 # every Docker invocation, regardless of local checkout names or build mode.
@@ -216,6 +220,14 @@ unset FAKE_PAIR_OK FAKE_MDNS FAKE_ADB_DEVICES
 rm -f "$MOCK_ROOT/wifi-connected"
 export FAKE_DEVICE_COUNT=1
 
+# MODEL must be initialized before running Docker in every build mode.
+model_header="$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
+rm -f "$model_header"
+: > "$MOCK_LOG"
+if ./compile_android.sh --build-only --baseline > "$work/output.log" 2>&1; then fail 'missing MODEL accepted'; fi
+assert_not_log 'docker run '
+touch "$model_header"
+
 # Never regenerate a previously provisioned but missing keystore. This check
 # must fail on the host BEFORE starting a disposable Docker container.
 signing_dir="$work/data/aowis-gui-mobile/android-debug-signing"
@@ -259,6 +271,8 @@ grep -Fq 'target_link_libraries(aowis-mobile PRIVATE android)' "$root/CMakeLists
 grep -Fq -- '--target aowis-mobile_make_apk' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'Android APK build still uses old test target'
 grep -Fq 'QT_ANDROID_APP_NAME "AOWIS"' "$root/CMakeLists.txt" || fail 'Android launcher label changed'
 grep -Fq 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"' "$root/CMakeLists.txt" || fail 'Android package identity changed'
+grep -Fq 'qt_policy(SET QTP0002 NEW)' "$root/CMakeLists.txt" || fail 'Qt Android QTP0002 policy warning not addressed'
+grep -Fq 'export LC_ALL=C.UTF-8' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'Qt host tools do not run in UTF-8 locale'
 
 grep -Fq 'keytool -genkeypair -noprompt' "$root/tools/qt-android/prepare_debug_signing.sh" || fail 'persistent debug certificate creation missing'
 grep -Fq 'APK signature DOES NOT match' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'APK certificate comparison missing'

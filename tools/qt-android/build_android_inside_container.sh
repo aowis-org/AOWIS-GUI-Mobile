@@ -2,6 +2,10 @@
 set -euo pipefail
 
 # Executed only by compile_android.sh inside the pinned toolchain image.
+# Qt's host binaries are invoked many times by Ninja. Always start them
+# with a UTF-8 locale, even in a minimal container whose default is C.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 project_dir=/project
 qt_version="${AOWIS_QT_ANDROID_VERSION:-6.12.0}"
 ndk_version="${AOWIS_ANDROID_NDK_VERSION:-27.2.12479018}"
@@ -18,6 +22,11 @@ android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid parallel job count.' >&2; exit 2; }
 [[ -x "$qt_cmake" && -d "$qt_host" && -d "$ndk" ]] || {
     echo 'Container Android toolchain is incomplete; rebuild using ./prepare_android_docker.sh.' >&2
+    exit 1
+}
+[[ -f "$project_dir/external/AOWIS-SERVER-MODEL/CMakeLists.txt" &&
+   -f "$project_dir/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h" ]] || {
+    echo 'AOWIS-SERVER-MODEL submodule missing in Docker /project. Run ./tools/init_model.sh on the host.' >&2
     exit 1
 }
 render_cmake_args=()

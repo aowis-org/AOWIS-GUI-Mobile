@@ -204,6 +204,9 @@ if "$list_devices"; then
 fi
 
 command -v docker >/dev/null 2>&1 || die 'Docker is missing (Arch: sudo pacman -S docker).'
+[[ -f "$project_dir/external/AOWIS-SERVER-MODEL/CMakeLists.txt" &&
+   -f "$project_dir/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h" ]] ||
+    die 'AOWIS-SERVER-MODEL missing. Run ./tools/init_model.sh once, then retry.'
 if [[ "$bgfx" == ON && ! -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]]; then
     die 'bgfx is not initialized. Run ./git_submodule_init.sh first.'
 fi
@@ -251,6 +254,8 @@ docker run --rm --network="${AOWIS_DOCKER_RUN_NETWORK:-host}" \
     -v "$cache_root:/gradle-cache" \
     -v "$signing_dir:/tmp/.android" \
     -e HOME=/tmp \
+    -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+\
     -e ANDROID_USER_HOME=/tmp/.android \
     -e GRADLE_USER_HOME=/gradle-cache \
     -e "AOWIS_QT_ANDROID_VERSION=$AOWIS_QT_ANDROID_VERSION" \

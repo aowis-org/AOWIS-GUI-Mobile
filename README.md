@@ -54,8 +54,15 @@ production map/terrain renderer has not yet been moved out of Desktop GUI.
 
 ## Build
 
-Initialize **both** Git submodules, including bgfx.cmake's pinned nested
-bgfx/bx/bimg revisions, after cloning:
+For existing checkouts, register the MODEL dependency **once** (the command
+creates both `.gitmodules` metadata and the Git submodule gitlink):
+
+```bash
+./tools/init_model.sh
+```
+
+For new clones, initialize all pinned submodules, including bgfx.cmake's
+nested bgfx/bx/bimg revisions:
 
 ```bash
 ./git_submodule_init.sh
@@ -73,12 +80,13 @@ git add external/AOWIS-GUI-Render
 The updater deliberately does **not** advance third-party bgfx.cmake or its
 nested vendor repositories. `./git_submodule_update.sh --all` additionally
 initializes the third-party dependencies at their recorded pins, without
-advancing them. `./git_submodule_init.sh --render` and `--bgfx` permit selective
-initialization. Changing the independently pinned bgfx.cmake release remains
+advancing them. `./git_submodule_init.sh --render`, `--bgfx` and `--model` permit
+selective initialization. `./git_submodule_update.sh --model` deliberately
+advances the MODEL gitlink, while the default updater changes only Render. Changing the independently pinned bgfx.cmake release remains
 an explicit operation through `./tools/init_bgfx.sh`.
 
 A `.gitmodules` entry is not enough: the repository must also track a gitlink
-(mode `160000`) for each submodule. Both new scripts reject missing gitlinks
+(mode `160000`) for each submodule. The initialization/update scripts reject missing gitlinks
 with a diagnostic. New clones should use `git clone --recurse-submodules`,
 or run `./git_submodule_init.sh` afterwards.
 
@@ -186,7 +194,7 @@ Patch ZIPs may include `AOWIS-GUI-Mobile/.aowis-patch-delete.txt` containing
 repository-relative file removals. Applying a patch refreshes file timestamps
 and regenerates `mobile.zip`. The source snapshot excludes build outputs,
 secrets, Git metadata and nested submodule contents. The `external/bgfx.cmake` and `external/AOWIS-GUI-Render`
-submodules are pinned separately by Git gitlinks.
+submodules and the MODEL dependency are pinned separately by Git gitlinks.
 
 License: Apache-2.0.
 
@@ -197,6 +205,11 @@ checks background/resume and downloads private recovery logs; see
 [Android device tests](docs/android-renderer-test.md).
 
 ## Shared production map geometry
+
+The pinned `external/AOWIS-SERVER-MODEL` submodule exports `AOWIS::Model`,
+which supplies the canonical quantity and unit-profile definitions used in
+Settings. Register MODEL once with `./tools/init_model.sh` after applying the
+MODEL integration patch; future clones automatically restore its gitlink.
 
 The pinned `external/AOWIS-GUI-Render` submodule exports
 `AOWIS::RenderGeometry` (continuous Mercator camera, globe icon visibility,

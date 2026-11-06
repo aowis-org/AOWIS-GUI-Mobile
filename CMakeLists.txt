@@ -9,6 +9,11 @@ set(CMAKE_AUTOMOC ON)
 # AOWIS mobile application, currently retaining an instrumented renderer scene.
 # Keep the proven Qt Quick/bgfx integration while product features are added.
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Positioning Sensors)
+# Opt in to Qt's modern Android deployment-path behavior (Qt 6.12).
+# Avoid a QTP0002 developer warning at target finalization.
+if(QT_KNOWN_POLICY_QTP0002)
+    qt_policy(SET QTP0002 NEW)
+endif()
 qt_standard_project_setup(REQUIRES 6.5)
 
 option(AOWIS_MOBILE_WITH_BGFX "Build the experimental bgfx/Qt Quick direct-underlay path" ON)
@@ -61,10 +66,20 @@ qt_add_executable(aowis-mobile
     src/lifecycle_watchdog.h
 )
 
-# Source-identical MODEL unit headers from the accompanying Desktop MODEL
-# snapshot. Swap to the pinned MODEL dependency when it enters Mobile's
-# Android/Linux toolchains (see src/unit_registry/README.md).
-target_include_directories(aowis-mobile PRIVATE src/unit_registry)
+# Use the canonical AOWIS domain model, including its unit profiles and
+# canonical UCUM registry. Never duplicate MODEL headers in Mobile.
+# Both native and Docker builds consume this pinned Git submodule.
+set(AOWIS_MODEL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-SERVER-MODEL")
+if(NOT EXISTS "${AOWIS_MODEL_SOURCE_DIR}/CMakeLists.txt" OR
+   NOT EXISTS "${AOWIS_MODEL_SOURCE_DIR}/include/aowis/model/units/unit_profile.h")
+    message(FATAL_ERROR
+        "AOWIS-SERVER-MODEL submodule is missing. "
+        "Run ./tools/init_model.sh once, or ./git_submodule_init.sh --model "
+        "if the gitlink is already registered.")
+endif()
+add_subdirectory("${AOWIS_MODEL_SOURCE_DIR}"
+    "${CMAKE_BINARY_DIR}/aowis-model" EXCLUDE_FROM_ALL)
+target_link_libraries(aowis-mobile PRIVATE AOWIS::Model)
 
 # Package the editable UTF-8 translation catalog directly. This does not
 # require Qt LinguistTools in the cross-compilation toolchain.
@@ -288,12 +303,12 @@ if(BUILD_TESTING)
     add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
     add_executable(aowis-mobile-unit-registry-contract-tests
         tests/unit_registry_contract_tests.cpp)
-    target_include_directories(aowis-mobile-unit-registry-contract-tests PRIVATE src/unit_registry)
+    target_link_libraries(aowis-mobile-unit-registry-contract-tests PRIVATE AOWIS::Model)
     add_test(NAME aowis-mobile-unit-registry-contract COMMAND aowis-mobile-unit-registry-contract-tests)
     add_executable(aowis-mobile-unit-profile-settings-tests
         tests/unit_profile_settings_tests.cpp src/unit_profile_settings.cpp src/unit_profile_settings.h)
-    target_include_directories(aowis-mobile-unit-profile-settings-tests PRIVATE src src/unit_registry)
-    target_link_libraries(aowis-mobile-unit-profile-settings-tests PRIVATE Qt6::Core)
+    target_include_directories(aowis-mobile-unit-profile-settings-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-unit-profile-settings-tests PRIVATE Qt6::Core AOWIS::Model)
     add_test(NAME aowis-mobile-unit-profile-settings COMMAND aowis-mobile-unit-profile-settings-tests)
     add_executable(aowis-mobile-language-settings-tests
         tests/language_settings_tests.cpp src/language_settings.cpp src/language_settings.h)

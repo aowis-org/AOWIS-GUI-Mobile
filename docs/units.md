@@ -31,14 +31,22 @@ inspectors and simulation tables have not yet been integrated into Mobile.
 
 ## MODEL dependency boundary
 
-Until a pinned full MODEL checkout is available to both the Linux and Android
-Mobile builds, `src/unit_registry/aowis/model/units/` contains the **three
-unmodified, header-only unit definitions** from `AOWIS-SERVER-MODEL` bundled
-with the Desktop GUI snapshot (Apache-2.0). Their definitions are identical
-to those consumed by the desktop `UnitProfileManager`, including preset
-inheritance, option lists and canonical identifiers. They must not be
-edited independently: replace this snapshot with a direct MODEL dependency
-once Mobile's model integration is available.
+The `external/AOWIS-SERVER-MODEL` Git submodule is the **single authoritative
+source** for canonical quantities, allowed units, predefined profiles and
+inheritance rules. Mobile links `AOWIS::Model` in both Linux and Android builds;
+there are no copied MODEL unit headers. Mobile owns only the QSettings / QML
+presentation adapter and its per-device customizations. The C++ unit contract
+test uses the real MODEL target, not a duplicated fixture.
+
+To register MODEL once in an existing checkout:
+
+```bash
+./tools/init_model.sh
+```
+
+Future clones use `./git_submodule_init.sh` (or `--model`) to restore the pinned
+commit. To intentionally advance MODEL later, use
+`./git_submodule_update.sh --model` and commit the updated gitlink after testing.
 
 The local settings location is the Qt per-user AOWIS-GUI-Mobile settings
 store. Custom profiles and the selected profile ID live under `units/`.
