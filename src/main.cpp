@@ -96,11 +96,24 @@ int main(int argc, char *argv[])
     QTimer refresh;
     refresh.setInterval(16);
     QObject::connect(&refresh, &QTimer::timeout, window, [window]() { window->update(); });
+    // The background lab refresh timer is deliberately suspended on Compass.
+    // Otherwise its independent 16ms window->update() calls fight Qt Quick's
+    // synchronized animation cadence and cause irregular dial frame pacing.
+    QObject::connect(&compassService, &CompassService::pageVisibleChanged,
+                     &refresh, [&refresh, &application, window](bool visible) {
+        if (visible)
+            refresh.stop();
+        else if (application.applicationState() == Qt::ApplicationActive)
+        {
+            refresh.start();
+            window->update();
+        }
+    });
     QObject::connect(&application, &QGuiApplication::applicationStateChanged,
-                     &lab, [&lab, &refresh, window](Qt::ApplicationState state) {
+                     &lab, [&lab, &refresh, &compassService, window](Qt::ApplicationState state) {
         const bool active = state == Qt::ApplicationActive;
         lab.setApplicationActive(active);
-        if (active)
+        if (active && !compassService.pageVisible())
         {
             refresh.start();
             window->update();
@@ -121,7 +134,7 @@ int main(int argc, char *argv[])
     locationService.setApplicationActive(active);
     compassService.setApplicationActive(active);
     lab.setApplicationActive(active);
-    if (active)
+    if (active && !compassService.pageVisible())
         refresh.start();
     return application.exec();
 }

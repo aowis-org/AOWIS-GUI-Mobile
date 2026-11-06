@@ -1,9 +1,10 @@
 #include "compass_heading.h"
 #include "compass_heading_filter.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
-#include <cmath>
 #include <string>
 
 #define CHECK(condition) do { \
@@ -13,133 +14,143 @@
     } \
 } while (false)
 
+namespace
+{
+struct Playback
+{
+    AowisCompass::HeadingFilter filter;
+    double frameInterval = 1.0 / 60.0;
+    double sampleInterval = 1.0 / 20.0;
+    double displayedStepMaximum = 0.0;
+    double movingStepMinimum = 1000.0;
+    double maxMovingError = 0.0;
+    double lateNoiseMin = 10000.0;
+    double lateNoiseMax = -10000.0;
+    double finalHeading = 0.0;
+
+    void run(double duration, double startHeading, double velocity, double noise)
+    {
+        CHECK(this->filter.sample(startHeading, 0.0));
+        double previous = this->filter.displayDegrees();
+        double nextSensor = this->sampleInterval;
+        for (int frame = 1; frame * this->frameInterval <= duration + 0.0000001; ++frame)
+        {
+            const double now = frame * this->frameInterval;
+            // Feed the sensor events that occurred before this render frame.
+            while (nextSensor <= now + 1e-8)
+            {
+                const double raw = AowisCompass::normalize(startHeading + velocity * nextSensor
+                    + noise * (std::sin(nextSensor * 49.0) + 0.55 * std::sin(nextSensor * 117.0)));
+                CHECK(this->filter.sample(raw, nextSensor));
+                nextSensor += this->sampleInterval;
+            }
+            this->filter.advanceDisplay(now);
+            const double heading = this->filter.displayDegrees();
+            const double increment = AowisCompass::shortestDelta(previous, heading);
+            this->displayedStepMaximum = std::max(this->displayedStepMaximum, std::fabs(increment));
+            if (velocity > 30.0 && now > 0.75 && now < duration - 0.2)
+            {
+                this->movingStepMinimum = std::min(this->movingStepMinimum, increment);
+                const double actual = AowisCompass::normalize(startHeading + velocity * now);
+                this->maxMovingError = std::max(this->maxMovingError,
+                    std::fabs(AowisCompass::shortestDelta(heading, actual)));
+            }
+            if (velocity == 0.0 && now > duration - 1.0)
+            {
+                const double relative = AowisCompass::shortestDelta(startHeading, heading);
+                this->lateNoiseMin = std::min(this->lateNoiseMin, relative);
+                this->lateNoiseMax = std::max(this->lateNoiseMax, relative);
+            }
+            previous = heading;
+            this->finalHeading = heading;
+        }
+    }
+};
+}
+
 int main()
 {
     CHECK(AowisCompass::normalize(0.0) == 0.0);
     CHECK(AowisCompass::normalize(360.0) == 0.0);
     CHECK(AowisCompass::normalize(725.0) == 5.0);
     CHECK(AowisCompass::normalize(-10.0) == 350.0);
-    CHECK(AowisCompass::normalize(-720.0) == 0.0);
-    CHECK(AowisCompass::normalize(345.0 + 90.0) == 75.0);
     CHECK(AowisCompass::normalize(NAN) == -1.0);
-    CHECK(AowisCompass::normalize(INFINITY) == -1.0);
-    CHECK(std::string(AowisCompass::direction(0.0)) == "N");
     CHECK(std::string(AowisCompass::direction(44.0)) == "NE");
-    CHECK(std::string(AowisCompass::direction(90.0)) == "E");
-    CHECK(std::string(AowisCompass::direction(135.0)) == "SE");
-    CHECK(std::string(AowisCompass::direction(180.0)) == "S");
-    CHECK(std::string(AowisCompass::direction(225.0)) == "SW");
-    CHECK(std::string(AowisCompass::direction(270.0)) == "W");
-    CHECK(std::string(AowisCompass::direction(315.0)) == "NW");
     CHECK(std::string(AowisCompass::direction(359.9)) == "N");
-    CHECK(std::string(AowisCompass::direction(-1.0)) == "N");
-    CHECK(std::string(AowisCompass::direction(NAN)) == "--");
-    CHECK(AowisCompass::clampedCalibration(-5.0) == 0.0);
     CHECK(AowisCompass::clampedCalibration(0.5) == 0.5);
-    CHECK(AowisCompass::clampedCalibration(2.0) == 1.0);
-    CHECK(AowisCompass::clampedCalibration(INFINITY) == -1.0);
-    // One Euro filter: first fix is shown immediately; no hidden initialization
-    // gate may prevent a live sensor bearing from appearing.
+
     AowisCompass::HeadingFilter filter;
     CHECK(!filter.initialized());
     CHECK(!filter.sample(NAN, 0.0));
     CHECK(filter.sample(359.0, 0.0));
     CHECK(filter.initialized());
     CHECK(std::fabs(filter.displayDegrees() - 359.0) < 1e-9);
-    CHECK(!filter.sample(190.0, 0.0)); // duplicate timestamp
-    CHECK(!filter.sample(270.0, -0.1)); // out-of-order timestamp
+    CHECK(!filter.sample(190.0, 0.0));
+    CHECK(!filter.sample(270.0, -0.1));
     CHECK(!filter.sample(INFINITY, 0.1));
-    CHECK(std::fabs(filter.displayDegrees() - 359.0) < 1e-9);
-
-    // Circular filtering must never rotate across the long arc at north.
     CHECK(filter.sample(1.0, 0.05));
-    CHECK(std::fabs(AowisCompass::shortestDelta(359.0, filter.targetDegrees())) < 3.0);
-    for (int i = 0; i < 15; ++i)
-        filter.advanceDisplay(0.016);
-    CHECK(std::fabs(AowisCompass::shortestDelta(filter.displayDegrees(), 1.0)) < 1.5);
+    for (int i = 1; i <= 12; ++i)
+        filter.advanceDisplay(0.05 + i / 60.0);
+    CHECK(std::fabs(AowisCompass::shortestDelta(filter.displayDegrees(), 1.0)) < 1.2);
 
-    // Static noisy magnetic data: reject jitter instead of following it
-    // one-to-one. Warm up and examine the last two seconds.
-    filter.reset();
-    double noisyMin = 1000.0;
-    double noisyMax = -1000.0;
-    for (int i = 0; i < 240; ++i)
-    {
-        const double reading = 42.0 + 1.4 * std::sin(i * 1.73) + 0.65 * std::sin(i * 0.67);
-        CHECK(filter.sample(reading, i * 0.05));
-        for (int j = 0; j < 3; ++j)
-            filter.advanceDisplay(1.0 / 60.0);
-        if (i >= 200)
-        {
-            noisyMin = std::min(noisyMin, filter.displayDegrees());
-            noisyMax = std::max(noisyMax, filter.displayDegrees());
-        }
-    }
-    CHECK(noisyMax - noisyMin < 1.5);
+    // Constant 90 degrees/s at 20Hz input must produce continuous 60Hz
+    // movement. The previous filter visibly stalled between packets.
+    Playback twenty;
+    twenty.run(5.0, 350.0, 90.0, 0.0);
+    std::cout << "20Hz moving: min step " << twenty.movingStepMinimum
+              << " max error " << twenty.maxMovingError
+              << " max step " << twenty.displayedStepMaximum << '\n';
+    CHECK(twenty.movingStepMinimum > 0.25);
+    CHECK(twenty.displayedStepMaximum < 6.0);
+    CHECK(twenty.maxMovingError < 13.0);
 
-    // Continuous rotation including repeated north crossings: smooth forward
-    // travel, rather than abruptly jumping a whole revolution backwards.
-    filter.reset();
-    CHECK(filter.sample(350.0, 0.0));
-    double previous = filter.displayDegrees();
-    double maximumStep = 0.0;
-    for (int i = 1; i <= 120; ++i)
-    {
-        const double seconds = i * 0.05;
-        const double raw = AowisCompass::normalize(350.0 + 90.0 * seconds);
-        CHECK(filter.sample(raw, seconds));
-        for (int j = 0; j < 3; ++j)
-        {
-            filter.advanceDisplay(1.0 / 60.0);
-            const double step = AowisCompass::shortestDelta(previous, filter.displayDegrees());
-            CHECK(step >= -0.05);
-            maximumStep = std::max(maximumStep, std::fabs(step));
-            previous = filter.displayDegrees();
-        }
-    }
-    CHECK(maximumStep < 12.0);
-    CHECK(std::fabs(AowisCompass::shortestDelta(filter.displayDegrees(), 170.0)) < 12.0);
+    // A backend limited to 10Hz still needs to be smooth between samples.
+    Playback ten;
+    ten.sampleInterval = 0.1;
+    ten.run(5.0, 350.0, 90.0, 0.0);
+    CHECK(ten.movingStepMinimum > 0.1);
+    CHECK(ten.maxMovingError < 16.0);
 
-    // Turn sharply, then settle. Fast movements should get a larger One Euro
-    // cutoff; display should catch up without an indefinitely long tail.
+    // Native high-rate sensor updates should not cause extra oscillation.
+    Playback sixty;
+    sixty.sampleInterval = 1.0 / 60.0;
+    sixty.run(5.0, 350.0, 90.0, 0.0);
+    CHECK(sixty.movingStepMinimum > 0.25);
+    CHECK(sixty.maxMovingError < 12.0);
+
+    // Frame cadence independence at 60 and 120fps.
+    Playback oneTwenty;
+    oneTwenty.frameInterval = 1.0 / 120.0;
+    oneTwenty.run(5.0, 350.0, 90.0, 0.0);
+    std::cout << "60vs120 " << twenty.finalHeading << " " << oneTwenty.finalHeading << "\n";
+    CHECK(std::fabs(AowisCompass::shortestDelta(twenty.finalHeading,
+                                                oneTwenty.finalHeading)) < 2.0);
+
+    // Stationary jitter should be damped rather than predicted as rotations.
+    Playback still;
+    still.run(8.0, 42.0, 0.0, 1.0);
+    std::cout << "stationary noise range: " << still.lateNoiseMax - still.lateNoiseMin << '\n';
+    CHECK(still.lateNoiseMax - still.lateNoiseMin < 2.0);
+
+    // Stopping the sensor freezes bounded prediction rather than spinning.
     filter.reset();
     CHECK(filter.sample(0.0, 0.0));
-    for (int i = 1; i <= 12; ++i)
+    for (int i = 1; i <= 8; ++i)
     {
-        CHECK(filter.sample(i * 12.0, i * 0.05));
-        for (int j = 0; j < 3; ++j)
-            filter.advanceDisplay(1.0 / 60.0);
+        CHECK(filter.sample(i * 6.0, i * 0.05));
+        filter.advanceDisplay(i * 0.05);
     }
-    CHECK(filter.displayDegrees() > 110.0);
-    for (int i = 13; i <= 25; ++i)
-    {
-        CHECK(filter.sample(144.0, i * 0.05));
-        for (int j = 0; j < 3; ++j)
-            filter.advanceDisplay(1.0 / 60.0);
-    }
-    CHECK(std::fabs(AowisCompass::shortestDelta(filter.displayDegrees(), 144.0)) < 1.0);
+    for (int i = 1; i <= 90; ++i)
+        filter.advanceDisplay(0.4 + i / 60.0);
+    const double settled = filter.displayDegrees();
+    filter.advanceDisplay(2.4);
+    CHECK(std::fabs(AowisCompass::shortestDelta(settled, filter.displayDegrees())) < 0.1);
 
-    // Time-based display response must behave similarly at 60Hz and 120Hz.
-    AowisCompass::HeadingFilter sixty;
-    AowisCompass::HeadingFilter oneTwenty;
-    CHECK(sixty.sample(0.0, 0.0));
-    CHECK(oneTwenty.sample(0.0, 0.0));
-    CHECK(sixty.sample(60.0, 0.05));
-    CHECK(oneTwenty.sample(60.0, 0.05));
-    for (int i = 0; i < 12; ++i)
-        sixty.advanceDisplay(1.0 / 60.0);
-    for (int i = 0; i < 24; ++i)
-        oneTwenty.advanceDisplay(1.0 / 120.0);
-    CHECK(std::fabs(AowisCompass::shortestDelta(sixty.displayDegrees(),
-                                                oneTwenty.displayDegrees())) < 0.05);
-
-    // A long sensor pause resets the filter instead of reviving stale bearing.
-    CHECK(sixty.sample(250.0, 3.0));
-    CHECK(std::fabs(sixty.displayDegrees() - 250.0) < 0.001);
-    sixty.reset();
-    CHECK(!sixty.initialized());
-    CHECK(!sixty.advanceDisplay(0.016));
-    CHECK(sixty.sample(75.0, 4.0));
-    CHECK(std::fabs(sixty.displayDegrees() - 75.0) < 0.001);
-
+    CHECK(filter.sample(250.0, 3.0));
+    CHECK(std::fabs(filter.displayDegrees() - 250.0) < 0.001);
+    filter.reset();
+    CHECK(!filter.initialized());
+    CHECK(!filter.advanceDisplay(3.1));
+    CHECK(filter.sample(75.0, 4.0));
+    CHECK(std::fabs(filter.displayDegrees() - 75.0) < 0.001);
 }

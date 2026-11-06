@@ -2,6 +2,9 @@
 #include "compass_heading.h"
 
 #include <QCompassReading>
+#include <QAbstractAnimation>
+#include <functional>
+#include <utility>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSensor>
@@ -11,6 +14,21 @@ namespace
 {
 constexpr qint64 kStaleAfterMs = 4000;
 constexpr qint64 kFirstReadingTimeoutMs = 6000;
+
+// The Qt animation framework advances this on the GUI animation clock.
+// In Qt Quick's threaded render loop this clock is synchronized to frames.
+// Unlike a 16ms QTimer, it does not impose an independent cadence on QML.
+class CompassFrameAnimation final : public QAbstractAnimation
+{
+public:
+    CompassFrameAnimation(std::function<void()> onFrame, QObject *parent)
+        : QAbstractAnimation(parent), m_onFrame(std::move(onFrame)) {}
+    int duration() const override { return -1; }
+protected:
+    void updateCurrentTime(int) override { this->m_onFrame(); }
+private:
+    std::function<void()> m_onFrame;
+};
 }
 
 CompassService::CompassService(QObject *parent)
@@ -28,14 +46,15 @@ CompassService::CompassService(QObject *parent)
                 [this, screen](Qt::ScreenOrientation current) {
                     this->m_displayRotationDegrees = screen->angleBetween(
                         screen->nativeOrientation(), current);
+                    emit headingChanged();
                     emit changed();
                 });
     }
-    this->m_compass.setDataRate(20); // Requested rate; sensor backend may choose another.
-    this->m_displayTimer.setInterval(16);
-    this->m_displayTimer.setTimerType(Qt::PreciseTimer);
-    connect(&this->m_displayTimer, &QTimer::timeout,
-            this, &CompassService::advanceHeading);
+    // Request high-frequency compass reports where supported. Qt/Android may
+    // deliver fewer; the motion observer handles arbitrary sample spacing.
+    this->m_compass.setDataRate(60);
+    this->m_frameAnimation = new CompassFrameAnimation(
+        [this]() { this->advanceHeading(); }, this);
     this->m_watchdog.setInterval(1000);
     connect(&this->m_compass, &QSensor::readingChanged,
             this, &CompassService::handleReading);
@@ -115,11 +134,27 @@ int CompassService::sampleCount() const
     return this->m_sampleCount;
 }
 
+double CompassService::sensorRateHz() const
+{
+    return this->m_sensorRateHz;
+}
+
+double CompassService::displayRateHz() const
+{
+    return this->m_displayRateHz;
+}
+
+bool CompassService::pageVisible() const
+{
+    return this->m_pageVisible;
+}
+
 void CompassService::changeState(State state)
 {
     if (this->m_state == state)
         return;
     this->m_state = state;
+    emit headingChanged(); // A first fix or loss of fix must update the dial immediately.
     emit changed();
 }
 
@@ -128,6 +163,7 @@ void CompassService::setPageVisible(bool visible)
     if (this->m_pageVisible == visible)
         return;
     this->m_pageVisible = visible;
+    emit pageVisibleChanged(visible);
     updateActivity();
 }
 
@@ -145,9 +181,12 @@ void CompassService::updateActivity()
     {
         this->m_compass.stop();
         this->m_watchdog.stop();
-        this->m_displayTimer.stop();
+        this->m_frameAnimation->stop();
         this->m_headingFilter.reset();
-        this->m_lastDisplayMs = -1;
+        this->m_sensorRateHz = 0.0;
+        this->m_displayRateHz = 0.0;
+        this->m_lastFrameRateCheckMs = -1;
+        this->m_framesSinceCheck = 0;
         this->m_lastReadingMs = -1;
         this->m_startMs = -1;
         this->m_sampleCount = 0;
@@ -158,9 +197,12 @@ void CompassService::updateActivity()
     // A reading from before backgrounding or a different page must not be
     // presented as live immediately after returning.
     this->m_lastReadingMs = -1;
-    this->m_displayTimer.stop();
+    this->m_frameAnimation->stop();
     this->m_headingFilter.reset();
-    this->m_lastDisplayMs = -1;
+    this->m_sensorRateHz = 0.0;
+    this->m_displayRateHz = 0.0;
+    this->m_lastFrameRateCheckMs = -1;
+    this->m_framesSinceCheck = 0;
     this->m_startMs = this->m_clock.elapsed();
     this->m_sampleCount = 0;
     if (!this->m_compass.connectToBackend())
@@ -190,15 +232,18 @@ void CompassService::handleReading()
     const qint64 now = this->m_clock.elapsed();
     if (!this->m_headingFilter.sample(degrees, static_cast<double>(now) / 1000.0))
         return;
-    if (!this->m_displayTimer.isActive())
+    if (this->m_lastReadingMs >= 0 && now > this->m_lastReadingMs)
     {
-        this->m_lastDisplayMs = now;
-        this->m_displayTimer.start();
+        const double rate = 1000.0 / static_cast<double>(now - this->m_lastReadingMs);
+        this->m_sensorRateHz = this->m_sensorRateHz == 0.0
+            ? rate : 0.85 * this->m_sensorRateHz + 0.15 * rate;
     }
     ++this->m_sampleCount;
     this->m_calibration = AowisCompass::clampedCalibration(reading->calibrationLevel());
     this->m_lastReadingMs = now;
     changeState(State::Tracking);
+    if (this->m_frameAnimation->state() != QAbstractAnimation::Running)
+        this->m_frameAnimation->start();
     emit changed();
 }
 
@@ -214,7 +259,7 @@ void CompassService::handleTimeout()
     if (this->m_lastReadingMs >= 0 &&
         this->m_clock.elapsed() - this->m_lastReadingMs > kStaleAfterMs)
     {
-        this->m_displayTimer.stop();
+        this->m_frameAnimation->stop();
         changeState(State::Stale);
     }
 }
@@ -223,13 +268,21 @@ void CompassService::advanceHeading()
 {
     if (!hasHeading())
     {
-        this->m_displayTimer.stop();
+        this->m_frameAnimation->stop();
         return;
     }
     const qint64 now = this->m_clock.elapsed();
-    const double dt = this->m_lastDisplayMs < 0 ? 0.016
-                    : static_cast<double>(now - this->m_lastDisplayMs) / 1000.0;
-    this->m_lastDisplayMs = now;
-    if (this->m_headingFilter.advanceDisplay(dt))
-        emit changed();
+    if (this->m_lastFrameRateCheckMs < 0)
+        this->m_lastFrameRateCheckMs = now;
+    ++this->m_framesSinceCheck;
+    if (now - this->m_lastFrameRateCheckMs >= 1000)
+    {
+        this->m_displayRateHz = 1000.0 * static_cast<double>(this->m_framesSinceCheck)
+            / static_cast<double>(now - this->m_lastFrameRateCheckMs);
+        this->m_lastFrameRateCheckMs = now;
+        this->m_framesSinceCheck = 0;
+        emit changed(); // Status only, never force a QML repaint on each tick.
+    }
+    if (this->m_headingFilter.advanceDisplay(static_cast<double>(now) / 1000.0))
+        emit headingChanged();
 }

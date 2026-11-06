@@ -39,13 +39,21 @@ checks = {
         "Math.round(compassService.headingDegrees)" in qml and
         "compassService.direction" in qml and
         "displayInitialized" not in rose and "FrameAnimation" not in rose,
-    "sensor-rate-independent C++ filtering and repaint loop":
+    "sensor prediction and Qt animation-clock repaint loop":
         "compass_heading_filter.h" in cmake and
         "AowisCompass::HeadingFilter m_headingFilter" in header and
         "m_headingFilter.sample" in service and
         "m_headingFilter.advanceDisplay" in service and
-        "m_displayTimer.setInterval(16)" in service and
-        "m_displayTimer.stop()" in service and
+        "m_compass.setDataRate(60)" in service and
+        "QAbstractAnimation" in service and
+        "m_frameAnimation->start()" in service and
+        "m_frameAnimation->stop()" in service and
+        "m_displayTimer" not in service and
+        "emit headingChanged()" in service and
+        "sensorRateHz" in header and
+        "displayRateHz" in header and
+        "pageVisibleChanged" in main and
+        "!compassService.pageVisible()" in main and
         "FrameAnimation" not in rose and "CompassMotion" not in rose,
     "hamburger navigation and Android Back":
         'text: "Compass"' in qml and 'root.openPage("compass")' in qml and

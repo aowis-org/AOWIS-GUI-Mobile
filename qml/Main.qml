@@ -616,6 +616,8 @@ Window {
                             Layout.fillWidth: true
                             text: "Sensor: " + (compassService.sensorActive ? "active" : "inactive")
                                   + " · readings: " + compassService.sampleCount
+                                  + " · sensor " + compassService.sensorRateHz.toFixed(0) + " Hz"
+                                  + " · display " + compassService.displayRateHz.toFixed(0) + " Hz"
                             color: root.uiMuted
                             font.pixelSize: 11
                         }
