@@ -8,6 +8,7 @@ A capability in a related repository is not automatically integrated here.
 | Document | What it answers |
 | --- | --- |
 | [Product](product.md) | What Mobile is for, scope, platform naming and product boundaries |
+| [Magnetic compass](compass.md) | Live Qt Sensors bearing, instrument UI and calibration |
 | [Device location](location.md) | Foreground GPS/location service, permission and fix semantics |
 | [Field workflows](survey-workflows.md) | Observation versus Direct Edit; geometry/GPS capture and review |
 | [Architecture](architecture.md) | What exists, dependencies, planned library boundary |

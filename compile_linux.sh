@@ -19,8 +19,8 @@ Environment:
   AOWIS_BUILD_TYPE  CMake build type (default RelWithDebInfo).
   AOWIS_LINUX_JOBS Parallel build jobs (default number of available CPUs).
 
-Requires CMake, Ninja, and host Qt 6 (Core, Gui, Qml, Quick, QuickControls2, Positioning).
-On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative qt6-positioning
+Requires CMake, Ninja, and host Qt 6 (Core, Gui, Qml, Quick, QuickControls2, Positioning, Sensors).
+On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative qt6-positioning qt6-sensors
 For bgfx and the shared renderer: ./git_submodule_init.sh.
 HELP
 }
@@ -83,8 +83,8 @@ cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
 cmake --build "$BUILD_DIR" --target aowis-mobile --parallel "$JOBS"
 
 if "$run_tests"; then
-    cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-location-snapshot-tests --parallel "$JOBS"
-    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-(gpu-(scene|stress)|lifecycle|map-server-settings|appearance-settings|location-snapshot)$'
+    cmake --build "$BUILD_DIR" --target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests --parallel "$JOBS"
+    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-(gpu-(scene|stress)|lifecycle|map-server-settings|appearance-settings|location-snapshot|compass-heading)$'
 fi
 
 if "$build_only"; then

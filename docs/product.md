@@ -91,6 +91,10 @@ is implemented in Mobile yet. Saving does not imply that the server is online.
 
 The **existing** grid, colored segments and junctions are synthetic graphics
 for GPU integration tests. None represent captured sites or hydraulic assets.
+A magnetic Compass page is available from the hamburger menu. It shows a
+vector compass rose, magnetic bearing and calibration status using Qt Sensors;
+it does not rely on GPS course-over-ground or the shared map renderer.
+
 Foreground-only GPS/location permissions and a live position readout are
 implemented; no position-to-map projection, survey forms, offline DB, maps or
 sync exist yet.

@@ -203,3 +203,6 @@ tests this public API alongside the existing Mobile lab camera/geometry tests.
 The Mobile renderer still shows its established Qt Quick/bgfx stress scene;
 this patch does not replace that scene or modify the Android EGL lifecycle.
 
+
+The hamburger menu also provides a live Qt Sensors **magnetic compass** with
+an animated compass rose. See [Compass](docs/compass.md).

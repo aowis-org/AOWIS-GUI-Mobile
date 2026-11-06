@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 
 # AOWIS mobile application, currently retaining an instrumented renderer scene.
 # Keep the proven Qt Quick/bgfx integration while product features are added.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Positioning)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Positioning Sensors)
 qt_standard_project_setup(REQUIRES 6.5)
 
 option(AOWIS_MOBILE_WITH_BGFX "Build the experimental bgfx/Qt Quick direct-underlay path" ON)
@@ -30,6 +30,9 @@ qt_add_executable(aowis-mobile
     src/location_snapshot.h
     src/location_service.cpp
     src/location_service.h
+    src/compass_service.cpp
+    src/compass_service.h
+    src/compass_heading.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
@@ -57,10 +60,11 @@ endif()
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_source_files_properties(qml/UiIcon.qml PROPERTIES QT_RESOURCE_ALIAS UiIcon.qml)
+set_source_files_properties(qml/CompassRose.qml PROPERTIES QT_RESOURCE_ALIAS CompassRose.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock
@@ -83,7 +87,7 @@ if(ANDROID)
 endif()
 
 target_link_libraries(aowis-mobile PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Positioning
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Positioning Qt6::Sensors
 )
 
 if(AOWIS_MOBILE_WITH_BGFX)
@@ -214,6 +218,10 @@ if(BUILD_TESTING)
         src/performance_samples.cpp
     )
     add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
+    add_executable(aowis-mobile-compass-heading-tests
+        tests/compass_heading_tests.cpp src/compass_heading.h)
+    target_include_directories(aowis-mobile-compass-heading-tests PRIVATE src)
+    add_test(NAME aowis-mobile-compass-heading COMMAND aowis-mobile-compass-heading-tests)
     add_executable(aowis-mobile-location-snapshot-tests
         tests/location_snapshot_tests.cpp src/location_snapshot.cpp src/location_snapshot.h)
     target_include_directories(aowis-mobile-location-snapshot-tests PRIVATE src)

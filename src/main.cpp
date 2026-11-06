@@ -2,6 +2,7 @@
 #include "map_server_settings.h"
 #include "appearance_settings.h"
 #include "location_service.h"
+#include "compass_service.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -62,11 +63,13 @@ int main(int argc, char *argv[])
     MapServerSettings mapServerSettings;
     AppearanceSettings appearanceSettings;
     LocationService locationService;
+    CompassService compassService;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("locationService"), &locationService);
+    engine.rootContext()->setContextProperty(QStringLiteral("compassService"), &compassService);
     engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;
@@ -109,9 +112,14 @@ int main(int argc, char *argv[])
                      &locationService, [&locationService](Qt::ApplicationState state) {
         locationService.setApplicationActive(state == Qt::ApplicationActive);
     });
+    QObject::connect(&application, &QGuiApplication::applicationStateChanged,
+                     &compassService, [&compassService](Qt::ApplicationState state) {
+        compassService.setApplicationActive(state == Qt::ApplicationActive);
+    });
     window->show();
     const bool active = application.applicationState() == Qt::ApplicationActive;
     locationService.setApplicationActive(active);
+    compassService.setApplicationActive(active);
     lab.setApplicationActive(active);
     if (active)
         refresh.start();

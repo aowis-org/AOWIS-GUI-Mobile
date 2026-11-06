@@ -95,6 +95,15 @@ RUN /opt/aqt-venv/bin/aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 
     && test -f "/opt/qt/${QT_VERSION}/android_arm64_v8a/lib/cmake/Qt6Positioning/Qt6PositioningConfig.cmake" \
     && test -f "/opt/qt/${QT_VERSION}/gcc_64/lib/cmake/Qt6Positioning/Qt6PositioningConfig.cmake"
 
+# Qt Sensors provides the native Android magnetic compass (not GPS course).
+# Install matching official host and ARM64 modules for the Compass page.
+RUN /opt/aqt-venv/bin/aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 \
+        --modules qtsensors -O /opt/qt \
+    && /opt/aqt-venv/bin/aqt install-qt all_os android "${QT_VERSION}" android_arm64_v8a \
+        --modules qtsensors -O /opt/qt \
+    && test -f "/opt/qt/${QT_VERSION}/gcc_64/lib/cmake/Qt6Sensors/Qt6SensorsConfig.cmake" \
+    && test -f "/opt/qt/${QT_VERSION}/android_arm64_v8a/lib/cmake/Qt6Sensors/Qt6SensorsConfig.cmake"
+
 # Fail at image construction rather than at the first app configure when a
 # Linux host tool has missing ELF runtime dependencies.
 RUN set -eu; \

@@ -34,6 +34,7 @@ Window {
     property real dragY: 0
     property string lastTap: "Touch or click the map"
     property string activePage: "map"
+    onActivePageChanged: compassService.setPageVisible(activePage === "compass")
     property string saveFeedback: ""
     property bool saveSucceeded: false
 
@@ -525,6 +526,115 @@ Window {
         }
     }
 
+    // Separate instrument page. Qt Sensors supplies magnetic bearing; do not
+    // substitute GPS course-over-ground when the phone is stationary.
+    Rectangle {
+        id: compassPage
+        anchors.fill: parent
+        visible: root.activePage === "compass"
+        color: root.uiSurface
+
+        ScrollView {
+            id: compassScroll
+            anchors.fill: parent
+            anchors.topMargin: 76
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            anchors.bottomMargin: 10
+            contentWidth: availableWidth
+            clip: true
+            ColumnLayout {
+                width: compassScroll.availableWidth
+                spacing: 12
+                Label {
+                    text: "Compass"
+                    color: root.uiText
+                    font.pixelSize: 26
+                    font.bold: true
+                    Layout.leftMargin: 4
+                }
+                Label {
+                    text: "MAGNETIC NAVIGATION · LIVE INSTRUMENT"
+                    color: root.uiMuted
+                    font.pixelSize: 11
+                    font.letterSpacing: 1.2
+                    Layout.leftMargin: 4
+                }
+                CompassRose {
+                    id: compassRose
+                    readonly property real visualSize: Math.max(180,
+                        Math.min(compassScroll.availableWidth - 8, root.height * .55, 400))
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: visualSize
+                    Layout.preferredHeight: visualSize
+                    darkTheme: root.darkTheme
+                    hasHeading: compassService.hasHeading
+                    headingDegrees: compassService.headingDegrees
+                    Layout.topMargin: 8
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: compassService.hasHeading
+                          ? ("000" + Math.round(compassService.headingDegrees)).slice(-3) + "°"
+                          : "—°"
+                    font.pixelSize: 46
+                    font.weight: Font.DemiBold
+                    color: root.uiText
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: compassService.hasHeading ? compassService.direction + " · MAGNETIC" : "NO HEADING"
+                    color: root.uiAccent
+                    font.pixelSize: 15
+                    font.bold: true
+                    font.letterSpacing: 2
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 8
+                    implicitHeight: statusColumn.implicitHeight + 28
+                    radius: 14
+                    color: root.uiRaised
+                    border.color: root.uiBorder
+                    ColumnLayout {
+                        id: statusColumn
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 15
+                        anchors.rightMargin: 15
+                        spacing: 7
+                        Label {
+                            Layout.fillWidth: true
+                            text: compassService.status
+                            color: compassService.hasHeading ? root.uiSuccess : root.uiMuted
+                            font.pixelSize: 13
+                            font.bold: true
+                            wrapMode: Text.WordWrap
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: compassService.calibrationStatus
+                            color: compassService.calibrationLevel >= 0 && compassService.calibrationLevel < .35
+                                   ? root.uiError : root.uiMuted
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: "Magnetic north, not true north. Hold the phone reasonably level and away from metal or magnets. If calibration is low, move it in a figure-eight pattern."
+                    color: root.uiMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 15
+                }
+            }
+        }
+    }
+
     // All prototype instrumentation lives here, never above the normal map.
     Rectangle {
         id: diagnosticsPage
@@ -756,6 +866,20 @@ Window {
                 text: "Map"
                 Layout.fillWidth: true
                 onClicked: root.openPage("map")
+            }
+            Button {
+                palette.buttonText: root.uiText
+                palette.text: root.uiText
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 10
+                    color: parent.down ? root.uiPressed : root.uiRaised
+                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                    opacity: parent.enabled ? 1.0 : 0.55
+                }
+                text: "Compass"
+                Layout.fillWidth: true
+                onClicked: root.openPage("compass")
             }
             Button {
                 palette.buttonText: root.uiText
