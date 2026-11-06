@@ -1309,10 +1309,15 @@ Window {
             GridLayout {
                 Layout.fillWidth: true
                 columns: 2
+                // Layout item implicit sizes differ by translated label length.
+                // Force four identically sized cells rather than two uneven columns.
+                uniformCellWidths: true
+                uniformCellHeights: true
                 columnSpacing: 9
                 rowSpacing: 9
                 ToolMenuButton {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     text: qsTr("Compass")
                     iconKind: "compass"
                     foregroundColor: root.uiText
@@ -1324,6 +1329,7 @@ Window {
                 }
                 ToolMenuButton {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     text: qsTr("Gradienter")
                     iconKind: "gradienter"
                     foregroundColor: root.uiText
@@ -1335,6 +1341,7 @@ Window {
                 }
                 ToolMenuButton {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     text: qsTr("Plumb Bob")
                     iconKind: "plumbbob"
                     foregroundColor: root.uiText
@@ -1346,6 +1353,7 @@ Window {
                 }
                 ToolMenuButton {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     text: flashlightService.enabled ? qsTr("Flashlight On") : qsTr("Flashlight")
                     iconKind: "flashlight"
                     lit: flashlightService.enabled

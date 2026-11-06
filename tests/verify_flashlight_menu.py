@@ -18,6 +18,13 @@ assert drawer.index('text: qsTr("Settings")') < drawer.index('text: qsTr("Tools"
 assert drawer.index('text: qsTr("Tools")') < drawer.index('text: qsTr("Diagnostics")')
 assert drawer.count('Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }') >= 2
 assert 'GridLayout {' in drawer and 'columns: 2' in drawer
+# Longer translated labels must not make the first column narrower than the second.
+tool_grid = drawer[drawer.index('            GridLayout {'):drawer.index('            Label {', drawer.index('            GridLayout {'))]
+assert 'uniformCellWidths: true' in tool_grid
+assert 'uniformCellHeights: true' in tool_grid
+assert tool_grid.count('ToolMenuButton {') == 4
+assert tool_grid.count('Layout.fillWidth: true') == 5  # grid + four buttons
+assert tool_grid.count('Layout.preferredWidth: 0') == 4
 for tool in ('compass', 'gradienter', 'plumbbob', 'flashlight'):
     assert f'iconKind: "{tool}"' in drawer
     assert f'icon.kind === "{tool}"' in icons
