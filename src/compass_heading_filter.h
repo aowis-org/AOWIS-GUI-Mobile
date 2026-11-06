@@ -3,19 +3,21 @@
 #include "compass_heading.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstddef>
 
-// A circular, noise-gated heading observer. Compass azimuth is an absolute
-// measurement, not an angular-rate sensor: differentiating individual magnetic
-// readings injects magnetic noise directly into the animation velocity.
+// Adaptive circular heading filter (a "One Euro" filter on the unwrapped
+// angle). Its cut-off frequency rises with the estimated turn rate:
 //
-// We estimate turning speed from a short least-squares history, smooth that
-// speed, and use a hysteretic still/moving state. The still state holds the
-// needle *exactly* still instead of rendering subpixel noise. During motion a
-// continuously updated, bounded velocity prediction fills sensor gaps.
-// A frame-time-invariant first-order display follower avoids spring ringing.
+//  * holding still  -> low cut-off: magnetic noise is averaged away, and the
+//                      estimate keeps converging on the true mean heading;
+//  * turning        -> high cut-off: little lag, the rose follows the turn.
+//
+// The previous observer instead *froze* the estimate until a departure of
+// ~2.6 deg was confirmed. That looked calm but left a persistent offset of
+// up to that size, moved slow turns in visible steps, and lagged turns by up
+// to ~13 deg. Here no measurement is ever discarded by a gate; only the
+// rendered needle has a tiny deadband (hundredths of a degree) so a
+// stationary phone does not trigger endless subpixel repaints.
 namespace AowisCompass
 {
 inline double shortestDelta(double fromDegrees, double toDegrees)
@@ -23,33 +25,49 @@ inline double shortestDelta(double fromDegrees, double toDegrees)
     return std::remainder(toDegrees - fromDegrees, 360.0);
 }
 
+struct HeadingFilterTuning
+{
+    double minCutoffHz;          // cut-off while still: lower = calmer, slower
+    double beta;                 // cut-off increase per deg/s of turn rate
+    double rateCutoffHz;         // smoothing of the turn-rate estimate
+    double displayTimeConstant;  // seconds; bridges sensor steps at frame rate
+    double stillRateDegrees;     // |turn rate| below this counts as "not moving"
+    double fullLeadRateDegrees;  // lead compensation fades in up to this rate
+    double leadMarginDegrees;    // lead may pass the last measurement by this
+    double displayDeadband;      // degrees; stop repainting closer than this
+};
+
+// Android fused rotation vector: gyroscope-stabilised, already smooth.
+inline constexpr HeadingFilterTuning kFusedSensorTuning{1.5, 0.05, 1.5, 0.015, 3.0, 12.0, 0.3, 0.03};
+// AOWIS fusion without gyroscope (accelerometer + magnetometer only):
+// much noisier, so average harder when still.
+inline constexpr HeadingFilterTuning kRawCompassTuning{0.35, 0.04, 1.0, 0.05, 6.0, 25.0, 1.0, 0.06};
+
 class HeadingFilter final
 {
 public:
+    void setTuning(const HeadingFilterTuning &tuning) { this->m_tuning = tuning; }
+    const HeadingFilterTuning &tuning() const { return this->m_tuning; }
+
     void reset()
     {
         this->m_initialized = false;
-        this->m_moving = false;
         this->m_lastSampleSeconds = 0.0;
         this->m_lastFrameSeconds = -1.0;
-        this->m_rawDegrees = 0.0;
-        this->m_fastDegrees = 0.0;
-        this->m_slowDegrees = 0.0;
         this->m_estimateDegrees = 0.0;
-        this->m_velocity = 0.0;
+        this->m_rate = 0.0;
+        this->m_turnRate = 0.0;
+        this->m_measuredDegrees = 0.0;
         this->m_displayDegrees = 0.0;
-        this->m_displayTarget = 0.0;
-        this->m_quietSeconds = 0.0;
-        this->m_motionConfirmations = 0;
-        this->m_historySize = 0;
     }
 
     bool initialized() const { return this->m_initialized; }
-    bool moving() const { return this->m_moving; }
+    bool moving() const { return std::fabs(this->m_turnRate) >= this->m_tuning.stillRateDegrees; }
     double targetDegrees() const { return normalize(this->m_estimateDegrees); }
+    double continuousTargetDegrees() const { return this->m_estimateDegrees; }
     double displayDegrees() const { return normalize(this->m_displayDegrees); }
     double continuousDisplayDegrees() const { return this->m_displayDegrees; }
-    double velocityDegreesPerSecond() const { return this->m_velocity; }
+    double velocityDegreesPerSecond() const { return this->m_turnRate; }
 
     bool sample(double rawDegrees, double monotonicSeconds)
     {
@@ -60,14 +78,11 @@ public:
         {
             this->m_initialized = true;
             this->m_lastSampleSeconds = monotonicSeconds;
-            this->m_lastFrameSeconds = monotonicSeconds;
-            this->m_rawDegrees = measured;
-            this->m_fastDegrees = measured;
-            this->m_slowDegrees = measured;
             this->m_estimateDegrees = measured;
+            this->m_measuredDegrees = measured;
             this->m_displayDegrees = measured;
-            this->m_displayTarget = measured;
-            this->appendReading(monotonicSeconds, measured);
+            this->m_rate = 0.0;
+            this->m_turnRate = 0.0;
             return true;
         }
 
@@ -76,170 +91,97 @@ public:
             return false;
         if (dt > 1.0)
         {
-            this->reset();
-            return this->sample(measured, monotonicSeconds);
+            // A long gap: the old estimate says nothing about the present.
+            // Keep the display angle continuous, restart the estimate.
+            const double display = this->m_displayDegrees;
+            this->m_estimateDegrees = display + shortestDelta(normalize(display), measured);
+            this->m_measuredDegrees = this->m_estimateDegrees;
+            this->m_rate = 0.0;
+            this->m_turnRate = 0.0;
+            this->m_lastSampleSeconds = monotonicSeconds;
+            return true;
         }
 
-        // Unwrap each measurement relative to the preceding raw measurement,
-        // not the displayed heading. This also handles repeated north crossings.
-        const double unwrapped = this->m_rawDegrees + shortestDelta(this->m_rawDegrees, measured);
-        this->m_rawDegrees = unwrapped;
-        // Two time scales distinguish persistent physical turns from magnetic
-        // shimmer: do not use an instantaneous angular derivative as a motion
-        // detector (that amplifies high-frequency sensor noise).
-        this->m_fastDegrees += (1.0 - std::exp(-dt / 0.09)) *
-                               (unwrapped - this->m_fastDegrees);
-        this->m_slowDegrees += (1.0 - std::exp(-dt / 0.38)) *
-                               (unwrapped - this->m_slowDegrees);
-        this->appendReading(monotonicSeconds, unwrapped);
-        const double observedVelocity = this->regressionVelocity();
-        const double velocityAlpha = 1.0 - std::exp(-dt / 0.18);
-        this->m_velocity += velocityAlpha * (observedVelocity - this->m_velocity);
-        this->m_velocity = std::clamp(this->m_velocity, -540.0, 540.0);
+        // Unwrap relative to the current estimate: handles north crossings
+        // in either direction, any number of times.
+        const double unwrapped = this->m_estimateDegrees +
+                                 shortestDelta(normalize(this->m_estimateDegrees), measured);
+        this->m_measuredDegrees = unwrapped;
 
-        if (!this->m_moving)
-        {
-            const double departure = std::fabs(unwrapped - this->m_estimateDegrees);
-            // A turn changes the fast average before the slow average.
-            // Very slow turns eventually drift the slow baseline away from
-            // the held instrument heading. Both require confirmation.
-            const bool realTurn =
-                (departure > 0.65 &&
-                 std::fabs(this->m_fastDegrees - this->m_slowDegrees) > 2.0) ||
-                std::fabs(this->m_slowDegrees - this->m_estimateDegrees) > 2.6;
-            this->m_motionConfirmations = realTurn ? this->m_motionConfirmations + 1 : 0;
-            if (this->m_motionConfirmations >= 2)
-            {
-                this->m_moving = true;
-                this->m_quietSeconds = 0.0;
-            }
-            else
-            {
-                // Absolute magnetic noise below the motion threshold must
-                // not produce visible oscillation or angular-rate prediction.
-                this->m_displayTarget = this->m_estimateDegrees;
-                this->m_lastSampleSeconds = monotonicSeconds;
-                return true;
-            }
-        }
+        const double observedRate = (unwrapped - this->m_estimateDegrees) / dt;
+        this->m_rate += smoothing(this->m_tuning.rateCutoffHz, dt) * (observedRate - this->m_rate);
+        this->m_rate = std::clamp(this->m_rate, -720.0, 720.0);
 
-        // Correct a velocity-predicted absolute heading toward the magnetic
-        // measurement. Low pass the position correction; the velocity itself
-        // comes from a multi-sample fit, never a single noisy innovation.
-        const double predicted = this->m_estimateDegrees + this->m_velocity * dt;
-        const double alpha = 1.0 - std::exp(-dt / 0.10);
-        this->m_estimateDegrees = predicted + alpha * (unwrapped - predicted);
+        const double cutoff = this->m_tuning.minCutoffHz + this->m_tuning.beta * std::fabs(this->m_rate);
+        const double previousEstimate = this->m_estimateDegrees;
+        this->m_estimateDegrees += smoothing(cutoff, dt) * (unwrapped - this->m_estimateDegrees);
 
-        // Hold the instrument still after physical turning stops. Check
-        // the *filtered* motion indicator, not magnetic sample residuals.
-        const bool quiet = std::fabs(this->m_fastDegrees - this->m_slowDegrees) < 1.0 &&
-                           std::fabs(this->m_velocity) < 12.0;
-        if (quiet)
-            this->m_quietSeconds += dt;
-        else
-            this->m_quietSeconds = std::max(0.0, this->m_quietSeconds - dt);
-        if (this->m_quietSeconds >= 0.30)
-        {
-            this->m_moving = false;
-            this->m_motionConfirmations = 0;
-            this->m_velocity = 0.0;
-        }
-
+        // The residual-based rate above is deliberately quick but noisy; it
+        // only adapts the cut-off. The derivative of the *filtered* estimate
+        // is far quieter and equals the true rate in a steady turn: it drives
+        // the motion state and the display lead.
+        const double estimateRate = (this->m_estimateDegrees - previousEstimate) / dt;
+        this->m_turnRate += smoothing(this->m_tuning.rateCutoffHz, dt) * (estimateRate - this->m_turnRate);
         this->m_lastSampleSeconds = monotonicSeconds;
         return true;
     }
 
     bool advanceDisplay(double monotonicSeconds)
     {
-        if (!this->m_initialized || !std::isfinite(monotonicSeconds) ||
-            monotonicSeconds < this->m_lastFrameSeconds)
+        if (!this->m_initialized || !std::isfinite(monotonicSeconds))
             return false;
-        const double dt = std::min(monotonicSeconds - this->m_lastFrameSeconds, 0.08);
+        if (this->m_lastFrameSeconds < 0.0 || monotonicSeconds < this->m_lastFrameSeconds)
+        {
+            this->m_lastFrameSeconds = monotonicSeconds;
+            return false;
+        }
+        const double dt = std::min(monotonicSeconds - this->m_lastFrameSeconds, 0.1);
         this->m_lastFrameSeconds = monotonicSeconds;
         if (dt <= 0.0)
             return false;
 
-        const double age = std::max(0.0, monotonicSeconds - this->m_lastSampleSeconds);
-        const double horizon = this->m_moving ? std::min(age, 0.09) : 0.0;
-        this->m_displayTarget = this->m_estimateDegrees + this->m_velocity * horizon;
-        // A first-order low pass cannot ring or change direction by itself.
-        // 120ms time constant; independent of actual rendering refresh rate.
-        const double gain = 1.0 - std::exp(-dt / 0.12);
-        const double next = this->m_displayDegrees +
-                            gain * (this->m_displayTarget - this->m_displayDegrees);
-        if (!this->m_moving && std::fabs(next - this->m_displayDegrees) < 0.025 &&
-            std::fabs(this->m_displayTarget - this->m_displayDegrees) < 0.20)
+        // Lead compensation: during a steady turn, both the adaptive
+        // low-pass and the display follower lag by (rate x time constant).
+        // Aim ahead by exactly that; the term fades with the rate estimate
+        // as soon as the turn stops, so a stationary needle is unaffected.
+        const double cutoff = this->m_tuning.minCutoffHz + this->m_tuning.beta * std::fabs(this->m_rate);
+        const double speed = std::fabs(this->m_turnRate);
+        const double fade = std::clamp((speed - this->m_tuning.stillRateDegrees) /
+            std::max(1e-6, this->m_tuning.fullLeadRateDegrees - this->m_tuning.stillRateDegrees), 0.0, 1.0);
+        double lead = fade * fade * this->m_turnRate *
+            (this->m_tuning.displayTimeConstant + 1.0 / (2.0 * kPi * cutoff));
+        // Never aim beyond what the sensor has actually reported (plus a
+        // noise margin): when a turn stops, the needle settles onto the
+        // measured heading instead of swinging past it and back.
+        const double ahead = this->m_measuredDegrees - this->m_estimateDegrees;
+        if (lead > 0.0)
+            lead = std::min(lead, std::max(0.0, ahead + this->m_tuning.leadMarginDegrees));
+        else if (lead < 0.0)
+            lead = std::max(lead, std::min(0.0, ahead - this->m_tuning.leadMarginDegrees));
+        const double error = this->m_estimateDegrees + lead - this->m_displayDegrees;
+        if (!moving() && std::fabs(error) < this->m_tuning.displayDeadband)
             return false;
+        // First-order follower: frame-rate independent, cannot overshoot.
+        const double gain = 1.0 - std::exp(-dt / this->m_tuning.displayTimeConstant);
         const double previous = this->m_displayDegrees;
-        this->m_displayDegrees = next;
+        this->m_displayDegrees += gain * error;
         return std::fabs(this->m_displayDegrees - previous) >= 0.002;
     }
 
 private:
-    struct Observation
+    static double smoothing(double cutoffHz, double dt)
     {
-        double seconds = 0.0;
-        double heading = 0.0;
-    };
-
-    void appendReading(double seconds, double heading)
-    {
-        // Keep a bounded ~300ms window. Fit a line to the whole window,
-        // not finite differences between noisy adjacent magnetic packets.
-        std::size_t kept = 0;
-        for (std::size_t index = 0; index < this->m_historySize; ++index)
-        {
-            if (seconds - this->m_history[index].seconds <= 0.50)
-                this->m_history[kept++] = this->m_history[index];
-        }
-        this->m_historySize = kept;
-        if (this->m_historySize == this->m_history.size())
-        {
-            for (std::size_t index = 1; index < this->m_historySize; ++index)
-                this->m_history[index - 1] = this->m_history[index];
-            --this->m_historySize;
-        }
-        this->m_history[this->m_historySize++] = {seconds, heading};
+        return 1.0 - std::exp(-2.0 * kPi * cutoffHz * dt);
     }
 
-    double regressionVelocity() const
-    {
-        if (this->m_historySize < 3)
-            return 0.0;
-        double sumT = 0.0;
-        double sumH = 0.0;
-        for (std::size_t i = 0; i < this->m_historySize; ++i)
-        {
-            sumT += this->m_history[i].seconds;
-            sumH += this->m_history[i].heading;
-        }
-        const double meanT = sumT / static_cast<double>(this->m_historySize);
-        const double meanH = sumH / static_cast<double>(this->m_historySize);
-        double variance = 0.0;
-        double covariance = 0.0;
-        for (std::size_t i = 0; i < this->m_historySize; ++i)
-        {
-            const double t = this->m_history[i].seconds - meanT;
-            variance += t * t;
-            covariance += t * (this->m_history[i].heading - meanH);
-        }
-        return variance > 1e-7 ? std::clamp(covariance / variance, -540.0, 540.0) : 0.0;
-    }
-
+    HeadingFilterTuning m_tuning = kFusedSensorTuning;
     bool m_initialized = false;
-    bool m_moving = false;
     double m_lastSampleSeconds = 0.0;
     double m_lastFrameSeconds = -1.0;
-    double m_rawDegrees = 0.0;
-    double m_fastDegrees = 0.0;
-    double m_slowDegrees = 0.0;
     double m_estimateDegrees = 0.0; // unwrapped
-    double m_velocity = 0.0;
-    double m_displayDegrees = 0.0; // unwrapped
-    double m_displayTarget = 0.0;
-    double m_quietSeconds = 0.0;
-    int m_motionConfirmations = 0;
-    std::array<Observation, 32> m_history{};
-    std::size_t m_historySize = 0;
+    double m_rate = 0.0;            // deg/s, residual based (cut-off only)
+    double m_turnRate = 0.0;        // deg/s, from the filtered estimate
+    double m_measuredDegrees = 0.0; // latest measurement, unwrapped
+    double m_displayDegrees = 0.0;  // unwrapped
 };
 }

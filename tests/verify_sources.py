@@ -147,6 +147,11 @@ checks = [
         "src/performance_samples.cpp", "src/performance_samples.h",
         "src/lifecycle_watchdog.cpp", "src/lifecycle_watchdog.h",
         "tests/lifecycle_watchdog_tests.cpp",
+        "src/compass_service.cpp", "src/compass_service.h",
+        "src/compass_heading.h", "src/compass_heading_filter.h",
+        "src/compass_sensor_source.cpp", "src/compass_sensor_source.h",
+        "src/compass_fusion.h",
+        "tests/compass_heading_tests.cpp",
         "tests/gpu_scene_geometry_tests.cpp", "tests/gpu_scene_stress_tests.cpp"
     ])),
 ]

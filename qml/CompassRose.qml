@@ -150,7 +150,9 @@ Item {
         }
     }
 
-    // Fixed heading index at the top: the dial spins below it as you turn.
+    // Fixed index triangles at top, right, bottom and left: the dial spins
+    // below them as you turn. The top one reads the heading; the others
+    // read the bearings 90°, 180° and 270° to the right of it.
     Canvas {
         id: indexMarker
         anchors.fill: parent
@@ -161,16 +163,21 @@ Item {
             const r = Math.min(width, height) / 2
             if (r <= 0) return
             ctx.translate(width / 2, height / 2)
-            ctx.beginPath()
-            ctx.moveTo(0, -r * .79)
-            ctx.lineTo(-r * .055, -r * .975)
-            ctx.lineTo(r * .055, -r * .975)
-            ctx.closePath()
-            ctx.fillStyle = compass.dialAccent
-            ctx.fill()
-            ctx.strokeStyle = compass.dialFace
-            ctx.lineWidth = 2
-            ctx.stroke()
+            for (let side = 0; side < 4; ++side) {
+                ctx.save()
+                ctx.rotate(side * Math.PI / 2)
+                ctx.beginPath()
+                ctx.moveTo(0, -r * .79)
+                ctx.lineTo(-r * .055, -r * .975)
+                ctx.lineTo(r * .055, -r * .975)
+                ctx.closePath()
+                ctx.fillStyle = compass.dialAccent
+                ctx.fill()
+                ctx.strokeStyle = compass.dialFace
+                ctx.lineWidth = 2
+                ctx.stroke()
+                ctx.restore()
+            }
             ctx.beginPath(); ctx.arc(0, 0, r * .987, 0, 2 * Math.PI)
             ctx.strokeStyle = compass.darkTheme ? "#d4f3eb" : "#6d8990"
             ctx.lineWidth = 1

@@ -36,6 +36,9 @@ qt_add_executable(aowis-mobile
     src/compass_service.h
     src/compass_heading.h
     src/compass_heading_filter.h
+    src/compass_fusion.h
+    src/compass_sensor_source.cpp
+    src/compass_sensor_source.h
     src/gradienter_service.cpp
     src/gradienter_service.h
     src/gradienter_math.h
@@ -107,6 +110,10 @@ endif()
 target_link_libraries(aowis-mobile PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Positioning Qt6::Sensors
 )
+if(ANDROID)
+    # NDK ASensorManager / ALooper for the compass (no Qt Sensors involved).
+    target_link_libraries(aowis-mobile PRIVATE android)
+endif()
 
 if(AOWIS_MOBILE_WITH_BGFX)
     # No FetchContent: builds must be reproducible and never download dependencies.
@@ -237,7 +244,7 @@ if(BUILD_TESTING)
     )
     add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
     add_executable(aowis-mobile-compass-heading-tests
-        tests/compass_heading_tests.cpp src/compass_heading.h)
+        tests/compass_heading_tests.cpp src/compass_heading.h src/compass_heading_filter.h src/compass_fusion.h)
     target_include_directories(aowis-mobile-compass-heading-tests PRIVATE src)
     add_test(NAME aowis-mobile-compass-heading COMMAND aowis-mobile-compass-heading-tests)
     add_executable(aowis-mobile-gradienter-math-tests

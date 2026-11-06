@@ -1,15 +1,18 @@
 #pragma once
 
-#include <QCompass>
 #include <QElapsedTimer>
 #include <QObject>
 #include <QTimer>
 #include <QAbstractAnimation>
 
 #include "compass_heading_filter.h"
+#include "compass_sensor_source.h"
 
 // Magnetic orientation, independent of GPS movement heading and map renderer.
 // The hardware is activated only while the Compass page is in the foreground.
+// Sensors are read through the Android NDK, not Qt Sensors: the OS-fused
+// rotation vector where it works, otherwise AOWIS' own fusion of the raw
+// gyroscope, accelerometer and magnetometer (see compass_sensor_source.h).
 class CompassService final : public QObject
 {
     Q_OBJECT
@@ -19,6 +22,9 @@ class CompassService final : public QObject
     Q_PROPERTY(QString direction READ direction NOTIFY headingChanged)
     Q_PROPERTY(double calibrationLevel READ calibrationLevel NOTIFY changed)
     Q_PROPERTY(QString calibrationStatus READ calibrationStatus NOTIFY changed)
+    Q_PROPERTY(double headingAccuracyDegrees READ headingAccuracyDegrees NOTIFY changed)
+    Q_PROPERTY(QString sourceDescription READ sourceDescription NOTIFY changed)
+    Q_PROPERTY(QString hardwareDescription READ hardwareDescription CONSTANT)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(bool sensorActive READ sensorActive NOTIFY changed)
     Q_PROPERTY(int sampleCount READ sampleCount NOTIFY changed)
@@ -34,6 +40,9 @@ public:
     QString direction() const;
     double calibrationLevel() const;
     QString calibrationStatus() const;
+    double headingAccuracyDegrees() const;
+    QString sourceDescription() const;
+    QString hardwareDescription() const;
     QString status() const;
     bool sensorActive() const;
     int sampleCount() const;
@@ -53,12 +62,14 @@ private:
     enum class State { Paused, Starting, Tracking, Stale, NoSamples, Unavailable, Error };
 
     void updateActivity();
-    void handleReading();
+    void handleSample(const CompassSensorSource::Sample &sample);
+    bool startSource(CompassSensorSource::Mode best);
     void handleTimeout();
     void advanceHeading();
     void changeState(State state);
 
-    QCompass m_compass;
+    CompassSensorSource m_source;
+    CompassSensorSource::Hardware m_hardware;
     QElapsedTimer m_clock;
     QTimer m_watchdog;
     QAbstractAnimation *m_frameAnimation = nullptr;
@@ -70,7 +81,10 @@ private:
     unsigned int m_framesSinceCheck = 0;
     int m_displayRotationDegrees = 0;
     double m_calibration = -1.0;
+    double m_headingAccuracy = -1.0;
+    double m_lastSampleSeconds = -1.0;
     qint64 m_lastReadingMs = -1;
+    qint64 m_lastStatusEmitMs = -1;
     qint64 m_startMs = -1;
     int m_sampleCount = 0;
     bool m_applicationActive = false;

@@ -716,6 +716,21 @@ Window {
                         }
                         Label {
                             Layout.fillWidth: true
+                            visible: text.length > 0
+                            text: compassService.sourceDescription
+                            color: root.uiMuted
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: compassService.hardwareDescription
+                            color: root.uiMuted
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
+                        Label {
+                            Layout.fillWidth: true
                             text: compassService.calibrationStatus
                             color: compassService.calibrationLevel >= 0 && compassService.calibrationLevel < .35
                                    ? root.uiError : root.uiMuted

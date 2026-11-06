@@ -1,5 +1,10 @@
 {
   "fr": {
+    "Source: Android fused rotation vector": "Source : vecteur de rotation fusionné d'Android",
+    "Source: AOWIS fusion (gyroscope + accelerometer + magnetometer)": "Source : fusion AOWIS (gyroscope + accéléromètre + magnétomètre)",
+    "Source: AOWIS fusion (accelerometer + magnetometer, no gyroscope)": "Source : fusion AOWIS (accéléromètre + magnétomètre, sans gyroscope)",
+    "Phone sensors: rotation vector %1 · gyroscope %2 · accelerometer %3 · magnetometer %4": "Capteurs du téléphone : vecteur de rotation %1 · gyroscope %2 · accéléromètre %3 · magnétomètre %4",
+    "%1 · estimated accuracy ±%2°": "%1 · précision estimée ±%2°",
     "%1 · MAGNETIC": "%1 · MAGNÉTIQUE",
     "%1 · sensor %2 · samples %3": "%1 · capteur %2 · mesures %3",
     "AOWIS": "AOWIS",
@@ -160,6 +165,11 @@
     "NW": "NO"
   },
   "ar": {
+    "Source: Android fused rotation vector": "المصدر: متجه الدوران المدمج من Android",
+    "Source: AOWIS fusion (gyroscope + accelerometer + magnetometer)": "المصدر: دمج AOWIS (جيروسكوب + مقياس تسارع + مقياس مغناطيسي)",
+    "Source: AOWIS fusion (accelerometer + magnetometer, no gyroscope)": "المصدر: دمج AOWIS (مقياس تسارع + مقياس مغناطيسي، بدون جيروسكوب)",
+    "Phone sensors: rotation vector %1 · gyroscope %2 · accelerometer %3 · magnetometer %4": "مستشعرات الهاتف: متجه الدوران %1 · الجيروسكوب %2 · مقياس التسارع %3 · المقياس المغناطيسي %4",
+    "%1 · estimated accuracy ±%2°": "%1 · الدقة المقدّرة ±%2°",
     "%1 · MAGNETIC": "%1 · مغناطيسي",
     "%1 · sensor %2 · samples %3": "%1 · المستشعر %2 · القراءات %3",
     "AOWIS": "AOWIS",
@@ -320,6 +330,11 @@
     "NW": "ش غ"
   },
   "de": {
+    "Source: Android fused rotation vector": "Quelle: fusionierter Android-Rotationsvektor",
+    "Source: AOWIS fusion (gyroscope + accelerometer + magnetometer)": "Quelle: AOWIS-Fusion (Gyroskop + Beschleunigungssensor + Magnetometer)",
+    "Source: AOWIS fusion (accelerometer + magnetometer, no gyroscope)": "Quelle: AOWIS-Fusion (Beschleunigungssensor + Magnetometer, ohne Gyroskop)",
+    "Phone sensors: rotation vector %1 · gyroscope %2 · accelerometer %3 · magnetometer %4": "Telefonsensoren: Rotationsvektor %1 · Gyroskop %2 · Beschleunigungssensor %3 · Magnetometer %4",
+    "%1 · estimated accuracy ±%2°": "%1 · geschätzte Genauigkeit ±%2°",
     "%1 · MAGNETIC": "%1 · MAGNETISCH",
     "%1 · sensor %2 · samples %3": "%1 · Sensor %2 · Messwerte %3",
     "AOWIS": "AOWIS",
@@ -480,6 +495,11 @@
     "NW": "NW"
   },
   "es": {
+    "Source: Android fused rotation vector": "Fuente: vector de rotación fusionado de Android",
+    "Source: AOWIS fusion (gyroscope + accelerometer + magnetometer)": "Fuente: fusión AOWIS (giroscopio + acelerómetro + magnetómetro)",
+    "Source: AOWIS fusion (accelerometer + magnetometer, no gyroscope)": "Fuente: fusión AOWIS (acelerómetro + magnetómetro, sin giroscopio)",
+    "Phone sensors: rotation vector %1 · gyroscope %2 · accelerometer %3 · magnetometer %4": "Sensores del teléfono: vector de rotación %1 · giroscopio %2 · acelerómetro %3 · magnetómetro %4",
+    "%1 · estimated accuracy ±%2°": "%1 · precisión estimada ±%2°",
     "%1 · MAGNETIC": "%1 · MAGNÉTICO",
     "%1 · sensor %2 · samples %3": "%1 · sensor %2 · muestras %3",
     "AOWIS": "AOWIS",

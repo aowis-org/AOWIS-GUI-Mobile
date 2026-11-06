@@ -1,19 +1,23 @@
 #include "compass_service.h"
 #include "compass_heading.h"
 
-#include <QCompassReading>
 #include <QAbstractAnimation>
 #include <functional>
 #include <utility>
 #include <QGuiApplication>
 #include <QScreen>
-#include <QSensor>
 #include <QtGlobal>
 
 namespace
 {
 constexpr qint64 kStaleAfterMs = 4000;
 constexpr qint64 kFirstReadingTimeoutMs = 6000;
+// The OS rotation vector should report within a fraction of a second; if it
+// stays silent, switch to AOWIS' own fusion quickly rather than waiting.
+constexpr qint64 kRotationVectorTimeoutMs = 2500;
+// Status text (sample count, rates) is refreshed at a readable cadence; the
+// heading itself is pushed on every display frame via headingChanged().
+constexpr qint64 kStatusRefreshMs = 250;
 
 // The Qt animation framework advances this on the GUI animation clock.
 // In Qt Quick's threaded render loop this clock is synchronized to frames.
@@ -50,25 +54,14 @@ CompassService::CompassService(QObject *parent)
                     emit changed();
                 });
     }
-    // Request high-frequency compass reports where supported. Qt/Android may
-    // deliver fewer; the motion observer handles arbitrary sample spacing.
-    this->m_compass.setDataRate(60);
+    this->m_hardware = CompassSensorSource::probeHardware();
+    this->m_source.setSampleHandler(
+        [this](const CompassSensorSource::Sample &sample) {
+            handleSample(sample);
+        });
     this->m_frameAnimation = new CompassFrameAnimation(
-        [this]() { this->advanceHeading(); }, this);
+        [this]() { advanceHeading(); }, this);
     this->m_watchdog.setInterval(1000);
-    connect(&this->m_compass, &QSensor::readingChanged,
-            this, &CompassService::handleReading);
-    connect(&this->m_compass, &QSensor::sensorError, this,
-            [this](int) {
-                if (this->m_applicationActive && this->m_pageVisible)
-                    this->changeState(State::Error);
-            });
-    connect(&this->m_compass, &QSensor::activeChanged, this,
-            [this]() {
-                if (this->m_applicationActive && this->m_pageVisible &&
-                    !this->m_compass.isActive() && this->m_state != State::Unavailable)
-                    this->changeState(State::Error);
-            });
     connect(&this->m_watchdog, &QTimer::timeout,
             this, &CompassService::handleTimeout);
 }
@@ -80,20 +73,19 @@ bool CompassService::hasHeading() const
            (this->m_clock.elapsed() - this->m_lastReadingMs <= kStaleAfterMs);
 }
 
+// Screen orientation is already applied per sample (it selects the
+// screen-top axis of the orientation), so the filter state is the
+// screen-top heading.
 double CompassService::headingDegrees() const
 {
-    return hasHeading()
-        ? AowisCompass::normalize(this->m_headingFilter.displayDegrees() + this->m_displayRotationDegrees)
-        : -1.0;
+    return hasHeading() ? this->m_headingFilter.displayDegrees() : -1.0;
 }
 
 double CompassService::roseHeadingDegrees() const
 {
     // The rose must receive an *unwrapped* angle. Normalizing here would
     // cause a visible 359 -> 0 degree jump on every north crossing.
-    return hasHeading()
-        ? this->m_headingFilter.continuousDisplayDegrees() + this->m_displayRotationDegrees
-        : -1.0;
+    return hasHeading() ? this->m_headingFilter.continuousDisplayDegrees() : -1.0;
 }
 
 QString CompassService::direction() const
@@ -108,13 +100,51 @@ double CompassService::calibrationLevel() const
 
 QString CompassService::calibrationStatus() const
 {
+    QString text;
     if (!hasHeading() || this->m_calibration < 0.0)
-        return tr("Calibration unavailable");
-    if (this->m_calibration < 0.35)
-        return tr("Low calibration · move phone in a figure eight");
-    if (this->m_calibration < 0.75)
-        return tr("Moderate calibration");
-    return tr("Good calibration");
+        text = tr("Calibration unavailable");
+    else if (this->m_calibration < 0.35)
+        text = tr("Low calibration · move phone in a figure eight");
+    else if (this->m_calibration < 0.75)
+        text = tr("Moderate calibration");
+    else
+        text = tr("Good calibration");
+    const double accuracy = headingAccuracyDegrees();
+    if (accuracy > 0.0)
+        text = tr("%1 · estimated accuracy ±%2°").arg(text).arg(qRound(accuracy));
+    return text;
+}
+
+double CompassService::headingAccuracyDegrees() const
+{
+    return hasHeading() ? this->m_headingAccuracy : -1.0;
+}
+
+QString CompassService::sourceDescription() const
+{
+    switch (this->m_source.mode())
+    {
+    case CompassSensorSource::Mode::RotationVector:
+        return tr("Source: Android fused rotation vector");
+    case CompassSensorSource::Mode::FusionWithGyroscope:
+        return tr("Source: AOWIS fusion (gyroscope + accelerometer + magnetometer)");
+    case CompassSensorSource::Mode::FusionWithoutGyroscope:
+        return tr("Source: AOWIS fusion (accelerometer + magnetometer, no gyroscope)");
+    case CompassSensorSource::Mode::None:
+        break;
+    }
+    return QString();
+}
+
+QString CompassService::hardwareDescription() const
+{
+    const QString yes = QStringLiteral("✓");
+    const QString no = QStringLiteral("✗");
+    return tr("Phone sensors: rotation vector %1 · gyroscope %2 · accelerometer %3 · magnetometer %4")
+        .arg(this->m_hardware.rotationVector ? yes : no)
+        .arg(this->m_hardware.gyroscope ? yes : no)
+        .arg(this->m_hardware.accelerometer ? yes : no)
+        .arg(this->m_hardware.magnetometer ? yes : no);
 }
 
 QString CompassService::status() const
@@ -135,7 +165,7 @@ QString CompassService::status() const
 
 bool CompassService::sensorActive() const
 {
-    return this->m_compass.isActive();
+    return this->m_source.active();
 }
 
 int CompassService::sampleCount() const
@@ -188,7 +218,7 @@ void CompassService::updateActivity()
 {
     if (!this->m_pageVisible || !this->m_applicationActive)
     {
-        this->m_compass.stop();
+        this->m_source.stop();
         this->m_watchdog.stop();
         this->m_frameAnimation->stop();
         this->m_headingFilter.reset();
@@ -197,6 +227,10 @@ void CompassService::updateActivity()
         this->m_lastFrameRateCheckMs = -1;
         this->m_framesSinceCheck = 0;
         this->m_lastReadingMs = -1;
+        this->m_lastStatusEmitMs = -1;
+        this->m_lastSampleSeconds = -1.0;
+        this->m_headingAccuracy = -1.0;
+        this->m_calibration = -1.0;
         this->m_startMs = -1;
         this->m_sampleCount = 0;
         changeState(State::Paused);
@@ -206,54 +240,81 @@ void CompassService::updateActivity()
     // A reading from before backgrounding or a different page must not be
     // presented as live immediately after returning.
     this->m_lastReadingMs = -1;
+    this->m_lastStatusEmitMs = -1;
     this->m_frameAnimation->stop();
     this->m_headingFilter.reset();
     this->m_sensorRateHz = 0.0;
     this->m_displayRateHz = 0.0;
     this->m_lastFrameRateCheckMs = -1;
     this->m_framesSinceCheck = 0;
+    this->m_lastSampleSeconds = -1.0;
+    this->m_headingAccuracy = -1.0;
+    this->m_calibration = -1.0;
     this->m_startMs = this->m_clock.elapsed();
     this->m_sampleCount = 0;
-    if (!this->m_compass.connectToBackend())
+    this->m_source.stop();
+    if (!startSource(CompassSensorSource::Mode::RotationVector))
     {
+        emit changed();
         changeState(State::Unavailable);
-        return;
-    }
-    changeState(State::Starting);
-    if (!this->m_compass.start())
-    {
-        changeState(State::Error);
         return;
     }
     this->m_watchdog.start();
 }
 
-void CompassService::handleReading()
+bool CompassService::startSource(CompassSensorSource::Mode best)
+{
+    this->m_headingFilter.reset();
+    this->m_startMs = this->m_clock.elapsed();
+    if (!this->m_source.start(best))
+        return false;
+    // The OS rotation vector and the gyroscope fusion are both stabilised;
+    // without a gyroscope the heading needs heavier averaging.
+    this->m_headingFilter.setTuning(
+        this->m_source.mode() == CompassSensorSource::Mode::FusionWithoutGyroscope
+            ? AowisCompass::kRawCompassTuning : AowisCompass::kFusedSensorTuning);
+    changeState(State::Starting);
+    emit changed();
+    return true;
+}
+
+void CompassService::handleSample(const CompassSensorSource::Sample &sample)
 {
     if (!this->m_pageVisible || !this->m_applicationActive)
         return;
-    const QCompassReading *reading = this->m_compass.reading();
-    if (reading == nullptr)
+    const double heading = AowisCompass::headingFromRotationVector(
+        sample.x, sample.y, sample.z, sample.w, this->m_displayRotationDegrees);
+    if (heading < 0.0)
+        return; // Degenerate pose (e.g. tipped far past flat): no fake value.
+    this->m_headingAccuracy = sample.headingAccuracyDegrees;
+    double calibration = AowisCompass::calibrationFromAndroidStatus(sample.magneticStatus);
+    if (calibration < 0.0 && sample.headingAccuracyDegrees > 0.0)
+        calibration = sample.headingAccuracyDegrees <= 10.0 ? 1.0
+                    : sample.headingAccuracyDegrees <= 25.0 ? 0.5 : 0.2;
+    const double sampleSeconds = sample.seconds;
+    if (!this->m_headingFilter.sample(heading, sampleSeconds))
         return;
-    const double degrees = AowisCompass::normalize(reading->azimuth());
-    if (degrees < 0.0)
-        return;
-    const qint64 now = this->m_clock.elapsed();
-    if (!this->m_headingFilter.sample(degrees, static_cast<double>(now) / 1000.0))
-        return;
-    if (this->m_lastReadingMs >= 0 && now > this->m_lastReadingMs)
+    if (this->m_lastSampleSeconds >= 0.0 && sampleSeconds > this->m_lastSampleSeconds)
     {
-        const double rate = 1000.0 / static_cast<double>(now - this->m_lastReadingMs);
+        const double rate = 1.0 / (sampleSeconds - this->m_lastSampleSeconds);
         this->m_sensorRateHz = this->m_sensorRateHz == 0.0
-            ? rate : 0.85 * this->m_sensorRateHz + 0.15 * rate;
+            ? rate : 0.95 * this->m_sensorRateHz + 0.05 * rate;
     }
+    this->m_lastSampleSeconds = sampleSeconds;
     ++this->m_sampleCount;
-    this->m_calibration = AowisCompass::clampedCalibration(reading->calibrationLevel());
+    this->m_calibration = calibration;
+    const qint64 now = this->m_clock.elapsed();
+    const bool firstSample = this->m_lastReadingMs < 0;
     this->m_lastReadingMs = now;
     changeState(State::Tracking);
     if (this->m_frameAnimation->state() != QAbstractAnimation::Running)
         this->m_frameAnimation->start();
-    emit changed();
+    if (firstSample || this->m_lastStatusEmitMs < 0 ||
+        now - this->m_lastStatusEmitMs >= kStatusRefreshMs)
+    {
+        this->m_lastStatusEmitMs = now;
+        emit changed();
+    }
 }
 
 void CompassService::handleTimeout()
@@ -263,8 +324,22 @@ void CompassService::handleTimeout()
     // from frame animation, which is never involved in reading the sensor.
     if (this->m_state == State::Starting && this->m_lastReadingMs < 0 &&
         this->m_startMs >= 0 &&
+        this->m_source.mode() == CompassSensorSource::Mode::RotationVector &&
+        this->m_clock.elapsed() - this->m_startMs > kRotationVectorTimeoutMs)
+    {
+        // Rotation vector listed but silent (seen on some vendor builds):
+        // continue with AOWIS' own fusion of the raw sensors.
+        this->m_source.stop();
+        if (!startSource(CompassSensorSource::Mode::FusionWithGyroscope))
+            changeState(State::NoSamples);
+        return;
+    }
+    if (this->m_state == State::Starting && this->m_lastReadingMs < 0 &&
+        this->m_startMs >= 0 &&
         this->m_clock.elapsed() - this->m_startMs > kFirstReadingTimeoutMs)
+    {
         changeState(State::NoSamples);
+    }
     if (this->m_lastReadingMs >= 0 &&
         this->m_clock.elapsed() - this->m_lastReadingMs > kStaleAfterMs)
     {
