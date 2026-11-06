@@ -20,6 +20,14 @@ validates the fields returned by providers. It never persists or transfers
 coordinates. The QML Settings panel and compact status pill consume its
 reactive properties.
 
+`UnitProfileSettings` is another renderer-independent Qt adapter. It uses a
+source-identical, header-only copy of AOWIS MODEL's canonical unit registry,
+built-in profiles and inheritance rules (see `src/unit_registry/README.md`).
+The full MODEL library is not yet linked in Mobile. The active unit profile
+and custom profile overrides are per-device display settings. Profile changes
+notify Qt Quick controls immediately; the GPS accuracy/altitude/speed
+readouts use those profiles. See [display units](units.md).
+
 `compile_linux.sh` builds against installed Linux Qt. `compile_android.sh`
 builds an ARM64 APK within a pinned Docker toolchain and optionally deploys
 with host ADB. **Android is a working build target**; iOS is not.
@@ -35,8 +43,8 @@ with host ADB. **Android is a working build target**; iOS is not.
 | `AOWIS-SERVER-MAP` | Map/terrain service and caching | Existing elsewhere, not linked into Mobile |
 | `AOWIS-SERVER-DVMDB` | Native project/branch/revision storage and working-copy semantics | Existing elsewhere, not linked into Mobile |
 
-Renaming repositories is independent of migrating code. Nothing in the
-current Mobile scene depends on MODEL, MAP or DVMDB.
+Renaming repositories is independent of migrating code. The current Mobile scene still does not consume MODEL, MAP or DVMDB network
+data; the display-unit adapter does use MODEL's unit-profile metadata.
 
 ## Planned shared renderer boundary
 

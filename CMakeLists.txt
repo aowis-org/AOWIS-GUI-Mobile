@@ -28,6 +28,10 @@ qt_add_executable(aowis-mobile
     src/appearance_settings.h
     src/language_settings.cpp
     src/language_settings.h
+    src/unit_profile_settings.cpp
+    src/unit_profile_settings.h
+    src/unit_display_text.h
+    src/unit_presented_quantities.h
     src/location_snapshot.cpp
     src/location_snapshot.h
     src/location_service.cpp
@@ -57,6 +61,11 @@ qt_add_executable(aowis-mobile
     src/lifecycle_watchdog.h
 )
 
+# Source-identical MODEL unit headers from the accompanying Desktop MODEL
+# snapshot. Swap to the pinned MODEL dependency when it enters Mobile's
+# Android/Linux toolchains (see src/unit_registry/README.md).
+target_include_directories(aowis-mobile PRIVATE src/unit_registry)
+
 # Package the editable UTF-8 translation catalog directly. This does not
 # require Qt LinguistTools in the cross-compilation toolchain.
 qt_add_resources(aowis-mobile "aowis_mobile_translations"
@@ -85,10 +94,11 @@ set_source_files_properties(qml/CompassRose.qml PROPERTIES QT_RESOURCE_ALIAS Com
 set_source_files_properties(qml/GradienterVial.qml PROPERTIES QT_RESOURCE_ALIAS GradienterVial.qml)
 set_source_files_properties(qml/PlumbBobInstrument.qml PROPERTIES QT_RESOURCE_ALIAS PlumbBobInstrument.qml)
 set_source_files_properties(qml/ToolMenuButton.qml PROPERTIES QT_RESOURCE_ALIAS ToolMenuButton.qml)
+set_source_files_properties(qml/UnitSettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS UnitSettingsPage.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml qml/UnitSettingsPage.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock
@@ -276,6 +286,15 @@ if(BUILD_TESTING)
     target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)
     target_link_libraries(aowis-mobile-map-server-settings-tests PRIVATE Qt6::Core)
     add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
+    add_executable(aowis-mobile-unit-registry-contract-tests
+        tests/unit_registry_contract_tests.cpp)
+    target_include_directories(aowis-mobile-unit-registry-contract-tests PRIVATE src/unit_registry)
+    add_test(NAME aowis-mobile-unit-registry-contract COMMAND aowis-mobile-unit-registry-contract-tests)
+    add_executable(aowis-mobile-unit-profile-settings-tests
+        tests/unit_profile_settings_tests.cpp src/unit_profile_settings.cpp src/unit_profile_settings.h)
+    target_include_directories(aowis-mobile-unit-profile-settings-tests PRIVATE src src/unit_registry)
+    target_link_libraries(aowis-mobile-unit-profile-settings-tests PRIVATE Qt6::Core)
+    add_test(NAME aowis-mobile-unit-profile-settings COMMAND aowis-mobile-unit-profile-settings-tests)
     add_executable(aowis-mobile-language-settings-tests
         tests/language_settings_tests.cpp src/language_settings.cpp src/language_settings.h)
     target_include_directories(aowis-mobile-language-settings-tests PRIVATE src)

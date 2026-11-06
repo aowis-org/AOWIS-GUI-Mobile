@@ -79,6 +79,16 @@ normal behavior (sending the application to the background). Desktop Escape
 closes the drawer or returns to the map as well. Unsaved changes to the map
 server fields are not applied: use **Save map server** before leaving.
 
+**Settings → Language** is at the top, followed by **Units**. The Units
+selector offers the same 12 MODEL-defined built-in display profiles as Desktop
+and saved custom profiles. **Detailed unit settings…** opens the same
+searchable quantity/unit choices and custom-profile controls as the Desktop
+Units page, in a touch-first layout. Changing profiles refreshes supported
+values immediately without restarting the application or changing MODEL
+data. The current GPS accuracy, altitude and speed readouts are unit-aware;
+map geometry and hydraulic views are not yet wired to real model measurements.
+Appearance is now at the bottom of Settings. See [display units](units.md).
+
 **Settings → Appearance** provides a persistent **Follow system / Dark / Light**
 selector. Switching takes effect immediately; the system choice follows the
 Android/desktop color scheme when Qt reports a change. The settings screens,

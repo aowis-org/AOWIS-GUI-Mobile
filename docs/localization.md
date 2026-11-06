@@ -60,3 +60,8 @@ field identifiers. The UI *presenting* their measurements is localized.
 The catalogs are editable JSON resources, not compiled `.qm` files, so the
 current Android Docker build needs **no Qt LinguistTools module**. The Qt
 translation bindings and live-switch behavior are otherwise conventional.
+
+The Units selector and detailed Units page also update when the language
+changes. Profile codes and UCUM identifiers remain stable, while user-facing
+labels, group titles and available quantity names are translated. Arabic
+mirroring changes text placement but not physical units or sensor angles.

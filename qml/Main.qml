@@ -57,7 +57,7 @@ Window {
     }
     function openPage(page) {
         navigationDrawer.close()
-        if (page === "settings") {
+        if (page === "settings" && activePage !== "units") {
             mapServerUrl.text = mapServerSettings.serverUrl
             mapServerPort.text = mapServerSettings.serverPort > 0
                                ? String(mapServerSettings.serverPort) : ""
@@ -74,6 +74,8 @@ Window {
     function navigateBack() {
         if (navigationDrawer.opened) {
             navigationDrawer.close()
+        } else if (activePage === "units") {
+            openPage("settings")
         } else if (activePage !== "map") {
             openPage("map")
         }
@@ -282,83 +284,6 @@ Window {
                     width: settingsScroll.availableWidth
                     spacing: 12
                     Label {
-                        text: qsTr("Appearance")
-                        color: root.uiAccent
-                        font.bold: true
-                        font.pixelSize: 19
-                    }
-                    Label {
-                        text: qsTr("Theme")
-                        color: root.uiText
-                        font.pixelSize: 14
-                    }
-                    ComboBox {
-                        id: themeSelector
-                        Layout.fillWidth: true
-                        model: [qsTr("Follow system"), qsTr("Dark"), qsTr("Light")]
-                        onActivated: function(index) {
-                            appearanceSettings.setMode(index === 1 ? "dark"
-                                                       : index === 2 ? "light" : "system")
-                        }
-                        palette.text: root.uiText
-                        palette.buttonText: root.uiText
-                        palette.base: root.uiInput
-                        palette.window: root.uiInput
-                        palette.highlight: root.uiSelection
-                        palette.highlightedText: root.uiSelectedText
-                        indicator: UiIcon {
-                            kind: "down"
-                            strokeColor: root.uiText
-                            width: 22
-                            height: 22
-                            x: languageSettings.rightToLeft ? 14 : themeSelector.width - width - 14
-                            y: (themeSelector.height - height) / 2
-                        }
-                        contentItem: Text {
-                            text: themeSelector.displayText
-                            color: root.uiText
-                            leftPadding: languageSettings.rightToLeft ? 32 : 12
-                            rightPadding: languageSettings.rightToLeft ? 12 : 32
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            implicitHeight: 48
-                            radius: 10
-                            color: root.uiInput
-                            border.color: themeSelector.activeFocus ? root.uiAccent : root.uiBorder
-                        }
-                        delegate: ItemDelegate {
-                            width: themeSelector.width
-                            text: modelData
-                            highlighted: themeSelector.highlightedIndex === index
-                            palette.text: root.uiText
-                            palette.highlightedText: root.uiSelectedText
-                            background: Rectangle {
-                                color: parent.highlighted ? root.uiSelection : root.uiInput
-                            }
-                        }
-                        popup: Popup {
-                            y: themeSelector.height - 1
-                            width: themeSelector.width
-                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 240)
-                            padding: 2
-                            contentItem: ListView {
-                                clip: true
-                                implicitHeight: contentHeight
-                                model: themeSelector.popup.visible ? themeSelector.delegateModel : null
-                                currentIndex: themeSelector.highlightedIndex
-                                ScrollIndicator.vertical: ScrollIndicator { }
-                            }
-                            background: Rectangle {
-                                radius: 10
-                                color: root.uiInput
-                                border.color: root.uiBorder
-                            }
-                        }
-                    }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
-                    Label {
                         text: qsTr("Language")
                         color: root.uiAccent
                         font.bold: true
@@ -437,6 +362,94 @@ Window {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {
+                        text: qsTr("Units")
+                        color: root.uiAccent
+                        font.bold: true
+                        font.pixelSize: 19
+                    }
+                    Label {
+                        text: qsTr("Unit profile")
+                        color: root.uiText
+                        font.pixelSize: 14
+                    }
+                    ComboBox {
+                        id: unitProfileSelector
+                        Layout.fillWidth: true
+                        model: unitProfileSettings.listProfiles(languageSettings.language, unitProfileSettings.revision)
+                        textRole: "label"
+                        currentIndex: unitProfileSettings.currentIndex
+                        onActivated: function(index) { unitProfileSettings.selectProfile(index) }
+                        palette.text: root.uiText
+                        palette.buttonText: root.uiText
+                        palette.base: root.uiInput
+                        palette.window: root.uiInput
+                        palette.highlight: root.uiSelection
+                        palette.highlightedText: root.uiSelectedText
+                        indicator: UiIcon {
+                            kind: "down"
+                            strokeColor: root.uiText
+                            width: 22; height: 22
+                            x: languageSettings.rightToLeft ? 14 : unitProfileSelector.width - width - 14
+                            y: (unitProfileSelector.height - height) / 2
+                        }
+                        contentItem: Text {
+                            text: unitProfileSelector.displayText
+                            color: root.uiText
+                            leftPadding: languageSettings.rightToLeft ? 32 : 12
+                            rightPadding: languageSettings.rightToLeft ? 12 : 32
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: unitProfileSelector.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        delegate: ItemDelegate {
+                            width: unitProfileSelector.width
+                            text: modelData.label
+                            highlighted: unitProfileSelector.highlightedIndex === index
+                            palette.text: root.uiText
+                            palette.highlightedText: root.uiSelectedText
+                            background: Rectangle {
+                                color: parent.highlighted ? root.uiSelection : root.uiInput
+                            }
+                        }
+                        popup: Popup {
+                            y: unitProfileSelector.height - 1
+                            width: unitProfileSelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 300)
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: unitProfileSelector.popup.visible ? unitProfileSelector.delegateModel : null
+                                currentIndex: unitProfileSelector.highlightedIndex
+                                ScrollIndicator.vertical: ScrollIndicator { }
+                            }
+                            background: Rectangle {
+                                radius: 10
+                                color: root.uiInput
+                                border.color: root.uiBorder
+                            }
+                        }
+                    }
+                    Button {
+                        Layout.fillWidth: true
+                        text: qsTr("Detailed unit settings…")
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        onClicked: root.openPage("units")
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+                    Label {
                         text: qsTr("Location")
                         color: root.uiAccent
                         font.bold: true
@@ -473,16 +486,16 @@ Window {
                         visible: locationService.hasFix
                         text: qsTr("Horizontal accuracy: %1\nVertical accuracy: %2\nAltitude (provider): %3\nSpeed: %4\nHeading: %5\nFix age: %6 s\nTimestamp (UTC): %7")
                             .arg(locationService.horizontalAccuracyMeters >= 0
-                                 ? "±" + locationService.horizontalAccuracyMeters.toFixed(1) + " m"
+                                 ? "±" + unitProfileSettings.formatDistance(locationService.horizontalAccuracyMeters, unitProfileSettings.revision)
                                  : qsTr("unavailable"))
                             .arg(locationService.verticalAccuracyMeters >= 0
-                                 ? "±" + locationService.verticalAccuracyMeters.toFixed(1) + " m"
+                                 ? "±" + unitProfileSettings.formatDistance(locationService.verticalAccuracyMeters, unitProfileSettings.revision)
                                  : qsTr("unavailable"))
                             .arg(locationService.altitudeAvailable
-                                 ? locationService.altitudeMeters.toFixed(1) + " m"
+                                 ? unitProfileSettings.formatAltitude(locationService.altitudeMeters, unitProfileSettings.revision)
                                  : qsTr("unavailable"))
                             .arg(locationService.speedMetersPerSecond >= 0
-                                 ? (locationService.speedMetersPerSecond * 3.6).toFixed(1) + " km/h"
+                                 ? unitProfileSettings.formatSpeed(locationService.speedMetersPerSecond, unitProfileSettings.revision)
                                  : qsTr("unavailable"))
                             .arg(locationService.headingDegrees >= 0
                                  ? locationService.headingDegrees.toFixed(0) + "°"
@@ -609,9 +622,104 @@ Window {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+                    Label {
+                        text: qsTr("Appearance")
+                        color: root.uiAccent
+                        font.bold: true
+                        font.pixelSize: 19
+                    }
+                    Label {
+                        text: qsTr("Theme")
+                        color: root.uiText
+                        font.pixelSize: 14
+                    }
+                    ComboBox {
+                        id: themeSelector
+                        Layout.fillWidth: true
+                        model: [qsTr("Follow system"), qsTr("Dark"), qsTr("Light")]
+                        onActivated: function(index) {
+                            appearanceSettings.setMode(index === 1 ? "dark"
+                                                       : index === 2 ? "light" : "system")
+                        }
+                        palette.text: root.uiText
+                        palette.buttonText: root.uiText
+                        palette.base: root.uiInput
+                        palette.window: root.uiInput
+                        palette.highlight: root.uiSelection
+                        palette.highlightedText: root.uiSelectedText
+                        indicator: UiIcon {
+                            kind: "down"
+                            strokeColor: root.uiText
+                            width: 22
+                            height: 22
+                            x: languageSettings.rightToLeft ? 14 : themeSelector.width - width - 14
+                            y: (themeSelector.height - height) / 2
+                        }
+                        contentItem: Text {
+                            text: themeSelector.displayText
+                            color: root.uiText
+                            leftPadding: languageSettings.rightToLeft ? 32 : 12
+                            rightPadding: languageSettings.rightToLeft ? 12 : 32
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: themeSelector.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        delegate: ItemDelegate {
+                            width: themeSelector.width
+                            text: modelData
+                            highlighted: themeSelector.highlightedIndex === index
+                            palette.text: root.uiText
+                            palette.highlightedText: root.uiSelectedText
+                            background: Rectangle {
+                                color: parent.highlighted ? root.uiSelection : root.uiInput
+                            }
+                        }
+                        popup: Popup {
+                            y: themeSelector.height - 1
+                            width: themeSelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 240)
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: themeSelector.popup.visible ? themeSelector.delegateModel : null
+                                currentIndex: themeSelector.highlightedIndex
+                                ScrollIndicator.vertical: ScrollIndicator { }
+                            }
+                            background: Rectangle {
+                                radius: 10
+                                color: root.uiInput
+                                border.color: root.uiBorder
+                            }
+                        }
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                 }
             }
         }
+    }
+
+    UnitSettingsPage {
+        id: unitsPage
+        anchors.fill: parent
+        visible: root.activePage === "units"
+        surfaceColor: root.uiSurface
+        raisedColor: root.uiRaised
+        inputColor: root.uiInput
+        textColor: root.uiText
+        mutedColor: root.uiMuted
+        accentColor: root.uiAccent
+        borderColor: root.uiBorder
+        selectedColor: root.uiSelection
+        selectedTextColor: root.uiSelectedText
+        rightToLeft: languageSettings.rightToLeft
+        onBackRequested: root.openPage("settings")
     }
 
     // Separate instrument page. Qt Sensors supplies magnetic bearing; do not

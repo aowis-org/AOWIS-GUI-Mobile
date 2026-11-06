@@ -2,6 +2,7 @@
 #include "map_server_settings.h"
 #include "appearance_settings.h"
 #include "language_settings.h"
+#include "unit_profile_settings.h"
 #include "location_service.h"
 #include "compass_service.h"
 #include "gradienter_service.h"
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
     MapServerSettings mapServerSettings;
     AppearanceSettings appearanceSettings;
     LanguageSettings languageSettings;
+    UnitProfileSettings unitProfileSettings;
     LocationService locationService;
     CompassService compassService;
     GradienterService gradienterService;
@@ -77,6 +79,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("languageSettings"), &languageSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("unitProfileSettings"), &unitProfileSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("locationService"), &locationService);
     engine.rootContext()->setContextProperty(QStringLiteral("compassService"), &compassService);
     engine.rootContext()->setContextProperty(QStringLiteral("gradienterService"), &gradienterService);
