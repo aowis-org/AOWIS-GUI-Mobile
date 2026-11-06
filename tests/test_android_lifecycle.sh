@@ -5,7 +5,7 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/bin" "$work/repo/tools" "$work/repo/fixtures"
-cp "$root/tools/test_android_lifecycle.sh" "$work/repo/tools/"
+cp "$root/tools/test_android_lifecycle.sh" "$root/tools/launch_android_app.sh" "$work/repo/tools/"
 printf 'utc,event,duration_us\n2026-11-05T16:00:00Z,recovered,23000\n' > "$work/repo/fixtures/events.csv"
 cat > "$work/bin/adb" <<'MOCK_ADB'
 #!/usr/bin/env bash
@@ -25,7 +25,10 @@ case "$1" in
         case "$1" in
             pm) printf 'package:/data/app/org.aowis.mobile/base.apk\n' ;;
             getprop) printf 'Test Handset\n' ;;
-            am) : ;;
+            cmd)
+                printf 'priority=0 preferredOrder=0 match=0x108000\norg.aowis.mobile/org.qtproject.qt.android.bindings.QtActivity\n' ;;
+            am)
+                printf 'Starting: Intent { cmp=org.aowis.mobile/org.qtproject.qt.android.bindings.QtActivity }\nStatus: ok\n' ;;
             input) : ;;
             pidof)
                 if [[ "${FAKE_RESTART:-0}" == 1 ]]; then
@@ -67,7 +70,8 @@ cd "$work/repo"
 find benchmarks/lifecycle -name 'events.csv' | grep -q .
 grep -q 'Errors: 0' "$work/result.log"
 grep -q 'shell input keyevent KEYCODE_HOME' "$MOCK_LOG"
-grep -q 'shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.aowis.mobile' "$MOCK_LOG"
+grep -q 'shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.aowis.mobile' "$MOCK_LOG"
+grep -q 'shell am start -W -n org.aowis.mobile/org.qtproject.qt.android.bindings.QtActivity -a android.intent.action.MAIN -c android.intent.category.LAUNCHER' "$MOCK_LOG"
 ! grep -q 'monkey' "$MOCK_LOG"
 ! grep -q 'accelerometer_rotation' "$MOCK_LOG"
 grep -q 'exec-out run-as org.aowis.mobile tar' "$MOCK_LOG"

@@ -10,6 +10,7 @@ mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/bgfx.cmake/bgfx/incl
     "$work/repo/external/AOWIS-GUI-Render" "$work/bin" "$work/cache"
 cp "$root/compile_android.sh" "$root/prepare_android_docker.sh" "$work/repo/"
 cp "$root/tools/qt-android/"*.sh "$work/repo/tools/qt-android/"
+cp "$root/tools/launch_android_app.sh" "$work/repo/tools/"
 touch "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" \
     "$work/repo/external/AOWIS-GUI-Render/CMakeLists.txt"
 cat > "$work/bin/docker" <<'MOCK_DOCKER'
@@ -63,7 +64,26 @@ case "${1:-}" in
         printf '%s' "$2" > "$MOCK_ROOT/wifi-connected"
         printf 'connected to %s\n' "$2" ;;
     -s)
-        if [[ "${3:-}" == get-state ]]; then printf 'device\n'; fi ;;
+        if [[ "${3:-}" == shell && "${4:-}" == cmd ]]; then
+            if [[ "${FAKE_LAUNCH_NO_ACTIVITY:-0}" == 1 ]]; then
+                printf 'No activity found\n'
+            else
+                printf 'priority=0 preferredOrder=0 match=0x108000\norg.aowis.mobile/org.qtproject.qt.android.bindings.QtActivity\n'
+            fi
+        elif [[ "${3:-}" == shell && "${4:-}" == am ]]; then
+            if [[ "${FAKE_LAUNCH_OUTPUT_ERROR:-0}" == 1 ]]; then
+                printf 'Error: Activity not started, unable to resolve Intent\n'
+            elif [[ "${FAKE_LAUNCH_EXIT_ERROR:-0}" == 1 ]]; then
+                exit 31
+            else
+                printf 'Starting: Intent { cmp=org.aowis.mobile/org.qtproject.qt.android.bindings.QtActivity }\nStatus: ok\n'
+            fi
+        elif [[ "${3:-}" == shell && "${4:-}" == pidof ]]; then
+            [[ "${FAKE_LAUNCH_NO_PID:-0}" != 1 ]] || exit 1
+            printf '12345\n'
+        elif [[ "${3:-}" == get-state ]]; then
+            printf 'device\n'
+        fi ;;
 esac
 MOCK_ADB
 chmod +x "$work/bin/docker" "$work/bin/adb"
@@ -107,10 +127,25 @@ run_case --baseline
 assert_log "$work/data/aowis-gui-mobile/android-debug-signing:/tmp/.android"
 assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-baseline'
 assert_log 'adb -s mobile1 install -r'
-assert_log 'adb -s mobile1 shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.aowis.mobile'
+assert_log 'adb -s mobile1 shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.aowis.mobile'
+assert_log 'adb -s mobile1 shell am start -W -n org.aowis.mobile/org.qtproject.qt.android.bindings.QtActivity -a android.intent.action.MAIN -c android.intent.category.LAUNCHER'
+assert_log 'adb -s mobile1 shell pidof org.aowis.mobile'
 assert_not_log 'monkey'
 assert_not_log 'settings put'
 assert_not_log 'accelerometer_rotation'
+
+# Real launch errors can be printed on stdout even when `adb shell` exits 0.
+# Never report success unless an activity resolves, am start succeeds AND
+# the installed app has a live process.
+for reason in FAKE_LAUNCH_NO_ACTIVITY FAKE_LAUNCH_OUTPUT_ERROR FAKE_LAUNCH_EXIT_ERROR FAKE_LAUNCH_NO_PID; do
+    export "$reason=1"
+    : > "$MOCK_LOG"
+    if ./compile_android.sh --run > "$work/output.log" 2>&1; then
+        fail "compile_android.sh accepted Android launcher failure: $reason"
+    fi
+    grep -Fq 'Launching AOWIS Mobile failed' "$work/output.log" || fail "missing launcher failure diagnostics: $reason"
+    unset "$reason"
+done
 
 # Multiple devices cannot be chosen implicitly, and explicit --run requires one.
 export FAKE_DEVICE_COUNT=2

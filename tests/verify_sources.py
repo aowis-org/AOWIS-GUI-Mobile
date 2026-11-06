@@ -119,8 +119,12 @@ checks = [
      'aowis-mobile-appearance-settings-tests' in cmake),
     ("settings regression test", 'aowis-mobile-map-server-settings-tests' in cmake and
      'aowis-mobile-map-server-settings' in cmake),
-    ("Android launch package without randomized input", 'shell am start -W -a android.intent.action.MAIN'
-     in (root / "compile_android.sh").read_text() and
+    ("explicit Android launcher activity and verified process", 'tools/launch_android_app.sh' in
+     (root / "compile_android.sh").read_text() and
+     'tools/launch_android_app.sh' in (root / "tools/test_android_lifecycle.sh").read_text() and
+     'cmd package resolve-activity --brief' in (root / "tools/launch_android_app.sh").read_text() and
+     'shell am start -W' in (root / "tools/launch_android_app.sh").read_text() and
+     'shell pidof' in (root / "tools/launch_android_app.sh").read_text() and
      'settings put' not in (root / "compile_android.sh").read_text()),
     ("Linux executable", '--target aowis-mobile' in (root / "compile_linux.sh").read_text()),
     ("Linux desktop entry", 'Name=AOWIS Mobile\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text() and

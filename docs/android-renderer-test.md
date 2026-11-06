@@ -212,8 +212,10 @@ Android device approval cannot be automated. iOS builds are not yet supported.
 ## Deployment and phone rotation preference
 
 `compile_android.sh` installs the APK with `adb install -r` and opens its launcher
-with a direct `adb shell am start` intent. The Android lifecycle test likewise
-uses `am start` instead of the randomized-input `monkey` command. Neither
+by resolving the installed MAIN/LAUNCHER activity and starting that **explicit
+component** with `adb shell am start -W -n`. Deployment verifies the start
+response and the application process before reporting success. The lifecycle
+runner uses the same launch helper. Neither
 script writes `settings put system accelerometer_rotation`, changes
 `user_rotation`, sends rotation test events, or configures the device's global
 Auto-rotate switch. Android's own rotation preference remains user-controlled.

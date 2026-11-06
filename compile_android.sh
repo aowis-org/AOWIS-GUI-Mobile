@@ -317,10 +317,7 @@ if ! install_output="$(adb -s "$serial" install -r "$apk" 2>&1)"; then
     die "APK installation failed on $serial"
 fi
 printf '%s\n' "$install_output"
-# Start the exported launcher activity directly. `monkey` is an input-fuzzing
-# tool; deployment must not inject random UI, key, touch or rotation events.
-# In particular, do not modify Android's system auto-rotate setting.
-adb -s "$serial" shell am start -W -a android.intent.action.MAIN \
-    -c android.intent.category.LAUNCHER -p org.aowis.mobile \
+# Resolve and launch the installed MAIN/LAUNCHER activity explicitly. Never
+# manipulate Android's auto-rotate setting or inject synthetic input events.
+"$project_dir/tools/launch_android_app.sh" "$serial" \
     || die "Launching AOWIS Mobile failed on $serial"
-echo '=== AOWIS Mobile launched ==='
