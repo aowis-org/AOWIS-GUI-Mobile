@@ -12,7 +12,7 @@ header = (root / "src/compass_service.h").read_text(encoding="utf-8")
 docker = (root / "tools/qt-android/Dockerfile").read_text(encoding="utf-8")
 checks = {
     "Qt Sensors linked and UI asset packaged":
-        "Qt6::Sensors" in cmake and "qml/CompassRose.qml" in cmake,
+        "Qt6::Sensors" in cmake and "qml/CompassRose.qml" in cmake and "qml/CompassMotion.js" in cmake,
     "Android Qt Sensors provisioned for host and ARM64":
         docker.count("--modules qtsensors") == 2 and
         "Qt6Sensors/Qt6SensorsConfig.cmake" in docker,
@@ -28,8 +28,13 @@ checks = {
     "screen orientation correction":
         "nativeOrientation()" in service and "angleBetween(" in service,
     "accessible polished vector compass and smooth rotation":
-        "Canvas {" in rose and "RotationAnimation.Shortest" in rose and
+        "Canvas {" in rose and "FrameAnimation {" in rose and
+        "CompassMotion.advance(" in rose and
         "Accessible.name:" in rose and "compassRose" in qml,
+    "digital bearing tracks the animated dial":
+        "compassRose.displayedHeadingDegrees" in qml and "compassRose.displayDirection" in qml,
+    "uninterrupted frame-based smoothing, no restarted rotation tween":
+        "RotationAnimation" not in rose and "Math.abs(compass.headingError)" in rose,
     "hamburger navigation and Android Back":
         'text: "Compass"' in qml and 'root.openPage("compass")' in qml and
         'activePage !== "map"' in qml,

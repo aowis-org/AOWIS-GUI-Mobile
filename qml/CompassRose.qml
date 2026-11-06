@@ -1,4 +1,5 @@
 import QtQuick
+import "CompassMotion.js" as CompassMotion
 
 // Vector-drawn magnetic compass. No font-icon packs, external assets, or
 // renderer dependency. Dial texture is retained and only rotated on updates.
@@ -7,6 +8,32 @@ Item {
     property bool darkTheme: true
     property bool hasHeading: false
     property real headingDegrees: 0
+    // Displayed bearing is advanced at the actual scene-graph frame rate.
+    // It intentionally follows (rather than immediately mirroring) sensor data.
+    property real displayedHeadingDegrees: 0
+    property bool displayInitialized: false
+    readonly property real headingError: CompassMotion.shortestDelta(displayedHeadingDegrees, headingDegrees)
+    readonly property string displayDirection: hasHeading && displayInitialized
+                                               ? CompassMotion.direction(displayedHeadingDegrees) : "--"
+
+    function alignToHeading() {
+        if (!hasHeading || !isFinite(headingDegrees) || headingDegrees < 0) {
+            displayInitialized = false
+            displayedHeadingDegrees = 0
+            return
+        }
+        displayedHeadingDegrees = CompassMotion.normalize(headingDegrees)
+        displayInitialized = true
+    }
+
+    onHasHeadingChanged: alignToHeading()
+    onVisibleChanged: {
+        // Returning from another page/background must not animate toward a
+        // reading left over from the previous sensor session.
+        if (visible)
+            alignToHeading()
+    }
+    Component.onCompleted: alignToHeading()
     readonly property color bezelLight: darkTheme ? "#8caab6" : "#9cbbc4"
     readonly property color bezelDark: darkTheme ? "#10222f" : "#415b6a"
     readonly property color dialFace: darkTheme ? "#122b3b" : "#f5f9f8"
@@ -18,7 +45,7 @@ Item {
     implicitWidth: 340
     implicitHeight: 340
     Accessible.role: Accessible.Indicator
-    Accessible.name: hasHeading ? "Magnetic heading " + Math.round(headingDegrees) + " degrees" : "Magnetic heading unavailable"
+    Accessible.name: hasHeading && displayInitialized ? "Magnetic heading " + Math.round(displayedHeadingDegrees) + " degrees" : "Magnetic heading unavailable"
 
     Canvas {
         id: bezel
@@ -61,15 +88,8 @@ Item {
         anchors.centerIn: parent
         width: compass.diameter * .91
         height: width
-        rotation: compass.hasHeading ? -compass.headingDegrees : 0
-        Behavior on rotation {
-            enabled: compass.hasHeading
-            RotationAnimation {
-                duration: 230
-                direction: RotationAnimation.Shortest
-                easing.type: Easing.OutCubic
-            }
-        }
+        rotation: compass.hasHeading && compass.displayInitialized
+                  ? -compass.displayedHeadingDegrees : 0
         Canvas {
             id: rose
             anchors.fill: parent
@@ -150,6 +170,18 @@ Item {
                 ctx.beginPath(); ctx.arc(0, 0, r * .025, 0, 2 * Math.PI)
                 ctx.fillStyle = compass.dialAccent; ctx.fill()
             }
+        }
+    }
+
+    // The scene-graph's animation clock advances the dial once per rendered
+    // frame, independently of the sensor's update rate (often ~20 Hz).
+    // Stop requesting frames when the dial has caught up or isn't visible.
+    FrameAnimation {
+        running: compass.visible && compass.hasHeading && compass.displayInitialized
+                 && Math.abs(compass.headingError) > 0.08
+        onTriggered: {
+            compass.displayedHeadingDegrees = CompassMotion.advance(
+                compass.displayedHeadingDegrees, compass.headingDegrees, frameTime)
         }
     }
 
