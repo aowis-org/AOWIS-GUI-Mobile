@@ -198,7 +198,7 @@ assert_log 'docker run '
 # Prevent regression to obsolete aqtinstall release or Qt archive architecture.
 source "$root/tools/qt-android/toolchain_versions.sh"
 [[ "$AOWIS_ANDROID_AQT_GIT_REF" =~ ^[a-f0-9]{40}$ ]] || fail 'aqt ref is not a 40-character commit'
-[[ "$AOWIS_ANDROID_TOOLCHAIN_REVISION" -ge 3 ]] || fail 'image version was not bumped'
+[[ "$AOWIS_ANDROID_TOOLCHAIN_REVISION" -ge 4 ]] || fail 'image version was not bumped'
 grep -Fq -- 'aqtinstall @ git+https://github.com/miurahr/aqtinstall.git@${AQT_GIT_REF}' "$root/tools/qt-android/Dockerfile" || fail 'pinned modern aqt is missing'
 grep -Fq -- '"${QT_VERSION}" linux_gcc_64' "$root/tools/qt-android/Dockerfile" || fail 'old Linux Qt archive architecture'
 grep -Fq -- '"${QT_VERSION}" android_arm64_v8a' "$root/tools/qt-android/Dockerfile" || fail 'Android Qt architecture changed'
@@ -208,6 +208,10 @@ grep -Fq -- 'AQT_GIT_REF=$AOWIS_ANDROID_AQT_GIT_REF' "$root/prepare_android_dock
 # Android's shared-library install destination, and Qt 6.12 TaskTree addon.
 grep -Fq 'libglib2.0-0t64' "$root/tools/qt-android/Dockerfile" || fail 'GLib host runtime missing'
 grep -Fq 'libexec/qmlimportscanner' "$root/tools/qt-android/Dockerfile" || fail 'qmlimportscanner missing from preflight'
+grep -Fq -- '--modules qtpositioning' "$root/tools/qt-android/Dockerfile" || fail 'Qt Positioning addon not provisioned'
+grep -Fq 'qt_add_android_permission(aowis-mobile NAME android.permission.ACCESS_FINE_LOCATION)' "$root/CMakeLists.txt" || fail 'Android fine location permission missing'
+grep -Fq 'qt_add_android_permission(aowis-mobile NAME android.permission.ACCESS_COARSE_LOCATION)' "$root/CMakeLists.txt" || fail 'Android coarse location permission missing'
+if grep -Fq 'android.permission.ACCESS_BACKGROUND_LOCATION' "$root/CMakeLists.txt"; then fail 'unrequested Android background location permission'; fi
 grep -Fq -- '--modules qttasktree' "$root/tools/qt-android/Dockerfile" || fail 'TaskTree not requested'
 grep -Fq 'android_arm64_v8a/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake' "$root/tools/qt-android/Dockerfile" || fail 'TaskTree Android validation missing'
 grep -Eq '^[[:space:]]+LIBRARY DESTINATION lib$' "$root/CMakeLists.txt" || fail 'Android library install destination missing'

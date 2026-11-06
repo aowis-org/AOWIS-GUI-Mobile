@@ -14,6 +14,12 @@ math. The geometry has a dependency-free C++ unit test.
 `external/bgfx.cmake` is a **temporary pinned submodule** with nested
 `bgfx`, `bx` and `bimg`. It is not part of a shared AOWIS renderer library yet.
 
+The renderer-independent `LocationService` uses Qt Positioning and runtime
+`QLocationPermission` for automatically started foreground positioning; `LocationSnapshot`
+validates the fields returned by providers. It never persists or transfers
+coordinates. The QML Settings panel and compact status pill consume its
+reactive properties.
+
 `compile_linux.sh` builds against installed Linux Qt. `compile_android.sh`
 builds an ARM64 APK within a pinned Docker toolchain and optionally deploys
 with host ADB. **Android is a working build target**; iOS is not.

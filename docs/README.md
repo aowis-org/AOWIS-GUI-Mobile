@@ -8,6 +8,7 @@ A capability in a related repository is not automatically integrated here.
 | Document | What it answers |
 | --- | --- |
 | [Product](product.md) | What Mobile is for, scope, platform naming and product boundaries |
+| [Device location](location.md) | Foreground GPS/location service, permission and fix semantics |
 | [Field workflows](survey-workflows.md) | Observation versus Direct Edit; geometry/GPS capture and review |
 | [Architecture](architecture.md) | What exists, dependencies, planned library boundary |
 | [Data model](data-model.md) | Generic geometry, observations, domain objects and identities |
@@ -25,14 +26,17 @@ platform-specific app labels and icon. GPU scene/camera and deterministic stress
 selectable large-network benchmark harness and on-device CSV capture are
 implemented but device performance has not yet been characterized.
 Real-world Linux and Android visual operation has been reported and shown.
+Foreground-only GPS/location acquisition is now implemented in source, with
+Android permission declarations and automatic foreground acquisition; device accuracy
+and permission interactions still require testing.
 
 **Not yet accepted:** sustained large-scene GPU/CPU/frame-pacing results; Android
 rotation/suspend/context-recreation durability. A recovery watchdog and
 repeatable ADB Home/resume runner exist but are not yet device-validated. A single successful phone
 launch is not evidence of those cases.
 
-**Not implemented:** real map tiles, geographic coordinate navigation, GPS,
-feature capture, areas, observations, hydraulic direct edits, durable offline
+**Not implemented:** real map tiles, geographic coordinate navigation, geographic
+GPS map marker or saved observation capture, feature capture, areas, observations, hydraulic direct edits, durable offline
 survey storage, DVMDB synchronization, and OSM publication. iOS is an intended
 future platform, not a current build target.
 

@@ -91,7 +91,9 @@ is implemented in Mobile yet. Saving does not imply that the server is online.
 
 The **existing** grid, colored segments and junctions are synthetic graphics
 for GPU integration tests. None represent captured sites or hydraulic assets.
-There are no survey forms, GPS permissions, offline DB, maps or sync yet.
+Foreground-only GPS/location permissions and a live position readout are
+implemented; no position-to-map projection, survey forms, offline DB, maps or
+sync exist yet.
 The rendering foundation has been exercised on Linux and Android. See
 [renderer integration](renderer-lab.md) and [roadmap](roadmap.md).
 

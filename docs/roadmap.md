@@ -74,7 +74,9 @@ requests; that is part of connecting the actual map renderer and tile pipeline.
 ## Map and survey foundation
 
 Replace synthetic geometry with real AOWIS-MAP/source imagery and geographic
-coordinates; add GPS position, selection, point/line/area tools and a typed
+coordinates; the automatic foreground Qt Positioning GPS service is implemented, but its
+position cannot yet be plotted on the synthetic map. Add map-position projection,
+selection, point/line/area tools and a typed
 classification interface. Introduce generic geographic geometry (including
 areas) into the appropriate shared MODEL layer.
 

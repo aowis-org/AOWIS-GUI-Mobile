@@ -20,14 +20,18 @@ The mobile UI now starts with a clean, map-first view. Its hamburger menu
 opens **Settings → Appearance** (system/dark/light interface theme) and
 **Settings → Map server** (persistent HTTP/HTTPS URL and numeric port)
 and **Diagnostics** (stress presets, recording, GPU recovery, zoom/recenter).
-These settings only configure a future map client; they do **not** yet load
+Settings reports automatically acquired foreground phone position,
+provider status, latitude/longitude and reported accuracy. A small status pill
+appears on the map. The sample is not persisted or
+placed on the synthetic map.
+These map-server settings only configure a future map client; they do **not** yet load
 map imagery or establish a server connection.
 The Android APK builds in a pinned Docker toolchain on Arch Linux and has been
 launched on a physical Android phone. Linux rendering has also been exercised.
 
 **This is not yet a survey editor.** The visible grid, pipes and junctions are a
 synthetic rendering test scene—not actual georeferenced maps or saved network
-objects. There is no GPS capture, feature classification, point/line/area editor,
+objects. There is no GPS-based survey capture, feature classification, point/line/area editor,
 offline map package, local observation store or DVMDB synchronization in this
 repository yet. The stress harness has initial Linux/Android recordings; further controlled
 performance and genuine context-loss testing remain open.
@@ -76,7 +80,7 @@ A `.gitmodules` entry is not enough: the repository must also track a gitlink
 with a diagnostic. New clones should use `git clone --recurse-submodules`,
 or run `./git_submodule_init.sh` afterwards.
 
-Linux (installed Qt 6, CMake, Ninja, C++ compiler):
+Linux (installed Qt 6 including Qt Positioning, CMake, Ninja, C++ compiler):
 
 ```bash
 ./compile_linux.sh                # build and launch bgfx underlay
@@ -100,7 +104,8 @@ Android ARM64 (Docker on host; optional Arch `adb` for deployment):
 No Qt Online Installer, host Android SDK/NDK or host Java installation is
 required for Android builds. ADB authorization/pairing still requires consent
 on the phone. The Docker toolchain is pinned; its first build downloads Qt and
-Android dependencies. See [Android build and device guide](docs/android-renderer-test.md)
+Android dependencies. See [device location](docs/location.md) for GPS/permissions and
+[Android build and device guide](docs/android-renderer-test.md)
 for setup, diagnostics and APK paths, and
 [renderer integration](docs/renderer-lab.md) for the current GPU design.
 

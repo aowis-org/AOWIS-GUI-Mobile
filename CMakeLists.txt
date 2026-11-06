@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 
 # AOWIS mobile application, currently retaining an instrumented renderer scene.
 # Keep the proven Qt Quick/bgfx integration while product features are added.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Positioning)
 qt_standard_project_setup(REQUIRES 6.5)
 
 option(AOWIS_MOBILE_WITH_BGFX "Build the experimental bgfx/Qt Quick direct-underlay path" ON)
@@ -26,6 +26,10 @@ qt_add_executable(aowis-mobile
     src/map_server_settings.h
     src/appearance_settings.cpp
     src/appearance_settings.h
+    src/location_snapshot.cpp
+    src/location_snapshot.h
+    src/location_service.cpp
+    src/location_service.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
@@ -71,10 +75,15 @@ if(ANDROID)
         QT_ANDROID_VERSION_CODE 1
         QT_ANDROID_VERSION_NAME "0.1"
     )
+    # Qt 6.12 generates its stock Android manifest. Declare both foreground
+    # permission levels here; Android lets the user grant coarse location only.
+    # Never request background-location permission for this feature.
+    qt_add_android_permission(aowis-mobile NAME android.permission.ACCESS_COARSE_LOCATION)
+    qt_add_android_permission(aowis-mobile NAME android.permission.ACCESS_FINE_LOCATION)
 endif()
 
 target_link_libraries(aowis-mobile PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Positioning
 )
 
 if(AOWIS_MOBILE_WITH_BGFX)
@@ -205,6 +214,11 @@ if(BUILD_TESTING)
         src/performance_samples.cpp
     )
     add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
+    add_executable(aowis-mobile-location-snapshot-tests
+        tests/location_snapshot_tests.cpp src/location_snapshot.cpp src/location_snapshot.h)
+    target_include_directories(aowis-mobile-location-snapshot-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-location-snapshot-tests PRIVATE Qt6::Core Qt6::Positioning)
+    add_test(NAME aowis-mobile-location-snapshot COMMAND aowis-mobile-location-snapshot-tests)
     add_executable(aowis-mobile-map-server-settings-tests
         tests/map_server_settings_tests.cpp src/map_server_settings.cpp src/map_server_settings.h)
     target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)

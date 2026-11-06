@@ -199,6 +199,44 @@ Window {
         }
     }
 
+    // Location tracking starts automatically in the foreground. Only a
+    // compact status pill overlays the map; synthetic geometry has no geo projection.
+    Button {
+        id: locationChip
+        visible: root.activePage === "map"
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 14
+        width: Math.min(root.width - 28, Math.max(168, locationChipText.implicitWidth + 28))
+        height: 44
+        z: 1
+        onClicked: root.openPage("settings")
+        contentItem: Text {
+            id: locationChipText
+            color: root.uiText
+            text: locationService.fresh
+                  ? "Location " + (locationService.horizontalAccuracyMeters >= 0
+                          ? "±" + Math.round(locationService.horizontalAccuracyMeters) + " m"
+                          : "(accuracy unavailable)")
+                  : locationService.status.indexOf("permission denied") !== -1
+                    ? "Location: permission required"
+                    : locationService.status.indexOf("No location provider") !== -1
+                      ? "Location: unavailable"
+                      : locationService.hasFix ? "Location: last fix" : "Location: searching"
+            font.pixelSize: 13
+            font.bold: true
+            elide: Text.ElideRight
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: 11
+            color: root.uiRaised
+            border.color: locationService.fresh ? root.uiAccent : root.uiBorder
+        }
+        Accessible.name: "Location status; open Settings"
+    }
+
     // Settings is a full page instead of a permanent panel over the map.
     Rectangle {
         id: settingsPage
@@ -306,6 +344,68 @@ Window {
                                 border.color: root.uiBorder
                             }
                         }
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+                    Label {
+                        text: "Location"
+                        color: root.uiAccent
+                        font.bold: true
+                        font.pixelSize: 19
+                    }
+                    Label {
+                        text: "Location starts automatically while AOWIS is active. Android requests permission when needed. Your position stays on this device."
+                        color: root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        text: locationService.status
+                        color: locationService.fresh ? root.uiSuccess : root.uiMuted
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        visible: locationService.hasFix
+                        text: locationService.hasFix
+                              ? "Latitude: " + locationService.latitude.toFixed(6)
+                                + "°\nLongitude: " + locationService.longitude.toFixed(6) + "°"
+                              : ""
+                        color: root.uiText
+                        font.pixelSize: 15
+                        font.bold: true
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Label {
+                        visible: locationService.hasFix
+                        text: "Horizontal accuracy: "
+                            + (locationService.horizontalAccuracyMeters >= 0
+                               ? "±" + locationService.horizontalAccuracyMeters.toFixed(1) + " m"
+                               : "unavailable")
+                            + "\nVertical accuracy: "
+                            + (locationService.verticalAccuracyMeters >= 0
+                               ? "±" + locationService.verticalAccuracyMeters.toFixed(1) + " m"
+                               : "unavailable")
+                            + "\nAltitude (provider): "
+                            + (locationService.altitudeAvailable
+                               ? locationService.altitudeMeters.toFixed(1) + " m"
+                               : "unavailable")
+                            + "\nSpeed: "
+                            + (locationService.speedMetersPerSecond >= 0
+                               ? (locationService.speedMetersPerSecond * 3.6).toFixed(1) + " km/h"
+                               : "unavailable")
+                            + "\nHeading: "
+                            + (locationService.headingDegrees >= 0
+                               ? locationService.headingDegrees.toFixed(0) + "°"
+                               : "unavailable")
+                            + "\nFix age: " + locationService.fixAgeSeconds + " s"
+                            + "\nTimestamp (UTC): " + locationService.timestampUtc
+                        color: root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {

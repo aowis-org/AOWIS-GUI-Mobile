@@ -85,6 +85,16 @@ RUN /opt/aqt-venv/bin/aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 
     && test -f "/opt/qt/${QT_VERSION}/gcc_64/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake" \
     && test -f "/opt/qt/${QT_VERSION}/android_arm64_v8a/lib/cmake/Qt6TaskTree/Qt6TaskTreeConfig.cmake"
 
+# Qt Positioning is a separate Qt module, not included in the base Qt
+# Android archive. Install matching host and ARM64 packages for GPS-01.
+# This is appended after the existing pinned toolchain layers for fast reuse.
+RUN /opt/aqt-venv/bin/aqt install-qt linux desktop "${QT_VERSION}" linux_gcc_64 \
+        --modules qtpositioning -O /opt/qt \
+    && /opt/aqt-venv/bin/aqt install-qt all_os android "${QT_VERSION}" android_arm64_v8a \
+        --modules qtpositioning -O /opt/qt \
+    && test -f "/opt/qt/${QT_VERSION}/android_arm64_v8a/lib/cmake/Qt6Positioning/Qt6PositioningConfig.cmake" \
+    && test -f "/opt/qt/${QT_VERSION}/gcc_64/lib/cmake/Qt6Positioning/Qt6PositioningConfig.cmake"
+
 # Fail at image construction rather than at the first app configure when a
 # Linux host tool has missing ELF runtime dependencies.
 RUN set -eu; \
