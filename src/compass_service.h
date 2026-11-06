@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QTimer>
 
+#include "compass_heading_filter.h"
+
 // Magnetic orientation, independent of GPS movement heading and map renderer.
 // The hardware is activated only while the Compass page is in the foreground.
 class CompassService final : public QObject
@@ -43,13 +45,16 @@ private:
     void updateActivity();
     void handleReading();
     void handleTimeout();
+    void advanceHeading();
     void changeState(State state);
 
     QCompass m_compass;
     QElapsedTimer m_clock;
     QTimer m_watchdog;
+    QTimer m_displayTimer;
+    AowisCompass::HeadingFilter m_headingFilter;
     State m_state = State::Paused;
-    double m_headingDegrees = -1.0;
+    qint64 m_lastDisplayMs = -1;
     int m_displayRotationDegrees = 0;
     double m_calibration = -1.0;
     qint64 m_lastReadingMs = -1;

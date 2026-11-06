@@ -33,6 +33,7 @@ qt_add_executable(aowis-mobile
     src/compass_service.cpp
     src/compass_service.h
     src/compass_heading.h
+    src/compass_heading_filter.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp

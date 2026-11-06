@@ -32,6 +32,10 @@ CompassService::CompassService(QObject *parent)
                 });
     }
     this->m_compass.setDataRate(20); // Requested rate; sensor backend may choose another.
+    this->m_displayTimer.setInterval(16);
+    this->m_displayTimer.setTimerType(Qt::PreciseTimer);
+    connect(&this->m_displayTimer, &QTimer::timeout,
+            this, &CompassService::advanceHeading);
     this->m_watchdog.setInterval(1000);
     connect(&this->m_compass, &QSensor::readingChanged,
             this, &CompassService::handleReading);
@@ -60,7 +64,7 @@ bool CompassService::hasHeading() const
 double CompassService::headingDegrees() const
 {
     return hasHeading()
-        ? AowisCompass::normalize(this->m_headingDegrees + this->m_displayRotationDegrees)
+        ? AowisCompass::normalize(this->m_headingFilter.displayDegrees() + this->m_displayRotationDegrees)
         : -1.0;
 }
 
@@ -141,6 +145,9 @@ void CompassService::updateActivity()
     {
         this->m_compass.stop();
         this->m_watchdog.stop();
+        this->m_displayTimer.stop();
+        this->m_headingFilter.reset();
+        this->m_lastDisplayMs = -1;
         this->m_lastReadingMs = -1;
         this->m_startMs = -1;
         this->m_sampleCount = 0;
@@ -151,6 +158,9 @@ void CompassService::updateActivity()
     // A reading from before backgrounding or a different page must not be
     // presented as live immediately after returning.
     this->m_lastReadingMs = -1;
+    this->m_displayTimer.stop();
+    this->m_headingFilter.reset();
+    this->m_lastDisplayMs = -1;
     this->m_startMs = this->m_clock.elapsed();
     this->m_sampleCount = 0;
     if (!this->m_compass.connectToBackend())
@@ -177,10 +187,17 @@ void CompassService::handleReading()
     const double degrees = AowisCompass::normalize(reading->azimuth());
     if (degrees < 0.0)
         return;
-    this->m_headingDegrees = degrees;
+    const qint64 now = this->m_clock.elapsed();
+    if (!this->m_headingFilter.sample(degrees, static_cast<double>(now) / 1000.0))
+        return;
+    if (!this->m_displayTimer.isActive())
+    {
+        this->m_lastDisplayMs = now;
+        this->m_displayTimer.start();
+    }
     ++this->m_sampleCount;
     this->m_calibration = AowisCompass::clampedCalibration(reading->calibrationLevel());
-    this->m_lastReadingMs = this->m_clock.elapsed();
+    this->m_lastReadingMs = now;
     changeState(State::Tracking);
     emit changed();
 }
@@ -196,5 +213,23 @@ void CompassService::handleTimeout()
         changeState(State::NoSamples);
     if (this->m_lastReadingMs >= 0 &&
         this->m_clock.elapsed() - this->m_lastReadingMs > kStaleAfterMs)
+    {
+        this->m_displayTimer.stop();
         changeState(State::Stale);
+    }
+}
+
+void CompassService::advanceHeading()
+{
+    if (!hasHeading())
+    {
+        this->m_displayTimer.stop();
+        return;
+    }
+    const qint64 now = this->m_clock.elapsed();
+    const double dt = this->m_lastDisplayMs < 0 ? 0.016
+                    : static_cast<double>(now - this->m_lastDisplayMs) / 1000.0;
+    this->m_lastDisplayMs = now;
+    if (this->m_headingFilter.advanceDisplay(dt))
+        emit changed();
 }

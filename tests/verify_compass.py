@@ -30,18 +30,23 @@ checks = {
         "compassService.sensorActive" in qml and "compassService.sampleCount" in qml,
     "screen orientation correction":
         "nativeOrientation()" in service and "angleBetween(" in service,
-    "accessible polished vector compass and smooth rotation":
-        "Canvas {" in rose and "Behavior on rotation" in rose and
-        "RotationAnimation.Shortest" in rose and
+    "accessible vector compass with C++-driven continuous rotation":
+        "Canvas {" in rose and "Behavior on rotation" not in rose and
+        "RotationAnimation" not in rose and
         "Accessible.name:" in rose and "compassRose" in qml,
     "live heading directly drives rose and numeric display":
         "rotation: compass.hasHeading ? -compass.headingDegrees : 0" in rose and
         "Math.round(compassService.headingDegrees)" in qml and
         "compassService.direction" in qml and
         "displayInitialized" not in rose and "FrameAnimation" not in rose,
-    "fast shortest-path tween with fallback-free live sensor values":
-        "duration: 95" in rose and "RotationAnimation.Shortest" in rose and
-        "CompassMotion" not in rose and "CompassMotion" not in cmake,
+    "sensor-rate-independent C++ filtering and repaint loop":
+        "compass_heading_filter.h" in cmake and
+        "AowisCompass::HeadingFilter m_headingFilter" in header and
+        "m_headingFilter.sample" in service and
+        "m_headingFilter.advanceDisplay" in service and
+        "m_displayTimer.setInterval(16)" in service and
+        "m_displayTimer.stop()" in service and
+        "FrameAnimation" not in rose and "CompassMotion" not in rose,
     "hamburger navigation and Android Back":
         'text: "Compass"' in qml and 'root.openPage("compass")' in qml and
         'activePage !== "map"' in qml,

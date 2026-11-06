@@ -15,13 +15,25 @@ while stationary, unlike the GPS course-over-ground field in Location settings.
 The reading is defined relative to the phone's native top edge; the app also
 compensates for screen rotation based on the Qt screen orientation.
 
-The dial is bound directly to the live magnetic sensor reading. A short,
-95-ms Qt Quick rotation animation takes the shortest path across north and
-softens the motion without gating sensor values behind a frame-animation
-initialization state. The numeric bearing and cardinal direction display the
-live sensor measurement. In particular, they remain usable if animations are
-paused by Android or the Qt scene graph. No synthetic or GPS-based heading is
-substituted for a missing magnetic compass reading.
+The dial is driven by a **C++ circular One Euro filter**, adapted from
+Casiez, Roussel and Vogel (CHI 2012, DOI 10.1145/2207676.2208639;
+https://gery.casiez.net/publications/CHI2012-casiez.pdf). This filter uses a
+low cutoff at rest to reject magnetic jitter and raises the cutoff as angular
+velocity increases to minimize lag. Shortest-arc angular differences handle
+359° → 1° and long continuous rotations without discontinuities. Actual
+monotonic sensor sample times (not an assumed fixed sampling period) control
+the filter.
+
+An independent **16-ms C++ display timer** follows the filtered magnetic
+bearing using a time-based, shortest-arc response. This provides intermediate
+frames even on phones that report magnetometer readings around 20 Hz. The
+numeric readout and rose use the *same displayed heading*. QML only binds to
+the C++ property; **no JavaScript smoothing and no per-sample Qt Quick
+RotationAnimation** exist. The first sample appears immediately, and the
+filter resets on every pause/resume to avoid carrying a stale heading into a
+new sensor session. A stopped sensor or expired fix is never extrapolated into
+a fake direction. Filter tuning constants are in
+`src/compass_heading_filter.h` and need real-hardware acceptance.
 
 Sensors are started **on entering Compass while the app is active**, and
 stopped when leaving the page or backgrounding AOWIS. A new reading is required
@@ -58,9 +70,10 @@ On an Android phone, open **☰ → Compass**, turn the phone slowly through
 north/east/south/west, and verify smooth movement and matching bearings.
 Check screen rotation, background/resume, and Android Back navigation. Verify
 there is no fake heading on devices lacking the sensor, and that calibration
-status is intelligible. The existing C++ unit tests cover wrap-around, cardinal sector boundaries,
-invalid input, calibration ranges and orientation addition. Source regression
-checks prevent a return to the frame-gated heading display that stopped moving
-on Android.
+status is intelligible. The C++ unit tests cover wrap-around, cardinal sector boundaries,
+invalid input, calibration ranges, stationary noise, slow and fast turns,
+variable sample rates, 60/120Hz display pacing, and lifecycle reset. Source
+regression checks prevent a return to per-sample animations and frame-gated
+JavaScript smoothing.
 
 The automated build/source checks cannot replace a real-phone sensor test.

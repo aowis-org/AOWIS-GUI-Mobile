@@ -62,14 +62,6 @@ Item {
         width: compass.diameter * .91
         height: width
         rotation: compass.hasHeading ? -compass.headingDegrees : 0
-        Behavior on rotation {
-            enabled: compass.hasHeading
-            RotationAnimation {
-                duration: 95
-                direction: RotationAnimation.Shortest
-                easing.type: Easing.OutSine
-            }
-        }
         Canvas {
             id: rose
             anchors.fill: parent
