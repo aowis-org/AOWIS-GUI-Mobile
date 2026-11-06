@@ -61,11 +61,10 @@ endif()
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_source_files_properties(qml/UiIcon.qml PROPERTIES QT_RESOURCE_ALIAS UiIcon.qml)
 set_source_files_properties(qml/CompassRose.qml PROPERTIES QT_RESOURCE_ALIAS CompassRose.qml)
-set_source_files_properties(qml/CompassMotion.js PROPERTIES QT_RESOURCE_ALIAS CompassMotion.js)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/CompassMotion.js
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock
@@ -223,13 +222,6 @@ if(BUILD_TESTING)
         tests/compass_heading_tests.cpp src/compass_heading.h)
     target_include_directories(aowis-mobile-compass-heading-tests PRIVATE src)
     add_test(NAME aowis-mobile-compass-heading COMMAND aowis-mobile-compass-heading-tests)
-    # Optional pure-JS regression test uses exactly the motion code shipped to QML.
-    find_program(AOWIS_MOBILE_NODE_EXECUTABLE NAMES node)
-    if(AOWIS_MOBILE_NODE_EXECUTABLE)
-        add_test(NAME aowis-mobile-compass-motion
-            COMMAND "${AOWIS_MOBILE_NODE_EXECUTABLE}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/compass_motion_tests.js")
-    endif()
     add_executable(aowis-mobile-location-snapshot-tests
         tests/location_snapshot_tests.cpp src/location_snapshot.cpp src/location_snapshot.h)
     target_include_directories(aowis-mobile-location-snapshot-tests PRIVATE src)

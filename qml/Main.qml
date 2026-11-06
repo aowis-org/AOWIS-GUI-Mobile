@@ -574,8 +574,8 @@ Window {
                 }
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: compassService.hasHeading && compassRose.displayInitialized
-                          ? ("000" + (Math.round(compassRose.displayedHeadingDegrees) % 360)).slice(-3) + "°"
+                    text: compassService.hasHeading
+                          ? ("000" + (Math.round(compassService.headingDegrees) % 360)).slice(-3) + "°"
                           : "—°"
                     font.pixelSize: 46
                     font.weight: Font.DemiBold
@@ -583,7 +583,7 @@ Window {
                 }
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: compassService.hasHeading ? compassRose.displayDirection + " · MAGNETIC" : "NO HEADING"
+                    text: compassService.hasHeading ? compassService.direction + " · MAGNETIC" : "NO HEADING"
                     color: root.uiAccent
                     font.pixelSize: 15
                     font.bold: true
@@ -611,6 +611,13 @@ Window {
                             font.pixelSize: 13
                             font.bold: true
                             wrapMode: Text.WordWrap
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: "Sensor: " + (compassService.sensorActive ? "active" : "inactive")
+                                  + " · readings: " + compassService.sampleCount
+                            color: root.uiMuted
+                            font.pixelSize: 11
                         }
                         Label {
                             Layout.fillWidth: true

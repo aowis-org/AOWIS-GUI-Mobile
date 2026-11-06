@@ -10,6 +10,7 @@
 namespace
 {
 constexpr qint64 kStaleAfterMs = 4000;
+constexpr qint64 kFirstReadingTimeoutMs = 6000;
 }
 
 CompassService::CompassService(QObject *parent)
@@ -93,10 +94,21 @@ QString CompassService::status() const
     case State::Tracking: return hasHeading() ? QStringLiteral("Live magnetic heading")
                                               : QStringLiteral("Compass reading has expired");
     case State::Stale: return QStringLiteral("Compass reading has expired");
+    case State::NoSamples: return QStringLiteral("Magnetic sensor started, but no heading samples arrived");
     case State::Unavailable: return QStringLiteral("No compass sensor available on this device");
     case State::Error: return QStringLiteral("Compass sensor could not start or stopped");
     }
     return QStringLiteral("Compass unavailable");
+}
+
+bool CompassService::sensorActive() const
+{
+    return this->m_compass.isActive();
+}
+
+int CompassService::sampleCount() const
+{
+    return this->m_sampleCount;
 }
 
 void CompassService::changeState(State state)
@@ -130,6 +142,8 @@ void CompassService::updateActivity()
         this->m_compass.stop();
         this->m_watchdog.stop();
         this->m_lastReadingMs = -1;
+        this->m_startMs = -1;
+        this->m_sampleCount = 0;
         changeState(State::Paused);
         return;
     }
@@ -137,6 +151,8 @@ void CompassService::updateActivity()
     // A reading from before backgrounding or a different page must not be
     // presented as live immediately after returning.
     this->m_lastReadingMs = -1;
+    this->m_startMs = this->m_clock.elapsed();
+    this->m_sampleCount = 0;
     if (!this->m_compass.connectToBackend())
     {
         changeState(State::Unavailable);
@@ -162,6 +178,7 @@ void CompassService::handleReading()
     if (degrees < 0.0)
         return;
     this->m_headingDegrees = degrees;
+    ++this->m_sampleCount;
     this->m_calibration = AowisCompass::clampedCalibration(reading->calibrationLevel());
     this->m_lastReadingMs = this->m_clock.elapsed();
     changeState(State::Tracking);
@@ -170,6 +187,13 @@ void CompassService::handleReading()
 
 void CompassService::handleTimeout()
 {
+    // A sensor backend can report a successful start yet deliver no samples.
+    // Do not leave the UI in "Waiting" forever: identify this failure separately
+    // from frame animation, which is never involved in reading the sensor.
+    if (this->m_state == State::Starting && this->m_lastReadingMs < 0 &&
+        this->m_startMs >= 0 &&
+        this->m_clock.elapsed() - this->m_startMs > kFirstReadingTimeoutMs)
+        changeState(State::NoSamples);
     if (this->m_lastReadingMs >= 0 &&
         this->m_clock.elapsed() - this->m_lastReadingMs > kStaleAfterMs)
         changeState(State::Stale);

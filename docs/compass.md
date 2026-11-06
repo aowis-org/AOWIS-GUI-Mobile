@@ -15,18 +15,22 @@ while stationary, unlike the GPS course-over-ground field in Location settings.
 The reading is defined relative to the phone's native top edge; the app also
 compensates for screen rotation based on the Qt screen orientation.
 
-The dial uses a **Qt Quick FrameAnimation** synchronized with each rendered frame,
-not a new 230-ms rotation animation for each magnetic sensor update. Its
-frame-rate-independent angular follower filters small sensor jitter and
-quickly tracks deliberate turns, always taking the short route across
-359°/0°. It stops requesting frames once it has caught up. The digital bearing
-and cardinal direction follow the same smoothed dial position, so the numbers
-and rose agree. The follower snaps to the next valid reading when opening or
-resuming the Compass page; stale readings are never replayed as animations.
+The dial is bound directly to the live magnetic sensor reading. A short,
+95-ms Qt Quick rotation animation takes the shortest path across north and
+softens the motion without gating sensor values behind a frame-animation
+initialization state. The numeric bearing and cardinal direction display the
+live sensor measurement. In particular, they remain usable if animations are
+paused by Android or the Qt scene graph. No synthetic or GPS-based heading is
+substituted for a missing magnetic compass reading.
 
 Sensors are started **on entering Compass while the app is active**, and
 stopped when leaving the page or backgrounding AOWIS. A new reading is required
-after every resume. Values older than four seconds are marked stale. If the
+after every resume. Values older than four seconds are marked stale.
+If a started sensor delivers no samples for six seconds, the UI reports that
+explicitly instead of waiting forever. The Compass status card shows whether
+the backend is active and how many valid magnetic samples it has delivered in
+the current visit. These numbers distinguish missing sensor updates from any
+visual dial animation problem. If the
 phone has no supported compass sensor, the UI explicitly reports this and does
 not display an invented bearing. There is no separate runtime permission for
 Android's magnetic compass. No compass readings are transmitted, persisted or
@@ -55,9 +59,8 @@ north/east/south/west, and verify smooth movement and matching bearings.
 Check screen rotation, background/resume, and Android Back navigation. Verify
 there is no fake heading on devices lacking the sensor, and that calibration
 status is intelligible. The existing C++ unit tests cover wrap-around, cardinal sector boundaries,
-invalid input, calibration ranges and orientation addition. The optional Node
-regression test exercises the very same JavaScript heading follower embedded
-in QML: time-independent convergence, smoothing noisy inputs, short-path
-359°/0° movement, large turns and pause/stall behavior.
+invalid input, calibration ranges and orientation addition. Source regression
+checks prevent a return to the frame-gated heading display that stopped moving
+on Android.
 
 The automated build/source checks cannot replace a real-phone sensor test.

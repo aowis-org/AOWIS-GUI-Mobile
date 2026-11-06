@@ -16,6 +16,8 @@ class CompassService final : public QObject
     Q_PROPERTY(double calibrationLevel READ calibrationLevel NOTIFY changed)
     Q_PROPERTY(QString calibrationStatus READ calibrationStatus NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
+    Q_PROPERTY(bool sensorActive READ sensorActive NOTIFY changed)
+    Q_PROPERTY(int sampleCount READ sampleCount NOTIFY changed)
 
 public:
     explicit CompassService(QObject *parent = nullptr);
@@ -26,6 +28,8 @@ public:
     double calibrationLevel() const;
     QString calibrationStatus() const;
     QString status() const;
+    bool sensorActive() const;
+    int sampleCount() const;
 
     Q_INVOKABLE void setPageVisible(bool visible);
     void setApplicationActive(bool active);
@@ -34,7 +38,7 @@ signals:
     void changed();
 
 private:
-    enum class State { Paused, Starting, Tracking, Stale, Unavailable, Error };
+    enum class State { Paused, Starting, Tracking, Stale, NoSamples, Unavailable, Error };
 
     void updateActivity();
     void handleReading();
@@ -49,6 +53,8 @@ private:
     int m_displayRotationDegrees = 0;
     double m_calibration = -1.0;
     qint64 m_lastReadingMs = -1;
+    qint64 m_startMs = -1;
+    int m_sampleCount = 0;
     bool m_applicationActive = false;
     bool m_pageVisible = false;
 };
