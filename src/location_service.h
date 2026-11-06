@@ -16,6 +16,8 @@ class LocationService final : public QObject
     Q_OBJECT
     Q_PROPERTY(bool hasFix READ hasFix NOTIFY changed)
     Q_PROPERTY(bool fresh READ fresh NOTIFY changed)
+    Q_PROPERTY(bool permissionDenied READ permissionDenied NOTIFY changed)
+    Q_PROPERTY(bool providerUnavailable READ providerUnavailable NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(double latitude READ latitude NOTIFY changed)
     Q_PROPERTY(double longitude READ longitude NOTIFY changed)
@@ -33,6 +35,8 @@ public:
 
     bool hasFix() const;
     bool fresh() const;
+    bool permissionDenied() const;
+    bool providerUnavailable() const;
     QString status() const;
     double latitude() const;
     double longitude() const;

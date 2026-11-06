@@ -32,7 +32,9 @@ Window {
     property real viewZoom: 1.0
     property real dragX: 0
     property real dragY: 0
-    property string lastTap: "Touch or click the map"
+    property bool hasLastTap: false
+    property real lastTapX: 0
+    property real lastTapY: 0
     property string activePage: "map"
     onActivePageChanged: {
         compassService.setPageVisible(activePage === "compass")
@@ -62,6 +64,8 @@ Window {
             saveFeedback = ""
             themeSelector.currentIndex = appearanceSettings.mode === "dark" ? 1
                                        : appearanceSettings.mode === "light" ? 2 : 0
+            const languages = ["en", "fr", "ar", "de", "es"]
+            languageSelector.currentIndex = languages.indexOf(languageSettings.language)
         }
         activePage = page
     }
@@ -142,8 +146,9 @@ Window {
 
         TapHandler {
             onTapped: function(point) {
-                root.lastTap = "Map tap: " + Math.round(point.position.x) +
-                               ", " + Math.round(point.position.y)
+                root.hasLastTap = true
+                root.lastTapX = Math.round(point.position.x)
+                root.lastTapY = Math.round(point.position.y)
             }
         }
         DragHandler {
@@ -220,14 +225,14 @@ Window {
             id: locationChipText
             color: root.uiText
             text: locationService.fresh
-                  ? "Location " + (locationService.horizontalAccuracyMeters >= 0
-                          ? "±" + Math.round(locationService.horizontalAccuracyMeters) + " m"
-                          : "(accuracy unavailable)")
-                  : locationService.status.indexOf("permission denied") !== -1
-                    ? "Location: permission required"
-                    : locationService.status.indexOf("No location provider") !== -1
-                      ? "Location: unavailable"
-                      : locationService.hasFix ? "Location: last fix" : "Location: searching"
+                  ? (locationService.horizontalAccuracyMeters >= 0
+                     ? qsTr("Location ±%1 m").arg(Math.round(locationService.horizontalAccuracyMeters))
+                     : qsTr("Location (accuracy unavailable)"))
+                  : locationService.permissionDenied
+                    ? qsTr("Location: permission required")
+                    : locationService.providerUnavailable
+                      ? qsTr("Location: unavailable")
+                      : locationService.hasFix ? qsTr("Location: last fix") : qsTr("Location: searching")
             font.pixelSize: 13
             font.bold: true
             elide: Text.ElideRight
@@ -239,12 +244,14 @@ Window {
             color: root.uiRaised
             border.color: locationService.fresh ? root.uiAccent : root.uiBorder
         }
-        Accessible.name: "Location status; open Settings"
+        Accessible.name: qsTr("Location status; open Settings")
     }
 
     // Settings is a full page instead of a permanent panel over the map.
     Rectangle {
         id: settingsPage
+        LayoutMirroring.enabled: languageSettings.rightToLeft
+        LayoutMirroring.childrenInherit: true
         anchors.fill: parent
         visible: root.activePage === "settings"
         color: root.uiSurface
@@ -258,7 +265,7 @@ Window {
             spacing: 15
 
             Label {
-                text: "Settings"
+                text: qsTr("Settings")
                 color: root.uiText
                 font.pixelSize: 26
                 font.bold: true
@@ -275,20 +282,20 @@ Window {
                     width: settingsScroll.availableWidth
                     spacing: 12
                     Label {
-                        text: "Appearance"
+                        text: qsTr("Appearance")
                         color: root.uiAccent
                         font.bold: true
                         font.pixelSize: 19
                     }
                     Label {
-                        text: "Theme"
+                        text: qsTr("Theme")
                         color: root.uiText
                         font.pixelSize: 14
                     }
                     ComboBox {
                         id: themeSelector
                         Layout.fillWidth: true
-                        model: ["Follow system", "Dark", "Light"]
+                        model: [qsTr("Follow system"), qsTr("Dark"), qsTr("Light")]
                         onActivated: function(index) {
                             appearanceSettings.setMode(index === 1 ? "dark"
                                                        : index === 2 ? "light" : "system")
@@ -304,14 +311,14 @@ Window {
                             strokeColor: root.uiText
                             width: 22
                             height: 22
-                            x: themeSelector.width - width - 14
+                            x: languageSettings.rightToLeft ? 14 : themeSelector.width - width - 14
                             y: (themeSelector.height - height) / 2
                         }
                         contentItem: Text {
                             text: themeSelector.displayText
                             color: root.uiText
-                            leftPadding: 12
-                            rightPadding: 32
+                            leftPadding: languageSettings.rightToLeft ? 32 : 12
+                            rightPadding: languageSettings.rightToLeft ? 12 : 32
                             verticalAlignment: Text.AlignVCenter
                             elide: Text.ElideRight
                         }
@@ -352,13 +359,91 @@ Window {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {
-                        text: "Location"
+                        text: qsTr("Language")
+                        color: root.uiAccent
+                        font.bold: true
+                        font.pixelSize: 19
+                    }
+                    ComboBox {
+                        id: languageSelector
+                        Layout.fillWidth: true
+                        textRole: "label"
+                        model: [
+                            { "code": "en", "label": "EN   English" },
+                            { "code": "fr", "label": "FR   Français" },
+                            { "code": "ar", "label": "AR   العربية" },
+                            { "code": "de", "label": "DE   Deutsch" },
+                            { "code": "es", "label": "ES   Español" }
+                        ]
+                        onActivated: function(index) {
+                            languageSettings.setLanguage(languageSelector.model[index].code)
+                        }
+                        palette.text: root.uiText
+                        palette.buttonText: root.uiText
+                        palette.base: root.uiInput
+                        palette.window: root.uiInput
+                        palette.highlight: root.uiSelection
+                        palette.highlightedText: root.uiSelectedText
+                        indicator: UiIcon {
+                            kind: "down"
+                            strokeColor: root.uiText
+                            width: 22
+                            height: 22
+                            x: languageSettings.rightToLeft ? 14 : languageSelector.width - width - 14
+                            y: (languageSelector.height - height) / 2
+                        }
+                        contentItem: Text {
+                            text: languageSelector.displayText
+                            color: root.uiText
+                            leftPadding: languageSettings.rightToLeft ? 32 : 12
+                            rightPadding: languageSettings.rightToLeft ? 12 : 32
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: languageSelector.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        delegate: ItemDelegate {
+                            width: languageSelector.width
+                            text: modelData.label
+                            highlighted: languageSelector.highlightedIndex === index
+                            palette.text: root.uiText
+                            palette.highlightedText: root.uiSelectedText
+                            background: Rectangle {
+                                color: parent.highlighted ? root.uiSelection : root.uiInput
+                            }
+                        }
+                        popup: Popup {
+                            y: languageSelector.height - 1
+                            width: languageSelector.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 280)
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: languageSelector.popup.visible ? languageSelector.delegateModel : null
+                                currentIndex: languageSelector.highlightedIndex
+                                ScrollIndicator.vertical: ScrollIndicator { }
+                            }
+                            background: Rectangle {
+                                radius: 10
+                                color: root.uiInput
+                                border.color: root.uiBorder
+                            }
+                        }
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+                    Label {
+                        text: qsTr("Location")
                         color: root.uiAccent
                         font.bold: true
                         font.pixelSize: 19
                     }
                     Label {
-                        text: "Location starts automatically while AOWIS is active. Android requests permission when needed. Your position stays on this device."
+                        text: qsTr("Location starts automatically while AOWIS is active. Android requests permission when needed. Your position stays on this device.")
                         color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -374,8 +459,9 @@ Window {
                     Label {
                         visible: locationService.hasFix
                         text: locationService.hasFix
-                              ? "Latitude: " + locationService.latitude.toFixed(6)
-                                + "°\nLongitude: " + locationService.longitude.toFixed(6) + "°"
+                              ? qsTr("Latitude: %1°\nLongitude: %2°")
+                                    .arg(locationService.latitude.toFixed(6))
+                                    .arg(locationService.longitude.toFixed(6))
                               : ""
                         color: root.uiText
                         font.pixelSize: 15
@@ -385,28 +471,24 @@ Window {
                     }
                     Label {
                         visible: locationService.hasFix
-                        text: "Horizontal accuracy: "
-                            + (locationService.horizontalAccuracyMeters >= 0
-                               ? "±" + locationService.horizontalAccuracyMeters.toFixed(1) + " m"
-                               : "unavailable")
-                            + "\nVertical accuracy: "
-                            + (locationService.verticalAccuracyMeters >= 0
-                               ? "±" + locationService.verticalAccuracyMeters.toFixed(1) + " m"
-                               : "unavailable")
-                            + "\nAltitude (provider): "
-                            + (locationService.altitudeAvailable
-                               ? locationService.altitudeMeters.toFixed(1) + " m"
-                               : "unavailable")
-                            + "\nSpeed: "
-                            + (locationService.speedMetersPerSecond >= 0
-                               ? (locationService.speedMetersPerSecond * 3.6).toFixed(1) + " km/h"
-                               : "unavailable")
-                            + "\nHeading: "
-                            + (locationService.headingDegrees >= 0
-                               ? locationService.headingDegrees.toFixed(0) + "°"
-                               : "unavailable")
-                            + "\nFix age: " + locationService.fixAgeSeconds + " s"
-                            + "\nTimestamp (UTC): " + locationService.timestampUtc
+                        text: qsTr("Horizontal accuracy: %1\nVertical accuracy: %2\nAltitude (provider): %3\nSpeed: %4\nHeading: %5\nFix age: %6 s\nTimestamp (UTC): %7")
+                            .arg(locationService.horizontalAccuracyMeters >= 0
+                                 ? "±" + locationService.horizontalAccuracyMeters.toFixed(1) + " m"
+                                 : qsTr("unavailable"))
+                            .arg(locationService.verticalAccuracyMeters >= 0
+                                 ? "±" + locationService.verticalAccuracyMeters.toFixed(1) + " m"
+                                 : qsTr("unavailable"))
+                            .arg(locationService.altitudeAvailable
+                                 ? locationService.altitudeMeters.toFixed(1) + " m"
+                                 : qsTr("unavailable"))
+                            .arg(locationService.speedMetersPerSecond >= 0
+                                 ? (locationService.speedMetersPerSecond * 3.6).toFixed(1) + " km/h"
+                                 : qsTr("unavailable"))
+                            .arg(locationService.headingDegrees >= 0
+                                 ? locationService.headingDegrees.toFixed(0) + "°"
+                                 : qsTr("unavailable"))
+                            .arg(locationService.fixAgeSeconds)
+                            .arg(locationService.timestampUtc)
                         color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -414,18 +496,20 @@ Window {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {
-                        text: "Map server"
+                        text: qsTr("Map server")
                         color: root.uiAccent
                         font.bold: true
                         font.pixelSize: 19
                     }
                     Label {
-                        text: "Server URL"
+                        text: qsTr("Server URL")
                         color: root.uiText
                         font.pixelSize: 14
                     }
                     TextField {
                         id: mapServerUrl
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: TextInput.AlignLeft
                         color: root.uiText
                         placeholderTextColor: root.uiPlaceholder
                         selectionColor: root.uiSelection
@@ -437,25 +521,27 @@ Window {
                             border.color: mapServerUrl.activeFocus ? root.uiAccent : root.uiBorder
                         }
                         Layout.fillWidth: true
-                        placeholderText: "http://192.168.2.10"
+                        placeholderText: qsTr("http://192.168.2.10")
                         selectByMouse: true
                         inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
                         onTextEdited: root.saveFeedback = ""
                     }
                     Label {
-                        text: "Use http:// or https://. Enter the port separately."
+                        text: qsTr("Use http:// or https://. Enter the port separately.")
                         color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
                     Label {
-                        text: "Port"
+                        text: qsTr("Port")
                         color: root.uiText
                         font.pixelSize: 14
                     }
                     TextField {
                         id: mapServerPort
+                        LayoutMirroring.enabled: false
+                        horizontalAlignment: TextInput.AlignLeft
                         color: root.uiText
                         placeholderTextColor: root.uiPlaceholder
                         selectionColor: root.uiSelection
@@ -467,7 +553,7 @@ Window {
                             border.color: mapServerPort.activeFocus ? root.uiAccent : root.uiBorder
                         }
                         Layout.fillWidth: true
-                        placeholderText: "e.g. 8080"
+                        placeholderText: qsTr("e.g. 8080")
                         selectByMouse: true
                         maximumLength: 5
                         inputMethodHints: Qt.ImhDigitsOnly | Qt.ImhNoPredictiveText
@@ -485,15 +571,13 @@ Window {
                             opacity: parent.enabled ? 1.0 : 0.55
                         }
                         
-                        text: "Save map server"
+                        text: qsTr("Save map server")
                         Layout.fillWidth: true
                         enabled: mapServerUrl.text.trim().length > 0 && mapServerPort.acceptableInput
                         onClicked: {
                             root.saveSucceeded = mapServerSettings.save(
                                         mapServerUrl.text, mapServerPort.text)
-                            root.saveFeedback = root.saveSucceeded
-                                              ? "Map server saved on this device."
-                                              : mapServerSettings.error
+                            root.saveFeedback = root.saveSucceeded ? "saved" : "error"
                             if (root.saveSucceeded) {
                                 mapServerUrl.text = mapServerSettings.serverUrl
                                 mapServerPort.text = String(mapServerSettings.serverPort)
@@ -503,23 +587,23 @@ Window {
                         }
                     }
                     Label {
-                        text: root.saveFeedback
-                        visible: text.length > 0
+                        text: root.saveSucceeded ? qsTr("Map server saved on this device.") : mapServerSettings.error
+                        visible: root.saveFeedback !== ""
                         color: root.saveSucceeded ? root.uiSuccess : root.uiError
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
                     Label {
                         text: mapServerSettings.configured
-                              ? "Saved endpoint: " + mapServerSettings.endpointUrl
-                              : "No map server configured yet."
+                              ? qsTr("Saved endpoint: %1").arg(mapServerSettings.endpointUrl)
+                              : qsTr("No map server configured yet.")
                         color: root.uiText
                         font.pixelSize: 13
                         wrapMode: Text.WrapAnywhere
                         Layout.fillWidth: true
                     }
                     Label {
-                        text: "The endpoint is saved locally. Map-server requests are not implemented yet; the visible network is still synthetic test geometry."
+                        text: qsTr("The endpoint is saved locally. Map-server requests are not implemented yet; the visible network is still synthetic test geometry.")
                         color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -534,6 +618,8 @@ Window {
     // substitute GPS course-over-ground when the phone is stationary.
     Rectangle {
         id: compassPage
+        LayoutMirroring.enabled: languageSettings.rightToLeft
+        LayoutMirroring.childrenInherit: true
         anchors.fill: parent
         visible: root.activePage === "compass"
         color: root.uiSurface
@@ -551,20 +637,22 @@ Window {
                 width: compassScroll.availableWidth
                 spacing: 12
                 Label {
-                    text: "Compass"
+                    text: qsTr("Compass")
                     color: root.uiText
                     font.pixelSize: 26
                     font.bold: true
                     Layout.leftMargin: 4
                 }
                 Label {
-                    text: "MAGNETIC NAVIGATION · LIVE INSTRUMENT"
+                    text: qsTr("MAGNETIC NAVIGATION · LIVE INSTRUMENT")
                     color: root.uiMuted
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
                     Layout.leftMargin: 4
                 }
                 CompassRose {
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: false
                     id: compassRose
                     readonly property real visualSize: Math.max(180,
                         Math.min(compassScroll.availableWidth - 8, root.height * .55, 400))
@@ -587,7 +675,7 @@ Window {
                 }
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: compassService.hasHeading ? compassService.direction + " · MAGNETIC" : "NO HEADING"
+                    text: compassService.hasHeading ? qsTr("%1 · MAGNETIC").arg(compassService.direction) : qsTr("NO HEADING")
                     color: root.uiAccent
                     font.pixelSize: 15
                     font.bold: true
@@ -618,10 +706,11 @@ Window {
                         }
                         Label {
                             Layout.fillWidth: true
-                            text: "Sensor: " + (compassService.sensorActive ? "active" : "inactive")
-                                  + " · readings: " + compassService.sampleCount
-                                  + " · sensor " + compassService.sensorRateHz.toFixed(0) + " Hz"
-                                  + " · display " + compassService.displayRateHz.toFixed(0) + " Hz"
+                            text: qsTr("Sensor: %1 · readings: %2 · sensor %3 Hz · display %4 Hz")
+                                  .arg(compassService.sensorActive ? qsTr("active") : qsTr("inactive"))
+                                  .arg(compassService.sampleCount)
+                                  .arg(compassService.sensorRateHz.toFixed(0))
+                                  .arg(compassService.displayRateHz.toFixed(0))
                             color: root.uiMuted
                             font.pixelSize: 11
                         }
@@ -637,7 +726,7 @@ Window {
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: "Magnetic north, not true north. Hold the phone reasonably level and away from metal or magnets. If calibration is low, move it in a figure-eight pattern."
+                    text: qsTr("Magnetic north, not true north. Hold the phone reasonably level and away from metal or magnets. If calibration is low, move it in a figure-eight pattern.")
                     color: root.uiMuted
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -652,6 +741,8 @@ Window {
     // filtering; no map renderer, magnetic compass, or JS animation required.
     Rectangle {
         id: gradienterPage
+        LayoutMirroring.enabled: languageSettings.rightToLeft
+        LayoutMirroring.childrenInherit: true
         anchors.fill: parent
         visible: root.activePage === "gradienter"
         color: root.uiSurface
@@ -669,20 +760,22 @@ Window {
                 width: gradienterScroll.availableWidth
                 spacing: 12
                 Label {
-                    text: "Gradienter"
+                    text: qsTr("Gradienter")
                     color: root.uiText
                     font.pixelSize: 26
                     font.bold: true
                     Layout.leftMargin: 4
                 }
                 Label {
-                    text: "TWO-AXIS SPIRIT LEVEL · GRAVITY"
+                    text: qsTr("TWO-AXIS SPIRIT LEVEL · GRAVITY")
                     color: root.uiMuted
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
                     Layout.leftMargin: 4
                 }
                 GradienterVial {
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: false
                     id: gradienterVial
                     readonly property real visualSize: Math.max(170,
                         Math.min(gradienterScroll.availableWidth - 8, root.height * .46, 390))
@@ -707,9 +800,9 @@ Window {
                 }
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: !gradienterService.hasReading ? "WAITING FOR SENSOR"
-                          : gradienterService.level ? "LEVEL · WITHIN ±0.5°"
-                          : "TILT FROM HORIZONTAL"
+                    text: !gradienterService.hasReading ? qsTr("WAITING FOR SENSOR")
+                          : gradienterService.level ? qsTr("LEVEL · WITHIN ±0.5°")
+                          : qsTr("TILT FROM HORIZONTAL")
                     font.pixelSize: 13
                     font.bold: true
                     font.letterSpacing: 1.0
@@ -727,7 +820,7 @@ Window {
                         Column {
                             anchors.centerIn: parent
                             spacing: 6
-                            Label { text: "ROLL · LEFT / RIGHT"; color: root.uiMuted; font.pixelSize: 10; font.letterSpacing: 0.5 }
+                            Label { text: qsTr("ROLL · LEFT / RIGHT"); color: root.uiMuted; font.pixelSize: 10; font.letterSpacing: 0.5 }
                             Label {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: gradienterService.hasReading ?
@@ -747,7 +840,7 @@ Window {
                         Column {
                             anchors.centerIn: parent
                             spacing: 6
-                            Label { text: "PITCH · TOP / BOTTOM"; color: root.uiMuted; font.pixelSize: 10; font.letterSpacing: 0.5 }
+                            Label { text: qsTr("PITCH · TOP / BOTTOM"); color: root.uiMuted; font.pixelSize: 10; font.letterSpacing: 0.5 }
                             Label {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: gradienterService.hasReading ?
@@ -763,7 +856,7 @@ Window {
                     Layout.fillWidth: true
                     spacing: 10
                     Button {
-                        text: "Zero reference"
+                        text: qsTr("Zero reference")
                         Layout.fillWidth: true
                         enabled: gradienterService.hasReading
                         palette.buttonText: root.uiText
@@ -778,7 +871,7 @@ Window {
                         onClicked: gradienterService.setReference()
                     }
                     Button {
-                        text: "Reset zero"
+                        text: qsTr("Reset zero")
                         Layout.fillWidth: true
                         enabled: gradienterService.referenceSet
                         palette.buttonText: root.uiText
@@ -795,8 +888,8 @@ Window {
                 }
                 Label {
                     text: gradienterService.referenceSet
-                          ? "Relative reference active · zero is the surface you selected."
-                          : "Absolute gravity level · zero means horizontal."
+                          ? qsTr("Relative reference active · zero is the surface you selected.")
+                          : qsTr("Absolute gravity level · zero means horizontal.")
                     color: gradienterService.referenceSet ? root.uiAccent : root.uiMuted
                     font.pixelSize: 12
                     Layout.fillWidth: true
@@ -815,9 +908,10 @@ Window {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: 14
                         anchors.rightMargin: 14
-                        text: gradienterService.status + " · sensor " +
-                              (gradienterService.sensorActive ? "active" : "inactive") +
-                              " · samples " + gradienterService.sampleCount
+                        text: qsTr("%1 · sensor %2 · samples %3")
+                              .arg(gradienterService.status)
+                              .arg(gradienterService.sensorActive ? qsTr("active") : qsTr("inactive"))
+                              .arg(gradienterService.sampleCount)
                         color: gradienterService.hasReading ? root.uiSuccess : root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -825,9 +919,7 @@ Window {
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: "Lay the phone flat to measure horizontal level. " +
-                          "Motion and vibration affect accelerometers; allow readings to settle. " +
-                          "Zero reference compares against the current surface (not true horizontal)."
+                    text: qsTr("Lay the phone flat to measure horizontal level. Motion and vibration affect accelerometers; allow readings to settle. Zero reference compares against the current surface (not true horizontal).")
                     color: root.uiMuted
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -841,6 +933,8 @@ Window {
     // JavaScript sensor filtering or motion animation.
     Rectangle {
         id: plumbBobPage
+        LayoutMirroring.enabled: languageSettings.rightToLeft
+        LayoutMirroring.childrenInherit: true
         anchors.fill: parent
         visible: root.activePage === "plumbbob"
         color: root.uiSurface
@@ -857,20 +951,22 @@ Window {
                 width: plumbBobScroll.availableWidth
                 spacing: 12
                 Label {
-                    text: "Plumb Bob"
+                    text: qsTr("Plumb Bob")
                     color: root.uiText
                     font.pixelSize: 26
                     font.bold: true
                     Layout.leftMargin: 4
                 }
                 Label {
-                    text: "EDGE ALIGNMENT · GRAVITY"
+                    text: qsTr("EDGE ALIGNMENT · GRAVITY")
                     color: root.uiMuted
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
                     Layout.leftMargin: 4
                 }
                 PlumbBobInstrument {
+                    LayoutMirroring.enabled: false
+                    LayoutMirroring.childrenInherit: false
                     id: plumbInstrument
                     readonly property real visualSize: Math.max(170,
                         Math.min(plumbBobScroll.availableWidth - 8, root.height * .45, 390))
@@ -895,9 +991,9 @@ Window {
                 }
                 Label {
                     Layout.alignment: Qt.AlignHCenter
-                    text: !plumbBobService.hasReading ? "WAITING FOR UPRIGHT READING"
-                          : plumbBobService.plumb ? "EDGE PLUMB · WITHIN ±0.75°"
-                          : "EDGE OFF VERTICAL"
+                    text: !plumbBobService.hasReading ? qsTr("WAITING FOR UPRIGHT READING")
+                          : plumbBobService.plumb ? qsTr("EDGE PLUMB · WITHIN ±0.75°")
+                          : qsTr("EDGE OFF VERTICAL")
                     color: plumbBobService.plumb ? root.uiSuccess : root.uiMuted
                     font.bold: true
                     font.pixelSize: 12
@@ -916,9 +1012,10 @@ Window {
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.leftMargin: 14
                         anchors.rightMargin: 14
-                        text: plumbBobService.status + " · sensor " +
-                              (plumbBobService.sensorActive ? "active" : "inactive") +
-                              " · samples " + plumbBobService.sampleCount
+                        text: qsTr("%1 · sensor %2 · samples %3")
+                              .arg(plumbBobService.status)
+                              .arg(plumbBobService.sensorActive ? qsTr("active") : qsTr("inactive"))
+                              .arg(plumbBobService.sampleCount)
                         color: plumbBobService.hasReading ? root.uiSuccess : root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -926,9 +1023,7 @@ Window {
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: "Hold the phone upright beside the edge you want to check. " +
-                          "The hanging line follows gravity; the angle shows how far the " +
-                          "phone's edge departs from vertical."
+                    text: qsTr("Hold the phone upright beside the edge you want to check. The hanging line follows gravity; the angle shows how far the phone's edge departs from vertical.")
                     color: root.uiMuted
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -941,6 +1036,8 @@ Window {
     // All prototype instrumentation lives here, never above the normal map.
     Rectangle {
         id: diagnosticsPage
+        LayoutMirroring.enabled: languageSettings.rightToLeft
+        LayoutMirroring.childrenInherit: true
         anchors.fill: parent
         visible: root.activePage === "diagnostics"
         color: root.uiSurface
@@ -959,8 +1056,8 @@ Window {
                 x: 16
                 width: Math.max(0, diagnosticScroll.width - 32)
                 spacing: 12
-                Label { text: "Diagnostics"; color: root.uiText; font.pixelSize: 26; font.bold: true }
-                Label { text: lab.bgfxMode ? "BGFX renderer" : "QML baseline"; color: root.uiAccent; font.pixelSize: 13 }
+                Label { text: qsTr("Diagnostics"); color: root.uiText; font.pixelSize: 26; font.bold: true }
+                Label { text: lab.bgfxMode ? qsTr("BGFX renderer") : qsTr("QML baseline"); color: root.uiAccent; font.pixelSize: 13 }
                 ComboBox {
                     id: workloadSelector
                     palette.text: root.uiText
@@ -974,7 +1071,7 @@ Window {
                         strokeColor: root.uiText
                         width: 22
                         height: 22
-                        x: workloadSelector.width - width - 14
+                        x: languageSettings.rightToLeft ? 14 : workloadSelector.width - width - 14
                         y: (workloadSelector.height - height) / 2
                     }
                     contentItem: Text {
@@ -1021,7 +1118,7 @@ Window {
                     }
                     Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
-                    model: ["Demo", "~1k features", "~10k features", "~100k features", "~1M features"]
+                    model: [qsTr("Demo"), qsTr("~1k features"), qsTr("~10k features"), qsTr("~100k features"), qsTr("~1M features")]
                     onActivated: function(index) { lab.setWorkload(index) }
                 }
                 Button {
@@ -1035,7 +1132,7 @@ Window {
                         opacity: parent.enabled ? 1.0 : 0.55
                     }
                     
-                    text: lab.benchmarkActive ? "Recording…" : "Record 15s"
+                    text: lab.benchmarkActive ? qsTr("Recording…") : qsTr("Record 15s")
                     Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
                     onClicked: lab.startBenchmark()
@@ -1051,21 +1148,24 @@ Window {
                         opacity: parent.enabled ? 1.0 : 0.55
                     }
                     
-                    text: "Recreate GPU resources (test)"
+                    text: qsTr("Recreate GPU resources (test)")
                     Layout.fillWidth: true
                     enabled: lab.bgfxMode && !lab.benchmarkActive
                     onClicked: lab.requestGpuRecreation()
                 }
                 Label { text: lab.status; color: root.uiAccent; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                 Label { text: lab.details; color: root.uiText; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
-                Label { text: "bgfx frames: " + lab.frames + " | " + root.lastTap; color: root.uiText; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
+                Label { text: qsTr("bgfx frames: %1 | %2").arg(lab.frames).arg(root.hasLastTap
+                    ? qsTr("Map tap: %1, %2").arg(root.lastTapX).arg(root.lastTapY)
+                    : qsTr("Touch or click the map")); color: root.uiText; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                 Label { text: lab.timings; color: root.uiMuted; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
                 Label { text: lab.recoveryStatus; color: root.uiAccent; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11 }
                 Label { text: lab.lifecycle; color: root.uiMuted; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
                 Label { text: lab.sceneStats; color: root.uiAccent; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
                 Label { text: lab.benchmarkResult; color: root.uiSuccess; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
                 Label {
-                    text: "Zoom: " + root.viewZoom.toFixed(2) + "× | Pan: " + Math.round(root.dragX) + ", " + Math.round(root.dragY)
+                    text: qsTr("Zoom: %1× | Pan: %2, %3")
+                        .arg(root.viewZoom.toFixed(2)).arg(Math.round(root.dragX)).arg(Math.round(root.dragY))
                     color: root.uiText; Layout.fillWidth: true; font.pixelSize: 12
                 }
                 RowLayout {
@@ -1104,7 +1204,7 @@ Window {
                             border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                             opacity: parent.enabled ? 1.0 : 0.55
                         }
-                        text: "Center"
+                        text: qsTr("Center")
                         Layout.fillWidth: true
                         onClicked: { root.dragX = 0; root.dragY = 0 }
                     }
@@ -1150,11 +1250,13 @@ Window {
             border.color: root.uiBorder
         }
         ColumnLayout {
+            LayoutMirroring.enabled: languageSettings.rightToLeft
+            LayoutMirroring.childrenInherit: true
             anchors.fill: parent
             anchors.margins: 18
             spacing: 12
-            Label { text: "AOWIS"; color: root.uiText; font.bold: true; font.pixelSize: 25; Layout.topMargin: 20 }
-            Label { text: "Mobile"; color: root.uiMuted; font.pixelSize: 13 }
+            Label { text: qsTr("AOWIS"); color: root.uiText; font.bold: true; font.pixelSize: 25; Layout.topMargin: 20 }
+            Label { text: qsTr("Mobile"); color: root.uiMuted; font.pixelSize: 13 }
             Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
             Button {
                 palette.buttonText: root.uiText
@@ -1166,7 +1268,7 @@ Window {
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                     opacity: parent.enabled ? 1.0 : 0.55
                 }
-                text: "Map"
+                text: qsTr("Map")
                 Layout.fillWidth: true
                 onClicked: root.openPage("map")
             }
@@ -1180,7 +1282,7 @@ Window {
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                     opacity: parent.enabled ? 1.0 : 0.55
                 }
-                text: "Compass"
+                text: qsTr("Compass")
                 Layout.fillWidth: true
                 onClicked: root.openPage("compass")
             }
@@ -1194,7 +1296,7 @@ Window {
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                     opacity: parent.enabled ? 1.0 : 0.55
                 }
-                text: "Gradienter"
+                text: qsTr("Gradienter")
                 Layout.fillWidth: true
                 onClicked: root.openPage("gradienter")
             }
@@ -1208,7 +1310,7 @@ Window {
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                     opacity: parent.enabled ? 1.0 : 0.55
                 }
-                text: "Plumb Bob"
+                text: qsTr("Plumb Bob")
                 Layout.fillWidth: true
                 onClicked: root.openPage("plumbbob")
             }
@@ -1222,7 +1324,7 @@ Window {
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                     opacity: parent.enabled ? 1.0 : 0.55
                 }
-                text: "Settings"
+                text: qsTr("Settings")
                 Layout.fillWidth: true
                 onClicked: root.openPage("settings")
             }
@@ -1236,13 +1338,13 @@ Window {
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                     opacity: parent.enabled ? 1.0 : 0.55
                 }
-                text: "Diagnostics"
+                text: qsTr("Diagnostics")
                 Layout.fillWidth: true
                 onClicked: root.openPage("diagnostics")
             }
             Item { Layout.fillHeight: true }
             Label {
-                text: "AOWIS Mobile"
+                text: qsTr("AOWIS Mobile")
                 Layout.fillWidth: true
                 color: root.uiMuted
                 font.pixelSize: 12
@@ -1270,7 +1372,7 @@ Window {
                 anchors.centerIn: parent
             }
         }
-        Accessible.name: "Open navigation menu"
+        Accessible.name: qsTr("Open navigation menu")
         background: Rectangle {
             radius: 12
             color: root.uiRaised

@@ -17,7 +17,9 @@ Selectable synthetic networks (~1k to ~1M total node/pipe features) use
 viewport tiles, bounded GPU buffers and explicit LOD sampling. A 15-second
 benchmark saves frame-level CSV and frame-pacing percentiles.
 The mobile UI now starts with a clean, map-first view. Its hamburger menu
-opens **Settings → Appearance** (system/dark/light interface theme) and
+opens **Settings → Appearance** (system/dark/light interface theme),
+**Settings → Language** (English, Français, العربية, Deutsch, Español;
+live change without restart), and
 **Settings → Map server** (persistent HTTP/HTTPS URL and numeric port)
 and **Diagnostics** (stress presets, recording, GPU recovery, zoom/recenter).
 Settings reports automatically acquired foreground phone position,
@@ -104,7 +106,8 @@ Android ARM64 (Docker on host; optional Arch `adb` for deployment):
 No Qt Online Installer, host Android SDK/NDK or host Java installation is
 required for Android builds. ADB authorization/pairing still requires consent
 on the phone. The Docker toolchain is pinned; its first build downloads Qt and
-Android dependencies. See [device location](docs/location.md) for GPS/permissions and
+Android dependencies. See [interface languages](docs/localization.md) for live translations,
+[device location](docs/location.md) for GPS/permissions and
 [Android build and device guide](docs/android-renderer-test.md)
 for setup, diagnostics and APK paths, and
 [renderer integration](docs/renderer-lab.md) for the current GPU design.

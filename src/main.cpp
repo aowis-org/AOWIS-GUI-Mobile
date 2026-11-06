@@ -1,6 +1,7 @@
 #include "render_lab.h"
 #include "map_server_settings.h"
 #include "appearance_settings.h"
+#include "language_settings.h"
 #include "location_service.h"
 #include "compass_service.h"
 #include "gradienter_service.h"
@@ -64,6 +65,7 @@ int main(int argc, char *argv[])
     RenderLab lab(useBgfx);
     MapServerSettings mapServerSettings;
     AppearanceSettings appearanceSettings;
+    LanguageSettings languageSettings;
     LocationService locationService;
     CompassService compassService;
     GradienterService gradienterService;
@@ -72,10 +74,27 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("languageSettings"), &languageSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("locationService"), &locationService);
     engine.rootContext()->setContextProperty(QStringLiteral("compassService"), &compassService);
     engine.rootContext()->setContextProperty(QStringLiteral("gradienterService"), &gradienterService);
     engine.rootContext()->setContextProperty(QStringLiteral("plumbBobService"), &plumbBobService);
+    // Qt Quick tracks qsTr() bindings; changing translations never reloads the
+    // QML component tree or restarts any render/sensor services.
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &engine, &QQmlApplicationEngine::retranslate);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &locationService, &LocationService::changed);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &compassService, &CompassService::changed);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &gradienterService, &GradienterService::changed);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &plumbBobService, &PlumbBobService::changed);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &mapServerSettings, &MapServerSettings::errorChanged);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &lab, &RenderLab::statusChanged);
     engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;

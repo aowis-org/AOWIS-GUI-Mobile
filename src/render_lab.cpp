@@ -91,39 +91,39 @@ QString RenderLab::status() const
 {
     switch (this->phase.load(std::memory_order_relaxed))
     {
-    case Phase::Baseline: return QStringLiteral("QML-only baseline");
-    case Phase::AwaitingSceneGraph: return QStringLiteral("Waiting for Qt Quick render thread");
-    case Phase::NoEglContext: return QStringLiteral("No external EGL context available");
-    case Phase::WrongGraphicsApi: return QStringLiteral("Qt Quick is not using OpenGL");
-    case Phase::InitFailed: return QStringLiteral("bgfx::init() failed");
-    case Phase::GeometryInitFailed: return QStringLiteral("GPU vertex/shader setup failed (check log)");
-    case Phase::Rendering: return QStringLiteral("GPU geometry submitted; inspect actual scene");
-    case Phase::Destroyed: return QStringLiteral("Scene graph released");
+    case Phase::Baseline: return tr("QML-only baseline");
+    case Phase::AwaitingSceneGraph: return tr("Waiting for Qt Quick render thread");
+    case Phase::NoEglContext: return tr("No external EGL context available");
+    case Phase::WrongGraphicsApi: return tr("Qt Quick is not using OpenGL");
+    case Phase::InitFailed: return tr("bgfx::init() failed");
+    case Phase::GeometryInitFailed: return tr("GPU vertex/shader setup failed (check log)");
+    case Phase::Rendering: return tr("GPU geometry submitted; inspect actual scene");
+    case Phase::Destroyed: return tr("Scene graph released");
     }
-    return QStringLiteral("Unknown");
+    return tr("Unknown");
 }
 
 QString RenderLab::details() const
 {
     if (!this->requestedBgfx)
-        return QStringLiteral("No bgfx initialized. Compare UI responsiveness with the experimental mode.");
+        return tr("No bgfx initialized. Compare UI responsiveness with the experimental mode.");
     if (this->phase.load(std::memory_order_relaxed) == Phase::NoEglContext)
-        return QStringLiteral("Requires a Qt-owned EGL/OpenGL context; GLX is not supported by this probe.");
+        return tr("Requires a Qt-owned EGL/OpenGL context; GLX is not supported by this probe.");
     if (this->phase.load(std::memory_order_relaxed) == Phase::Rendering)
-        return QStringLiteral("Vertex-color shaders: grid, pipes and nodes. Verify geometry + QML overlay during resize and gestures.");
-    return QStringLiteral("Experimental: bgfx may swap a Qt-owned EGL surface. See docs/renderer-lab.md.");
+        return tr("Vertex-color shaders: grid, pipes and nodes. Verify geometry + QML overlay during resize and gestures.");
+    return tr("Experimental: bgfx may swap a Qt-owned EGL surface. See docs/renderer-lab.md.");
 }
 
 QString RenderLab::timings() const
 {
     if (!this->requestedBgfx)
-        return QStringLiteral("Timing: baseline; no bgfx submission");
+        return tr("Timing: baseline; no bgfx submission");
     const int64_t submit = this->submitMicroseconds.load(std::memory_order_relaxed);
     const int64_t interval = this->frameIntervalMicroseconds.load(std::memory_order_relaxed);
     const int64_t gpu = this->gpuMicroseconds.load(std::memory_order_relaxed);
     const QString gpuText = gpu < 0 ? QStringLiteral("N/A")
         : QStringLiteral("%1 ms").arg(double(gpu) / 1000.0, 0, 'f', 2);
-    return QStringLiteral("bgfx submit CPU: %1 ms  |  frame interval: %2 ms\n"
+    return tr("bgfx submit CPU: %1 ms  |  frame interval: %2 ms\n"
                           "bgfx GPU (if supported): %3  |  draws: %4")
         .arg(double(submit) / 1000.0, 0, 'f', 2)
         .arg(double(interval) / 1000.0, 0, 'f', 2)
@@ -132,9 +132,9 @@ QString RenderLab::timings() const
 
 QString RenderLab::lifecycle() const
 {
-    return QStringLiteral("App: %1 | resumes: %2 | pauses: %3\n"
+    return tr("App: %1 | resumes: %2 | pauses: %3\n"
                           "Scenegraph: %4 inits / %5 releases | bgfx inits: %6")
-        .arg(this->applicationActive.load() ? QStringLiteral("active") : QStringLiteral("inactive"))
+        .arg(this->applicationActive.load() ? tr("active") : tr("inactive"))
         .arg(this->resumes.load()).arg(this->pauses.load())
         .arg(this->sceneGraphStarts.load()).arg(this->sceneGraphStops.load())
         .arg(this->bgfxInitializations.load());
@@ -144,15 +144,33 @@ QString RenderLab::recoveryStatus() const
 {
     const int64_t nowUs = steadyMicroseconds();
     const QString progress = this->recoveryWatchdog.pending()
-        ? QStringLiteral("waiting %1 ms").arg(this->recoveryWatchdog.ageUs(nowUs) / 1000)
-        : QStringLiteral("idle");
-    return QStringLiteral("Recovery: %1 | OK %2 / stalled %3 / late %4\n"
+        ? tr("waiting %1 ms").arg(this->recoveryWatchdog.ageUs(nowUs) / 1000)
+        : tr("idle");
+    QString lastRecoveryMessage;
+    switch (this->recoveryDisplay)
+    {
+    case RecoveryDisplay::Awaiting:
+        lastRecoveryMessage = tr("Awaiting first active frame");
+        break;
+    case RecoveryDisplay::Waiting:
+        lastRecoveryMessage = tr("Expecting a new bgfx frame after %1").arg(this->recoveryReason);
+        break;
+    case RecoveryDisplay::Recovered:
+        lastRecoveryMessage = tr("%1: frame recovered in %2 ms")
+                                  .arg(this->recoveryReason).arg(formatMs(this->lastRecoveryDurationUs));
+        break;
+    case RecoveryDisplay::Stalled:
+        lastRecoveryMessage = tr("STALLED after %1; no bgfx frame in 5 seconds")
+                                  .arg(this->recoveryReason);
+        break;
+    }
+    return tr("Recovery: %1 | OK %2 / stalled %3 / late %4\n"
                           "Worst: %5 ms | release without GL: %6 | %7\n"
                           "%8")
         .arg(progress).arg(this->recoveries).arg(this->recoveryTimeouts)
         .arg(this->lateRecoveries).arg(formatMs(this->worstRecoveryUs))
         .arg(this->absentGlContextOnRelease.load(std::memory_order_relaxed))
-        .arg(this->lastRecoveryMessage)
+        .arg(lastRecoveryMessage)
         .arg(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
              + QStringLiteral("/lifecycle/events.csv"));
 }
@@ -203,7 +221,7 @@ void RenderLab::beginRecovery(const QString &reason, int64_t eventUs)
         return;
     this->recoveryReason = reason;
     this->recoveryWatchdog.arm(eventUs);
-    this->lastRecoveryMessage = QStringLiteral("Expecting a new bgfx frame after %1").arg(reason);
+    this->recoveryDisplay = RecoveryDisplay::Waiting;
     this->recordLifecycleEvent(QStringLiteral("watch_") + reason);
 }
 
@@ -239,16 +257,15 @@ void RenderLab::inspectRecovery()
             ++this->recoveries;
         const int64_t duration = this->recoveryWatchdog.lastDurationUs();
         this->worstRecoveryUs = std::max(this->worstRecoveryUs, duration);
-        this->lastRecoveryMessage = QStringLiteral("%1: frame recovered in %2 ms")
-            .arg(this->recoveryReason).arg(formatMs(duration));
+        this->recoveryDisplay = RecoveryDisplay::Recovered;
+        this->lastRecoveryDurationUs = duration;
         this->recordLifecycleEvent(outcome == AowisMobileLifecycle::Outcome::LateRecovered
                                    ? QStringLiteral("late_recovery") : QStringLiteral("recovered"), duration);
     }
     else if (outcome == AowisMobileLifecycle::Outcome::TimedOut)
     {
         ++this->recoveryTimeouts;
-        this->lastRecoveryMessage = QStringLiteral("STALLED after %1; no bgfx frame in 5 seconds")
-            .arg(this->recoveryReason);
+        this->recoveryDisplay = RecoveryDisplay::Stalled;
         this->recordLifecycleEvent(QStringLiteral("timeout"));
     }
 }
@@ -297,12 +314,12 @@ QString RenderLab::sceneStats() const
 {
     const int preset = this->workload.load(std::memory_order_relaxed);
     if (preset == 0)
-        return QStringLiteral("Scene: small GPU demonstration (8 nodes / 7 pipes)");
+        return tr("Scene: small GPU demonstration (8 nodes / 7 pipes)");
     const AowisMobileGpu::StressProfile profile = AowisMobileGpu::stressProfile(preset);
     const uint64_t kb = rssKilobytes();
     const QString rss = kb == 0 ? QStringLiteral("N/A")
         : QStringLiteral("%1 MiB").arg(double(kb) / 1024.0, 0, 'f', 1);
-    return QStringLiteral("Network: %1 nodes + %2 pipes = %3 total\n"
+    return tr("Network: %1 nodes + %2 pipes = %3 total\n"
                           "Visible: %4 nodes / %5 pipes | %6 tiles | LOD 1:%7\n"
                           "GPU cache: %8 tiles / %9 MiB vertex data | uploads/frame: %10 | RSS: %11")
         .arg(QString::number(static_cast<qulonglong>(profile.nodes))).arg(QString::number(static_cast<qulonglong>(profile.pipes)))
@@ -322,7 +339,25 @@ bool RenderLab::benchmarkActive() const
 
 QString RenderLab::benchmarkResult() const
 {
-    return this->lastBenchmarkResult;
+    switch (this->benchmarkDisplay)
+    {
+    case BenchmarkDisplay::None: return QString();
+    case BenchmarkDisplay::Recording: return tr("Recording 15 seconds; keep workload unchanged");
+    case BenchmarkDisplay::Interrupted: return tr("Capture interrupted by application pause; discarded");
+    case BenchmarkDisplay::TooFew: return tr("Not enough frames captured; no report saved");
+    case BenchmarkDisplay::DirectoryError: return tr("Cannot create benchmark output directory");
+    case BenchmarkDisplay::OpenError: return tr("Cannot open CSV report for writing");
+    case BenchmarkDisplay::SaveError: return tr("Failed to save CSV report");
+    case BenchmarkDisplay::Complete:
+    {
+        QString message = tr("%1 frames | interval p50/p95/p99: %2 / %3 / %4 ms\n"
+                             "CPU p95: %5 ms | GPU p95: %6 ms | CSV: %7");
+        for (const QString &argument : this->benchmarkArgs)
+            message = message.arg(argument);
+        return message;
+    }
+    }
+    return QString();
 }
 
 void RenderLab::requestGpuRecreation()
@@ -350,7 +385,8 @@ void RenderLab::setWorkload(int preset)
             return; // Workload must remain fixed for a benchmark sample.
     }
     this->workload.store(preset, std::memory_order_relaxed);
-    this->lastBenchmarkResult.clear();
+    this->benchmarkDisplay = BenchmarkDisplay::None;
+    this->benchmarkArgs.clear();
     emit statusChanged();
 }
 
@@ -370,7 +406,7 @@ void RenderLab::startBenchmark()
         this->captureStartRssKb = rssKilobytes();
         this->captureInvalidated.store(false);
     }
-    this->lastBenchmarkResult = QStringLiteral("Recording 15 seconds; keep workload unchanged");
+    this->benchmarkDisplay = BenchmarkDisplay::Recording;
     const uint64_t token = ++this->captureToken;
     QTimer::singleShot(15000, this, [this, token]() {
         if (this->captureToken == token)
@@ -393,13 +429,13 @@ void RenderLab::finishBenchmark(bool interrupted)
     }
     if (interrupted)
     {
-        this->lastBenchmarkResult = QStringLiteral("Capture interrupted by application pause; discarded");
+        this->benchmarkDisplay = BenchmarkDisplay::Interrupted;
         emit statusChanged();
         return;
     }
     if (samples.size() < 10)
     {
-        this->lastBenchmarkResult = QStringLiteral("Not enough frames captured; no report saved");
+        this->benchmarkDisplay = BenchmarkDisplay::TooFew;
         emit statusChanged();
         return;
     }
@@ -417,7 +453,7 @@ void RenderLab::finishBenchmark(bool interrupted)
         + QStringLiteral("/benchmarks");
     if (!QDir().mkpath(directory))
     {
-        this->lastBenchmarkResult = QStringLiteral("Cannot create benchmark output directory");
+        this->benchmarkDisplay = BenchmarkDisplay::DirectoryError;
         emit statusChanged();
         return;
     }
@@ -428,7 +464,7 @@ void RenderLab::finishBenchmark(bool interrupted)
     QSaveFile file(output);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
-        this->lastBenchmarkResult = QStringLiteral("Cannot open CSV report for writing");
+        this->benchmarkDisplay = BenchmarkDisplay::OpenError;
         emit statusChanged();
         return;
     }
@@ -456,15 +492,15 @@ void RenderLab::finishBenchmark(bool interrupted)
     stream.flush();
     if (!file.commit())
     {
-        this->lastBenchmarkResult = QStringLiteral("Failed to save CSV report");
+        this->benchmarkDisplay = BenchmarkDisplay::SaveError;
         emit statusChanged();
         return;
     }
-    this->lastBenchmarkResult = QStringLiteral("%1 frames | interval p50/p95/p99: %2 / %3 / %4 ms\n"
-        "CPU p95: %5 ms | GPU p95: %6 ms | CSV: %7")
-        .arg(qulonglong(samples.size())).arg(formatMs(median)).arg(formatMs(p95))
-        .arg(formatMs(p99)).arg(formatMs(cpu95)).arg(formatMs(gpu95)).arg(output);
-    qInfo().noquote() << "AOWIS Mobile benchmark:" << this->lastBenchmarkResult;
+    this->benchmarkDisplay = BenchmarkDisplay::Complete;
+    this->benchmarkArgs = {QString::number(qulonglong(samples.size())),
+                           formatMs(median), formatMs(p95), formatMs(p99),
+                           formatMs(cpu95), formatMs(gpu95), output};
+    qInfo().noquote() << "AOWIS Mobile benchmark:" << this->benchmarkResult();
     emit statusChanged();
 }
 

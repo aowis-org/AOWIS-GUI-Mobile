@@ -1,5 +1,6 @@
 #include "map_server_settings.h"
 
+#include <QCoreApplication>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QUrl>
@@ -58,7 +59,10 @@ bool MapServerSettings::configured() const
 
 QString MapServerSettings::error() const
 {
-    return this->validationError;
+    if (this->validationError.isEmpty())
+        return QString();
+    const QByteArray source = this->validationError.toUtf8();
+    return QCoreApplication::translate("MapServerSettings", source.constData());
 }
 
 void MapServerSettings::setError(const QString &message)

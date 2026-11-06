@@ -26,6 +26,8 @@ qt_add_executable(aowis-mobile
     src/map_server_settings.h
     src/appearance_settings.cpp
     src/appearance_settings.h
+    src/language_settings.cpp
+    src/language_settings.h
     src/location_snapshot.cpp
     src/location_snapshot.h
     src/location_service.cpp
@@ -48,6 +50,13 @@ qt_add_executable(aowis-mobile
     src/performance_samples.h
     src/lifecycle_watchdog.cpp
     src/lifecycle_watchdog.h
+)
+
+# Package the editable UTF-8 translation catalog directly. This does not
+# require Qt LinguistTools in the cross-compilation toolchain.
+qt_add_resources(aowis-mobile "aowis_mobile_translations"
+    PREFIX "/"
+    FILES i18n/translations.json
 )
 
 set_source_files_properties(assets/icons/aowis.png PROPERTIES QT_RESOURCE_ALIAS icon.png)
@@ -249,6 +258,16 @@ if(BUILD_TESTING)
     target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)
     target_link_libraries(aowis-mobile-map-server-settings-tests PRIVATE Qt6::Core)
     add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
+    add_executable(aowis-mobile-language-settings-tests
+        tests/language_settings_tests.cpp src/language_settings.cpp src/language_settings.h)
+    target_include_directories(aowis-mobile-language-settings-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-language-settings-tests PRIVATE Qt6::Core Qt6::Gui)
+    # Standalone test needs the same catalog as the Android application.
+    qt_add_resources(aowis-mobile-language-settings-tests "aowis_language_test_catalog"
+        PREFIX "/" FILES i18n/translations.json)
+    add_test(NAME aowis-mobile-language-settings COMMAND aowis-mobile-language-settings-tests)
+    set_tests_properties(aowis-mobile-language-settings PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(aowis-mobile-appearance-settings-tests
         tests/appearance_settings_tests.cpp src/appearance_settings.cpp src/appearance_settings.h)
     target_include_directories(aowis-mobile-appearance-settings-tests PRIVATE src)

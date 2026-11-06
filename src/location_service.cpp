@@ -24,20 +24,30 @@ bool LocationService::fresh() const
 {
     return this->m_state == State::Tracking && this->m_applicationActive;
 }
+bool LocationService::permissionDenied() const
+{
+    return this->m_state == State::PermissionDenied;
+}
+
+bool LocationService::providerUnavailable() const
+{
+    return this->m_state == State::Unavailable;
+}
+
 QString LocationService::status() const
 {
     switch (this->m_state)
     {
-    case State::Paused: return QStringLiteral("Paused while app is in background");
-    case State::RequestingPermission: return QStringLiteral("Waiting for location permission");
-    case State::PermissionDenied: return QStringLiteral("Location permission denied; enable it in Android Settings");
-    case State::WaitingForFix: return QStringLiteral("Searching for position");
-    case State::Tracking: return QStringLiteral("Position available");
-    case State::Stale: return QStringLiteral("Last position is stale; waiting for a new fix");
-    case State::Unavailable: return QStringLiteral("No location provider available; check location services");
-    case State::Error: return QStringLiteral("Location service error; try again");
+    case State::Paused: return tr("Paused while app is in background");
+    case State::RequestingPermission: return tr("Waiting for location permission");
+    case State::PermissionDenied: return tr("Location permission denied; enable it in Android Settings");
+    case State::WaitingForFix: return tr("Searching for position");
+    case State::Tracking: return tr("Position available");
+    case State::Stale: return tr("Last position is stale; waiting for a new fix");
+    case State::Unavailable: return tr("No location provider available; check location services");
+    case State::Error: return tr("Location service error; try again");
     }
-    return QStringLiteral("Unknown location state");
+    return tr("Unknown location state");
 }
 double LocationService::latitude() const { return this->m_fix.latitude; }
 double LocationService::longitude() const { return this->m_fix.longitude; }

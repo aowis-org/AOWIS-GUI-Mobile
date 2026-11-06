@@ -59,7 +59,7 @@ checks = {
         "!compassService.pageVisible()" in main and
         "FrameAnimation" not in rose and "CompassMotion" not in rose,
     "hamburger navigation and Android Back":
-        'text: "Compass"' in qml and 'root.openPage("compass")' in qml and
+        'text: qsTr("Compass")' in qml and 'root.openPage("compass")' in qml and
         'activePage !== "map"' in qml,
     "live heading identified as magnetic, never true":
         "MAGNETIC" in qml and "not true north" in qml,

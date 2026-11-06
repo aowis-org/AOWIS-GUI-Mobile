@@ -26,7 +26,7 @@ checks = {
         "Rotation {" in component and "onPaint:" not in component and
         "Timer {" not in component and "Behavior on" not in component,
     "navigation and Android Back": 'root.openPage("plumbbob")' in qml and
-        'text: "Plumb Bob"' in qml and 'activePage !== "map"' in qml,
+        'text: qsTr("Plumb Bob")' in qml and 'activePage !== "map"' in qml,
     "Qt module and context registration": "qml/PlumbBobInstrument.qml" in cmake and
         'setContextProperty(QStringLiteral("plumbBobService")' in main,
     "native regression tests in builds": "aowis-mobile-plumb-bob-math-tests" in cmake and
@@ -38,10 +38,12 @@ checks = {
     "help explains plumb only": "not magnetic north" not in qml and
         "phone's edge departs from vertical" in qml,
     "no C++ auto": all("auto " not in t for t in (cpp, header, math)),
-    "launch without monkey or system changes": "shell am start -W" in android and
-        "shell am start -W" in lifecycle and
-        "shell monkey " not in android and "shell monkey " not in lifecycle and
-        "settings put" not in android and "settings put" not in lifecycle,
+    "launch without monkey or system changes":
+        'tools/launch_android_app.sh' in android and
+        'tools/launch_android_app.sh' in lifecycle and
+        'shell am start -W' in (root / 'tools/launch_android_app.sh').read_text() and
+        'shell monkey ' not in android and 'shell monkey ' not in lifecycle and
+        'settings put' not in android and 'settings put' not in lifecycle,
 }
 for label, ok in checks.items():
     print(("PASS" if ok else "FAIL") + ": " + label)

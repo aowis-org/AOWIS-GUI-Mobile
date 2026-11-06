@@ -111,16 +111,16 @@ QString GradienterService::status() const
 {
     switch (this->m_state)
     {
-    case State::Paused: return QStringLiteral("Open Gradienter to measure slope");
-    case State::Starting: return QStringLiteral("Waiting for gravity sensor");
-    case State::Tracking: return hasReading() ? QStringLiteral("Live gravity inclinometer")
-                                              : QStringLiteral("Gravity reading has expired");
-    case State::Stale: return QStringLiteral("Gravity reading has expired");
-    case State::NoSamples: return QStringLiteral("Sensor started, but no gravity readings arrived");
-    case State::Unavailable: return QStringLiteral("No accelerometer available on this device");
-    case State::Error: return QStringLiteral("Accelerometer could not start or stopped");
+    case State::Paused: return tr("Open Gradienter to measure slope");
+    case State::Starting: return tr("Waiting for gravity sensor");
+    case State::Tracking: return hasReading() ? tr("Live gravity inclinometer")
+                                              : tr("Gravity reading has expired");
+    case State::Stale: return tr("Gravity reading has expired");
+    case State::NoSamples: return tr("Sensor started, but no gravity readings arrived");
+    case State::Unavailable: return tr("No accelerometer available on this device");
+    case State::Error: return tr("Accelerometer could not start or stopped");
     }
-    return QStringLiteral("Gradienter unavailable");
+    return tr("Gradienter unavailable");
 }
 
 void GradienterService::changeState(State state)

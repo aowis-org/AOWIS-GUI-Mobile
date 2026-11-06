@@ -197,7 +197,7 @@ Item {
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.topMargin: chamber.height * .06
-            text: "PLUMB  /  GRAVITY"
+            text: qsTr("PLUMB  /  GRAVITY")
             font.pixelSize: Math.max(9, instrument.size * .026)
             font.bold: true
             font.letterSpacing: 2

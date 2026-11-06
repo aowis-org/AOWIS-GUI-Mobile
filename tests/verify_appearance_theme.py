@@ -43,7 +43,7 @@ for field in ('mapServerUrl', 'mapServerPort'):
                      qml, re.S), field
 assert qml.count('placeholderTextColor: root.uiPlaceholder') == 2
 assert qml.count('palette.buttonText: root.uiText') >= 8
-assert qml.count('palette.highlightedText: root.uiSelectedText') == 4
+assert qml.count('palette.highlightedText: root.uiSelectedText') >= 5
 assert 'appearanceSettings.setMode' in qml
 assert 'appearanceSettings.dark' in qml
 assert 'colorSchemeChanged' in settings

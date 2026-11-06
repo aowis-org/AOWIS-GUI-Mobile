@@ -98,7 +98,7 @@ double CompassService::roseHeadingDegrees() const
 
 QString CompassService::direction() const
 {
-    return QString::fromLatin1(AowisCompass::direction(headingDegrees()));
+    return tr(AowisCompass::direction(headingDegrees()));
 }
 
 double CompassService::calibrationLevel() const
@@ -109,28 +109,28 @@ double CompassService::calibrationLevel() const
 QString CompassService::calibrationStatus() const
 {
     if (!hasHeading() || this->m_calibration < 0.0)
-        return QStringLiteral("Calibration unavailable");
+        return tr("Calibration unavailable");
     if (this->m_calibration < 0.35)
-        return QStringLiteral("Low calibration · move phone in a figure eight");
+        return tr("Low calibration · move phone in a figure eight");
     if (this->m_calibration < 0.75)
-        return QStringLiteral("Moderate calibration");
-    return QStringLiteral("Good calibration");
+        return tr("Moderate calibration");
+    return tr("Good calibration");
 }
 
 QString CompassService::status() const
 {
     switch (this->m_state)
     {
-    case State::Paused: return QStringLiteral("Open Compass to read heading");
-    case State::Starting: return QStringLiteral("Waiting for magnetic compass sensor");
-    case State::Tracking: return hasHeading() ? QStringLiteral("Live magnetic heading")
-                                              : QStringLiteral("Compass reading has expired");
-    case State::Stale: return QStringLiteral("Compass reading has expired");
-    case State::NoSamples: return QStringLiteral("Magnetic sensor started, but no heading samples arrived");
-    case State::Unavailable: return QStringLiteral("No compass sensor available on this device");
-    case State::Error: return QStringLiteral("Compass sensor could not start or stopped");
+    case State::Paused: return tr("Open Compass to read heading");
+    case State::Starting: return tr("Waiting for magnetic compass sensor");
+    case State::Tracking: return hasHeading() ? tr("Live magnetic heading")
+                                              : tr("Compass reading has expired");
+    case State::Stale: return tr("Compass reading has expired");
+    case State::NoSamples: return tr("Magnetic sensor started, but no heading samples arrived");
+    case State::Unavailable: return tr("No compass sensor available on this device");
+    case State::Error: return tr("Compass sensor could not start or stopped");
     }
-    return QStringLiteral("Compass unavailable");
+    return tr("Compass unavailable");
 }
 
 bool CompassService::sensorActive() const

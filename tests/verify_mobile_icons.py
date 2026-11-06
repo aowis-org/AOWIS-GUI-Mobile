@@ -18,7 +18,7 @@ for kind in ('menu', 'down', 'plus', 'minus'):
 # Menu, dropdown arrows and math controls must not require missing font glyphs.
 for glyph in ('☰', '▾', '−'):
     assert glyph not in qml, f'font-dependent symbol remains: {glyph}'
-assert qml.count('kind: "down"') == 2
+assert qml.count('kind: "down"') == 3
 assert qml.count('kind: "menu"') == 1
 assert 'id: hamburgerButton' in qml
 assert 'anchors.right: parent.right' in qml

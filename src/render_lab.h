@@ -4,6 +4,7 @@
 #include <QQuickWindow>
 #include <QMutex>
 #include <QString>
+#include <QStringList>
 
 #include "performance_samples.h"
 #include "lifecycle_watchdog.h"
@@ -105,7 +106,9 @@ private:
     std::atomic<uint32_t> absentGlContextOnRelease{0};
     AowisMobileLifecycle::Watchdog recoveryWatchdog; // GUI thread only.
     QString recoveryReason; // GUI thread only.
-    QString lastRecoveryMessage = QStringLiteral("Awaiting first active frame");
+    enum class RecoveryDisplay { Awaiting, Waiting, Recovered, Stalled };
+    RecoveryDisplay recoveryDisplay = RecoveryDisplay::Awaiting;
+    int64_t lastRecoveryDurationUs = -1;
     uint32_t observedInvalidations = 0; // GUI thread only.
     uint32_t recoveries = 0; // GUI thread only.
     uint32_t recoveryTimeouts = 0; // GUI thread only.
@@ -121,7 +124,12 @@ private:
     uint64_t captureStartRssKb = 0; // Mutex-protected.
     int64_t captureStartUs = 0; // Protected by benchmarkMutex.
     std::vector<AowisMobileBench::FrameSample> captureSamples; // Mutex-protected.
-    QString lastBenchmarkResult; // GUI thread only.
+    enum class BenchmarkDisplay {
+        None, Recording, Interrupted, TooFew, DirectoryError, OpenError,
+        SaveError, Complete
+    };
+    BenchmarkDisplay benchmarkDisplay = BenchmarkDisplay::None;
+    QStringList benchmarkArgs; // GUI thread only; values, never localized prose.
     std::atomic<double> viewZoom{1.0};
     std::atomic<double> viewPanX{0.0};
     std::atomic<double> viewPanY{0.0};

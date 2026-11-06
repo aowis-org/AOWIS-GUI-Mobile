@@ -13,7 +13,7 @@ cmake = (root / "CMakeLists.txt").read_text()
 build = (root / "compile_linux.sh").read_text()
 checks = {
     "service registered with QML": 'setContextProperty(QStringLiteral("gradienterService")' in main,
-    "navigation and in-app Back": 'text: "Gradienter"' in qml and
+    "navigation and in-app Back": 'text: qsTr("Gradienter")' in qml and
          'root.openPage("gradienter")' in qml and 'activePage !== "map"' in qml,
     "Qt QML component packaged": "qml/GradienterVial.qml" in cmake and "GradienterVial {" in qml,
     "native Qt Sensors acceleration service": "QAccelerometer" in header and

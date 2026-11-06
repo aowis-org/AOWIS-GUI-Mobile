@@ -99,17 +99,17 @@ QString PlumbBobService::status() const
 {
     switch (this->m_state)
     {
-    case State::Paused: return QStringLiteral("Open Plumb Bob to measure vertical alignment");
-    case State::Starting: return QStringLiteral("Waiting for gravity sensor");
-    case State::Tracking: return this->hasReading() ? QStringLiteral("Live gravity plumb line")
-                                                       : QStringLiteral("Gravity reading has expired");
-    case State::TooFlat: return QStringLiteral("Hold the phone upright to measure an edge");
-    case State::Stale: return QStringLiteral("Gravity reading has expired");
-    case State::NoSamples: return QStringLiteral("Sensor started, but no gravity readings arrived");
-    case State::Unavailable: return QStringLiteral("No accelerometer available on this device");
-    case State::Error: return QStringLiteral("Accelerometer could not start or stopped");
+    case State::Paused: return tr("Open Plumb Bob to measure vertical alignment");
+    case State::Starting: return tr("Waiting for gravity sensor");
+    case State::Tracking: return this->hasReading() ? tr("Live gravity plumb line")
+                                                       : tr("Gravity reading has expired");
+    case State::TooFlat: return tr("Hold the phone upright to measure an edge");
+    case State::Stale: return tr("Gravity reading has expired");
+    case State::NoSamples: return tr("Sensor started, but no gravity readings arrived");
+    case State::Unavailable: return tr("No accelerometer available on this device");
+    case State::Error: return tr("Accelerometer could not start or stopped");
     }
-    return QStringLiteral("Plumb Bob unavailable");
+    return tr("Plumb Bob unavailable");
 }
 
 void PlumbBobService::changeState(State state)

@@ -18,8 +18,13 @@ Item {
     implicitWidth: 340
     implicitHeight: 340
     Accessible.role: Accessible.Indicator
-    Accessible.name: hasHeading ? "Magnetic heading " + Math.round(headingDegrees) + " degrees" : "Magnetic heading unavailable"
+    Accessible.name: hasHeading ? qsTr("Magnetic heading %1 degrees").arg(Math.round(headingDegrees))
+                                : qsTr("Magnetic heading unavailable")
 
+    Connections {
+        target: languageSettings
+        function onLanguageChanged() { rose.requestPaint() }
+    }
     Canvas {
         id: bezel
         anchors.fill: parent
@@ -126,7 +131,7 @@ Item {
                 }
                 // Always-available Latin cardinal glyphs, avoiding icon fonts.
                 ctx.font = "700 " + Math.max(19, r * .15) + "px sans-serif"
-                const cardinal = ["N", "E", "S", "W"]
+                const cardinal = [qsTr("N"), qsTr("E"), qsTr("S"), qsTr("W")]
                 for (let a = 0; a < 4; ++a) {
                     const theta = a * 90 * rad - Math.PI / 2
                     ctx.fillStyle = a === 0 ? compass.northRed : compass.dialText
