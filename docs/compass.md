@@ -15,13 +15,23 @@ while stationary, unlike the GPS course-over-ground field in Location settings.
 The reading is defined relative to the phone's native top edge; the app also
 compensates for screen rotation based on the Qt screen orientation.
 
-The dial is driven by a **C++ circular constant-velocity observer** and an
-analytically integrated **critically damped display follower**. The observer
-tracks the real arrival time of each QCompass azimuth sample and estimates
-angular velocity. It rejects small magnetic noise and predicts short motion
-between readings, so the dial doesn't pause every time it catches up with the
-last magnetic sample. Predictions stop after 105 milliseconds without a new
-sample, rather than spinning indefinitely through sensor failures.
+The dial is driven by a **C++ noise-gated circular observer**. Raw magnetic
+azimuth values are unwrapped through north; a short least-squares measurement
+history estimates angular speed without differentiating consecutive noisy
+samples. Two low-pass time scales distinguish sustained turns from stationary
+magnetic fluctuations. A hysteretic motion gate holds the dial **completely
+still** against small magnetic jitter, and releases after sustained movement.
+During a turn, a bounded 90 ms angular-velocity prediction bridges gaps between
+sensor reports. An analytically integrated first-order display follower advances
+smoothly without the spring ringing and high-frequency vibration of the
+previous velocity-error servo. Unlike the old implementation, velocity changes
+are **not** injected directly from individual magnetic innovation residuals.
+Noise suppression inevitably trades a small amount of sensitivity to extremely
+slow turns for a stable instrument when stationary.
+
+The compass rose uses a separate **continuous, unwrapped** C++ angle: its
+rotation can pass from 359° through 360° to 361° without snapping back by a
+full revolution. The numeric bearing remains normalized into 0–359°.
 
 A persistent, indefinite **C++ `QAbstractAnimation`** invokes the display
 follower on Qt's animation clock. With Qt Quick's threaded render loop the
@@ -29,8 +39,8 @@ animation clock is synchronized to scene-graph frames, rather than running
 on an independent 16 ms `QTimer`. No per-sample animations restart, and
 **no JavaScript smoothing is used**. The rose rotates as a cached QML Canvas
 texture; its paint code does not rerun for heading changes. The numeric
-readout and rose use the same C++ heading. North wraparound is circular,
-including repeated rotations through 360°.
+readout and rose use the same C++ observer, with separate continuous and
+normalized representations of heading.
 
 The phone requests 60 Hz sensor readings, but the Android backend can still
 supply fewer; the status panel displays the *observed* sensor rate to make
@@ -38,7 +48,11 @@ this distinction visible. An animation-clock improvement cannot overcome
 hardware sensor latency or degraded magnetic calibration, so phone testing
 remains essential. The first valid sample is displayed immediately; stopping,
 backgrounding, reopening and loss of readings reset or invalidate the heading.
-All filter and prediction parameters are in `src/compass_heading_filter.h`.
+All filtering and prediction parameters are in `src/compass_heading_filter.h`.
+Hardware-free regression tests cover alternating magnetic jitter at 20/60 Hz,
+noisy real turns, turn-and-stop behavior, slow motion, frame-rate consistency
+and continuous north crossing. These simulations are not a substitute for
+real-device visual acceptance.
 
 Sensors are started **on entering Compass while the app is active**, and
 stopped when leaving the page or backgrounding AOWIS. A new reading is required

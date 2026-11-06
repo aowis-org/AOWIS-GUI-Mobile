@@ -569,7 +569,7 @@ Window {
                     Layout.preferredHeight: visualSize
                     darkTheme: root.darkTheme
                     hasHeading: compassService.hasHeading
-                    headingDegrees: compassService.headingDegrees
+                    headingDegrees: compassService.roseHeadingDegrees
                     Layout.topMargin: 8
                 }
                 Label {

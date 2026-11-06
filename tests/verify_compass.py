@@ -38,6 +38,9 @@ checks = {
         "rotation: compass.hasHeading ? -compass.headingDegrees : 0" in rose and
         "Math.round(compassService.headingDegrees)" in qml and
         "compassService.direction" in qml and
+        "headingDegrees: compassService.roseHeadingDegrees" in qml and
+        "Q_PROPERTY(double roseHeadingDegrees" in header and
+        "continuousDisplayDegrees()" in service and
         "displayInitialized" not in rose and "FrameAnimation" not in rose,
     "sensor prediction and Qt animation-clock repaint loop":
         "compass_heading_filter.h" in cmake and

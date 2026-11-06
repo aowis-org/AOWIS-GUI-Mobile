@@ -87,6 +87,15 @@ double CompassService::headingDegrees() const
         : -1.0;
 }
 
+double CompassService::roseHeadingDegrees() const
+{
+    // The rose must receive an *unwrapped* angle. Normalizing here would
+    // cause a visible 359 -> 0 degree jump on every north crossing.
+    return hasHeading()
+        ? this->m_headingFilter.continuousDisplayDegrees() + this->m_displayRotationDegrees
+        : -1.0;
+}
+
 QString CompassService::direction() const
 {
     return QString::fromLatin1(AowisCompass::direction(headingDegrees()));

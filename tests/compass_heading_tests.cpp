@@ -88,10 +88,15 @@ int main()
     CHECK(!filter.sample(190.0, 0.0));
     CHECK(!filter.sample(270.0, -0.1));
     CHECK(!filter.sample(INFINITY, 0.1));
-    CHECK(filter.sample(1.0, 0.05));
-    for (int i = 1; i <= 12; ++i)
-        filter.advanceDisplay(0.05 + i / 60.0);
-    CHECK(std::fabs(AowisCompass::shortestDelta(filter.displayDegrees(), 1.0)) < 1.2);
+    // Isolated packets are not enough to distinguish noise from motion.
+    // A sustained clockwise north crossing must rotate continuously forward.
+    for (int i = 1; i <= 10; ++i)
+        CHECK(filter.sample(AowisCompass::normalize(359.0 + i), i * 0.05));
+    for (int i = 1; i <= 30; ++i)
+        filter.advanceDisplay(0.5 + i / 60.0);
+    CHECK(filter.continuousDisplayDegrees() > 360.0);
+    CHECK(filter.continuousDisplayDegrees() < 372.0);
+    CHECK(std::fabs(AowisCompass::shortestDelta(filter.displayDegrees(), 9.0)) < 3.0);
 
     // Constant 90 degrees/s at 20Hz input must produce continuous 60Hz
     // movement. The previous filter visibly stalled between packets.
@@ -145,6 +150,144 @@ int main()
     const double settled = filter.displayDegrees();
     filter.advanceDisplay(2.4);
     CHECK(std::fabs(AowisCompass::shortestDelta(settled, filter.displayDegrees())) < 0.1);
+
+    // The display angle is unwrapped: the UI must never see 359 -> 0 and
+    // rotate an entire revolution backwards across north.
+    AowisCompass::HeadingFilter wrap;
+    CHECK(wrap.sample(350.0, 0.0));
+    double nextSample = 0.05;
+    double lastContinuous = wrap.continuousDisplayDegrees();
+    for (int frame = 1; frame <= 180; ++frame)
+    {
+        const double t = frame / 60.0;
+        while (nextSample <= t + 1e-8)
+        {
+            CHECK(wrap.sample(AowisCompass::normalize(350.0 + 45.0 * nextSample), nextSample));
+            nextSample += 0.05;
+        }
+        wrap.advanceDisplay(t);
+        const double continuous = wrap.continuousDisplayDegrees();
+        CHECK(continuous >= lastContinuous - 0.02);
+        CHECK(continuous - lastContinuous < 2.0);
+        lastContinuous = continuous;
+    }
+    CHECK(wrap.continuousDisplayDegrees() > 360.0);
+
+    // Reproduces the reported electric-motor / shaver-like vibration:
+    // a stationary phone with substantial alternating magnetic fluctuations
+    // must not repeatedly move the rendered rose by subpixel angles.
+    for (double sampleHz : {20.0, 60.0})
+    {
+        AowisCompass::HeadingFilter noisyStill;
+        CHECK(noisyStill.sample(42.0, 0.0));
+        double latest = 42.0;
+        double highest = 42.0;
+        double lowest = 42.0;
+        double next = 1.0 / sampleHz;
+        for (int frame = 1; frame <= 600; ++frame)
+        {
+            const double t = frame / 60.0;
+            while (next <= t + 1e-8)
+            {
+                const double noise = 1.1 * (0.75 * std::sin(next * 129.0)
+                                             + 0.55 * std::sin(next * 239.0)
+                                             + 0.3 * std::sin(next * 19.0));
+                CHECK(noisyStill.sample(42.0 + noise, next));
+                next += 1.0 / sampleHz;
+            }
+            noisyStill.advanceDisplay(t);
+            latest = noisyStill.displayDegrees();
+            if (t > 2.0)
+            {
+                highest = std::max(highest, latest);
+                lowest = std::min(lowest, latest);
+            }
+        }
+        std::cout << "Stationary noise range at " << sampleHz << "Hz: "
+                  << (highest - lowest) << " degrees\n";
+        CHECK(highest - lowest < 0.18);
+    }
+
+    // Under a genuine, noisy turn, a continuous observer must never hunt
+    // alternately clockwise/counter-clockwise at each magnetic sample.
+    for (double sampleHz : {20.0, 60.0})
+    {
+        AowisCompass::HeadingFilter turning;
+        CHECK(turning.sample(22.0, 0.0));
+        double lastAngle = turning.continuousDisplayDegrees();
+        double next = 1.0 / sampleHz;
+        double reversals = 0.0;
+        int reversedFrames = 0;
+        for (int frame = 1; frame <= 300; ++frame)
+        {
+            const double t = frame / 60.0;
+            while (next <= t + 1e-8)
+            {
+                const double noise = 1.3 * (0.75 * std::sin(next * 129.0)
+                                             + 0.55 * std::sin(next * 239.0)
+                                             + 0.3 * std::sin(next * 19.0));
+                CHECK(turning.sample(AowisCompass::normalize(22.0 + 40.0 * next + noise), next));
+                next += 1.0 / sampleHz;
+            }
+            turning.advanceDisplay(t);
+            const double angle = turning.continuousDisplayDegrees();
+            if (t > 0.8 && angle < lastAngle - 0.02)
+            {
+                reversals += lastAngle - angle;
+                ++reversedFrames;
+            }
+            lastAngle = angle;
+        }
+        std::cout << "Noisy 40deg/s turn at " << sampleHz << "Hz: "
+                  << reversedFrames << " reverse frames, " << reversals << " deg reversed\n";
+        CHECK(reversedFrames == 0);
+        CHECK(reversals < 0.01);
+        CHECK(std::fabs(turning.continuousDisplayDegrees() - 222.0) < 6.0);
+    }
+
+    // A realistic failure case is a phone rotating, then stopping while the
+    // magnetometer continues alternating by up to ~2 degrees at 20Hz. The
+    // observer must return to its held-needle mode rather than "idling".
+    AowisCompass::HeadingFilter turnThenStop;
+    CHECK(turnThenStop.sample(40.0, 0.0));
+    double nextStopSample = 0.05;
+    double lateMinimum = 1000.0;
+    double lateMaximum = -1000.0;
+    for (int frame = 1; frame <= 900; ++frame)
+    {
+        const double t = frame / 60.0;
+        while (nextStopSample <= t + 1e-8)
+        {
+            const double measuredTurn = 40.0 + 40.0 * std::min(5.0, nextStopSample);
+            const double magneticNoise = 2.0 *
+                (0.75 * std::sin(nextStopSample * 129.0)
+                 + 0.55 * std::sin(nextStopSample * 239.0)
+                 + 0.3 * std::sin(nextStopSample * 19.0));
+            CHECK(turnThenStop.sample(AowisCompass::normalize(measuredTurn + magneticNoise),
+                                      nextStopSample));
+            nextStopSample += 0.05;
+        }
+        turnThenStop.advanceDisplay(t);
+        if (t > 12.0)
+        {
+            lateMinimum = std::min(lateMinimum, turnThenStop.continuousDisplayDegrees());
+            lateMaximum = std::max(lateMaximum, turnThenStop.continuousDisplayDegrees());
+        }
+    }
+    CHECK(!turnThenStop.moving());
+    CHECK(lateMaximum - lateMinimum < 0.18);
+
+    // Even a slow physical turn must eventually release the stillness gate.
+    AowisCompass::HeadingFilter slow;
+    CHECK(slow.sample(40.0, 0.0));
+    for (int frame = 1; frame <= 240; ++frame)
+    {
+        const double t = frame / 60.0;
+        CHECK(slow.sample(40.0 + 2.0 * t, t));
+        slow.advanceDisplay(t);
+    }
+    CHECK(slow.displayDegrees() > 45.0);
+    CHECK(slow.displayDegrees() < 49.0);
 
     CHECK(filter.sample(250.0, 3.0));
     CHECK(std::fabs(filter.displayDegrees() - 250.0) < 0.001);

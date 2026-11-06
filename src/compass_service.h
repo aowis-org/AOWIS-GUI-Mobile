@@ -15,6 +15,7 @@ class CompassService final : public QObject
     Q_OBJECT
     Q_PROPERTY(bool hasHeading READ hasHeading NOTIFY changed)
     Q_PROPERTY(double headingDegrees READ headingDegrees NOTIFY headingChanged)
+    Q_PROPERTY(double roseHeadingDegrees READ roseHeadingDegrees NOTIFY headingChanged)
     Q_PROPERTY(QString direction READ direction NOTIFY headingChanged)
     Q_PROPERTY(double calibrationLevel READ calibrationLevel NOTIFY changed)
     Q_PROPERTY(QString calibrationStatus READ calibrationStatus NOTIFY changed)
@@ -29,6 +30,7 @@ public:
 
     bool hasHeading() const;
     double headingDegrees() const;
+    double roseHeadingDegrees() const;
     QString direction() const;
     double calibrationLevel() const;
     QString calibrationStatus() const;
