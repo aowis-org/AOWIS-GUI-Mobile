@@ -864,7 +864,7 @@ Window {
                     Layout.leftMargin: 4
                 }
                 Label {
-                    text: "TRUE VERTICAL · GRAVITY"
+                    text: "EDGE ALIGNMENT · GRAVITY"
                     color: root.uiMuted
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
@@ -887,8 +887,7 @@ Window {
                 Label {
                     Layout.alignment: Qt.AlignHCenter
                     text: plumbBobService.hasReading
-                          ? Math.max(plumbBobService.edgeDegrees,
-                                     plumbBobService.faceDegrees).toFixed(1) + "°"
+                          ? plumbBobService.edgeDegrees.toFixed(1) + "°"
                           : "—°"
                     font.pixelSize: 42
                     font.weight: Font.DemiBold
@@ -897,64 +896,12 @@ Window {
                 Label {
                     Layout.alignment: Qt.AlignHCenter
                     text: !plumbBobService.hasReading ? "WAITING FOR UPRIGHT READING"
-                          : plumbBobService.plumb ? "PLUMB · WITHIN ±0.75°"
-                          : "DEVIATION FROM TRUE VERTICAL"
+                          : plumbBobService.plumb ? "EDGE PLUMB · WITHIN ±0.75°"
+                          : "EDGE OFF VERTICAL"
                     color: plumbBobService.plumb ? root.uiSuccess : root.uiMuted
                     font.bold: true
                     font.pixelSize: 12
                     font.letterSpacing: 0.8
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 85
-                        radius: 13
-                        color: root.uiRaised
-                        border.color: root.uiBorder
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            Label {
-                                text: "EDGE OFF VERTICAL"
-                                color: root.uiMuted
-                                font.pixelSize: 10
-                            }
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: plumbBobService.hasReading
-                                      ? plumbBobService.edgeDegrees.toFixed(1) + "°" : "—°"
-                                color: root.uiText
-                                font.pixelSize: 25
-                                font.bold: true
-                            }
-                        }
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 85
-                        radius: 13
-                        color: root.uiRaised
-                        border.color: root.uiBorder
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            Label {
-                                text: "FACE LEAN"
-                                color: root.uiMuted
-                                font.pixelSize: 10
-                            }
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: plumbBobService.hasReading
-                                      ? plumbBobService.faceDegrees.toFixed(1) + "°" : "—°"
-                                color: root.uiText
-                                font.pixelSize: 25
-                                font.bold: true
-                            }
-                        }
-                    }
                 }
                 Rectangle {
                     Layout.fillWidth: true
@@ -979,10 +926,9 @@ Window {
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: "Hold the phone upright, with its face against a vertical surface. " +
-                          "The hanging line indicates gravity, not magnetic north. " +
-                          "Both the screen edge and the phone face must be vertical. " +
-                          "Measurements are gravity-based and cannot substitute for a calibrated survey instrument."
+                    text: "Hold the phone upright beside the edge you want to check. " +
+                          "The hanging line follows gravity; the angle shows how far the " +
+                          "phone's edge departs from vertical."
                     color: root.uiMuted
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap

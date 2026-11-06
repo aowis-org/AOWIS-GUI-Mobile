@@ -87,13 +87,9 @@ double PlumbBobService::edgeDegrees() const
 {
     return this->hasReading() ? AowisPlumbBob::edgeDeviation(this->displayedDirection()) : 0.0;
 }
-double PlumbBobService::faceDegrees() const
-{
-    return this->hasReading() ? this->m_filter.faceDeviation() : 0.0;
-}
 bool PlumbBobService::plumb() const
 {
-    return this->hasReading() && AowisPlumbBob::plumb(this->edgeDegrees(), this->faceDegrees());
+    return this->hasReading() && AowisPlumbBob::plumb(this->edgeDegrees());
 }
 bool PlumbBobService::sensorActive() const { return this->m_accelerometer.isActive(); }
 int PlumbBobService::sampleCount() const { return this->m_sampleCount; }
@@ -107,7 +103,7 @@ QString PlumbBobService::status() const
     case State::Starting: return QStringLiteral("Waiting for gravity sensor");
     case State::Tracking: return this->hasReading() ? QStringLiteral("Live gravity plumb line")
                                                        : QStringLiteral("Gravity reading has expired");
-    case State::TooFlat: return QStringLiteral("Hold phone upright — the face is too horizontal");
+    case State::TooFlat: return QStringLiteral("Hold the phone upright to measure an edge");
     case State::Stale: return QStringLiteral("Gravity reading has expired");
     case State::NoSamples: return QStringLiteral("Sensor started, but no gravity readings arrived");
     case State::Unavailable: return QStringLiteral("No accelerometer available on this device");

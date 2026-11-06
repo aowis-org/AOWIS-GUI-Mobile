@@ -31,6 +31,12 @@ checks = {
         'setContextProperty(QStringLiteral("plumbBobService")' in main,
     "native regression tests in builds": "aowis-mobile-plumb-bob-math-tests" in cmake and
         "aowis-mobile-plumb-bob-math-tests" in build,
+    "single edge deviation only": "faceDegrees" not in qml + cpp + header and
+        "FACE LEAN" not in qml and "signedFaceLean" not in math and
+        "faceLean" not in math and "plumbBobService.edgeDegrees.toFixed" in qml and
+        "plumb(this->edgeDegrees())" in cpp,
+    "help explains plumb only": "not magnetic north" not in qml and
+        "phone's edge departs from vertical" in qml,
     "no C++ auto": all("auto " not in t for t in (cpp, header, math)),
     "launch without monkey or system changes": "shell am start -W" in android and
         "shell am start -W" in lifecycle and

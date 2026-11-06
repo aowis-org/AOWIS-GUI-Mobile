@@ -14,7 +14,7 @@ int main()
     assert(value.suitable);
     assert(std::abs(value.downX) < 1e-6);
     assert(std::abs(value.downY - 1) < 1e-6);
-    assert(AowisPlumbBob::plumb(AowisPlumbBob::edgeDeviation({value.downX, value.downY}), value.faceLean));
+    assert(AowisPlumbBob::plumb(AowisPlumbBob::edgeDeviation({value.downX, value.downY})));
 
     assert(AowisPlumbBob::fromGravity(0, -9.81, 0, value));
     assert(value.suitable);
@@ -26,15 +26,17 @@ int main()
 
     assert(AowisPlumbBob::fromGravity(0, 0, 9.81, value));
     assert(!value.suitable);
-    assert(std::abs(value.faceLean - 90) < 1e-6);
 
     assert(AowisPlumbBob::fromGravity(0, 9.81 / std::sqrt(2),
                                      9.81 / std::sqrt(2), value));
     assert(value.suitable);
-    assert(std::abs(value.faceLean - 45) < .0001);
-    assert(!AowisPlumbBob::plumb(0, value.faceLean));
-    assert(!AowisPlumbBob::plumb(1.0, 0));
-    assert(AowisPlumbBob::plumb(0.6, 0.6));
+    // The single measured quantity is the edge in the screen's upright plane;
+    // pitching the phone face does not add a second lean constraint.
+    assert(AowisPlumbBob::plumb(AowisPlumbBob::edgeDeviation({value.downX, value.downY})));
+    assert(!AowisPlumbBob::plumb(1.0));
+    assert(AowisPlumbBob::plumb(0.6));
+    assert(!AowisPlumbBob::plumb(-0.5));
+    assert(!AowisPlumbBob::plumb(NAN));
 
     assert(!AowisPlumbBob::fromGravity(NAN, 1, 0, value));
     assert(!AowisPlumbBob::fromGravity(0, 0, 0, value));

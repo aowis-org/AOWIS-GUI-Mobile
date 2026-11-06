@@ -17,8 +17,6 @@ struct Reading
 {
     double downX = 0.0;  // projected gravity, screen right positive
     double downY = 1.0;  // projected gravity, screen down positive
-    double signedFaceLean = 0.0; // degrees; sign records which face is leaning
-    double faceLean = 0.0;       // absolute deviation from a vertical plane
     bool suitable = false;
 };
 
@@ -42,8 +40,6 @@ inline bool fromGravity(double x, double y, double z, Reading &out)
     const bool suitable = planar / magnitude >= 0.35;
     Reading value;
     value.suitable = suitable;
-    value.signedFaceLean = std::asin(std::clamp(z / magnitude, -1.0, 1.0)) * kDegrees;
-    value.faceLean = std::abs(value.signedFaceLean);
     if (suitable)
     {
         // Qt fixed axes: +x right, +y toward the device's top. The static
@@ -73,10 +69,10 @@ inline double edgeDeviation(ScreenDirection down)
     return std::atan2(std::abs(down.x), std::abs(down.y)) * kDegrees;
 }
 
-inline bool plumb(double edgeDegrees, double faceDegrees, double toleranceDegrees = 0.75)
+inline bool plumb(double edgeDegrees, double toleranceDegrees = 0.75)
 {
-    return std::isfinite(edgeDegrees) && std::isfinite(faceDegrees) &&
-           edgeDegrees <= toleranceDegrees && faceDegrees <= toleranceDegrees;
+    return std::isfinite(edgeDegrees) && edgeDegrees >= 0.0 &&
+           edgeDegrees <= toleranceDegrees;
 }
 
 inline double shortestDelta(double fromDegrees, double toDegrees)
@@ -100,8 +96,6 @@ public:
         this->m_lastFrame = -1.0;
         this->m_observedAngle = 0.0;
         this->m_displayAngle = 0.0;
-        this->m_observedLean = 0.0;
-        this->m_displayLean = 0.0;
     }
 
     bool sample(Reading reading, double seconds)
@@ -116,8 +110,6 @@ public:
             this->m_lastFrame = seconds;
             this->m_observedAngle = angle;
             this->m_displayAngle = angle;
-            this->m_observedLean = reading.signedFaceLean;
-            this->m_displayLean = reading.signedFaceLean;
             return true;
         }
         if (seconds <= this->m_lastSample)
@@ -133,8 +125,6 @@ public:
             const double gain = 1.0 - std::exp(-dt / 0.13);
             this->m_observedAngle += gain * difference;
         }
-        const double leanGain = 1.0 - std::exp(-dt / 0.14);
-        this->m_observedLean += leanGain * (reading.signedFaceLean - this->m_observedLean);
         return true;
     }
 
@@ -146,11 +136,8 @@ public:
         this->m_lastFrame = seconds;
         const double gain = 1.0 - std::exp(-dt / 0.10);
         const double beforeAngle = this->m_displayAngle;
-        const double beforeLean = this->m_displayLean;
         this->m_displayAngle += gain * (this->m_observedAngle - this->m_displayAngle);
-        this->m_displayLean += gain * (this->m_observedLean - this->m_displayLean);
-        return std::abs(this->m_displayAngle - beforeAngle) > 0.0001 ||
-               std::abs(this->m_displayLean - beforeLean) > 0.0001;
+        return std::abs(this->m_displayAngle - beforeAngle) > 0.0001;
     }
 
     ScreenDirection direction() const
@@ -158,7 +145,6 @@ public:
         const double angle = this->m_displayAngle / kDegrees;
         return {std::sin(angle), std::cos(angle)};
     }
-    double faceDeviation() const { return std::abs(this->m_displayLean); }
     bool initialized() const { return this->m_initialized; }
 
 private:
@@ -167,7 +153,5 @@ private:
     double m_lastFrame = -1.0;
     double m_observedAngle = 0.0;
     double m_displayAngle = 0.0;
-    double m_observedLean = 0.0;
-    double m_displayLean = 0.0;
 };
 } // namespace AowisPlumbBob

@@ -19,7 +19,6 @@ class PlumbBobService final : public QObject
     Q_PROPERTY(double downX READ downX NOTIFY directionChanged)
     Q_PROPERTY(double downY READ downY NOTIFY directionChanged)
     Q_PROPERTY(double edgeDegrees READ edgeDegrees NOTIFY directionChanged)
-    Q_PROPERTY(double faceDegrees READ faceDegrees NOTIFY directionChanged)
     Q_PROPERTY(bool plumb READ plumb NOTIFY directionChanged)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(bool sensorActive READ sensorActive NOTIFY changed)
@@ -32,7 +31,6 @@ public:
     double downX() const;
     double downY() const;
     double edgeDegrees() const;
-    double faceDegrees() const;
     bool plumb() const;
     QString status() const;
     bool sensorActive() const;
