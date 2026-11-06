@@ -92,7 +92,8 @@ errors=0
 if ! "$pull_only"; then
     # Launch once, then establish the original PID. A changed PID indicates a
     # process restart even when the screenshot looks correct afterwards.
-    "${adb_cmd[@]}" shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 >/dev/null
+    "${adb_cmd[@]}" shell am start -W -a android.intent.action.MAIN \
+        -c android.intent.category.LAUNCHER -p "$package" >/dev/null
     sleep "$resume_seconds"
     initial_pid="$(app_pid)"
     if [[ -z "$initial_pid" ]]; then
@@ -103,7 +104,8 @@ if ! "$pull_only"; then
         for ((i=1; i<=cycles; i++)); do
             "${adb_cmd[@]}" shell input keyevent KEYCODE_HOME
             sleep "$pause_seconds"
-            "${adb_cmd[@]}" shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 >/dev/null
+            "${adb_cmd[@]}" shell am start -W -a android.intent.action.MAIN \
+                -c android.intent.category.LAUNCHER -p "$package" >/dev/null
             sleep "$resume_seconds"
             current_pid="$(app_pid)"
             if [[ -z "$current_pid" ]]; then

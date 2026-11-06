@@ -37,6 +37,9 @@ qt_add_executable(aowis-mobile
     src/gradienter_service.cpp
     src/gradienter_service.h
     src/gradienter_math.h
+    src/plumb_bob_service.cpp
+    src/plumb_bob_service.h
+    src/plumb_bob_math.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
@@ -66,10 +69,11 @@ set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_source_files_properties(qml/UiIcon.qml PROPERTIES QT_RESOURCE_ALIAS UiIcon.qml)
 set_source_files_properties(qml/CompassRose.qml PROPERTIES QT_RESOURCE_ALIAS CompassRose.qml)
 set_source_files_properties(qml/GradienterVial.qml PROPERTIES QT_RESOURCE_ALIAS GradienterVial.qml)
+set_source_files_properties(qml/PlumbBobInstrument.qml PROPERTIES QT_RESOURCE_ALIAS PlumbBobInstrument.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock
@@ -231,6 +235,10 @@ if(BUILD_TESTING)
         tests/gradienter_math_tests.cpp src/gradienter_math.h)
     target_include_directories(aowis-mobile-gradienter-math-tests PRIVATE src)
     add_test(NAME aowis-mobile-gradienter-math COMMAND aowis-mobile-gradienter-math-tests)
+    add_executable(aowis-mobile-plumb-bob-math-tests
+        tests/plumb_bob_math_tests.cpp src/plumb_bob_math.h)
+    target_include_directories(aowis-mobile-plumb-bob-math-tests PRIVATE src)
+    add_test(NAME aowis-mobile-plumb-bob-math COMMAND aowis-mobile-plumb-bob-math-tests)
     add_executable(aowis-mobile-location-snapshot-tests
         tests/location_snapshot_tests.cpp src/location_snapshot.cpp src/location_snapshot.h)
     target_include_directories(aowis-mobile-location-snapshot-tests PRIVATE src)

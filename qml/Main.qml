@@ -37,6 +37,7 @@ Window {
     onActivePageChanged: {
         compassService.setPageVisible(activePage === "compass")
         gradienterService.setPageVisible(activePage === "gradienter")
+        plumbBobService.setPageVisible(activePage === "plumbbob")
     }
     property string saveFeedback: ""
     property bool saveSucceeded: false
@@ -836,6 +837,161 @@ Window {
         }
     }
 
+    // Gravity-based plumb instrument; no map renderer dependency and no
+    // JavaScript sensor filtering or motion animation.
+    Rectangle {
+        id: plumbBobPage
+        anchors.fill: parent
+        visible: root.activePage === "plumbbob"
+        color: root.uiSurface
+        ScrollView {
+            id: plumbBobScroll
+            anchors.fill: parent
+            anchors.topMargin: 76
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            anchors.bottomMargin: 12
+            contentWidth: availableWidth
+            clip: true
+            ColumnLayout {
+                width: plumbBobScroll.availableWidth
+                spacing: 12
+                Label {
+                    text: "Plumb Bob"
+                    color: root.uiText
+                    font.pixelSize: 26
+                    font.bold: true
+                    Layout.leftMargin: 4
+                }
+                Label {
+                    text: "TRUE VERTICAL · GRAVITY"
+                    color: root.uiMuted
+                    font.pixelSize: 11
+                    font.letterSpacing: 1.2
+                    Layout.leftMargin: 4
+                }
+                PlumbBobInstrument {
+                    id: plumbInstrument
+                    readonly property real visualSize: Math.max(170,
+                        Math.min(plumbBobScroll.availableWidth - 8, root.height * .45, 390))
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: visualSize
+                    Layout.preferredHeight: visualSize
+                    Layout.topMargin: 7
+                    darkTheme: root.darkTheme
+                    hasReading: plumbBobService.hasReading
+                    plumb: plumbBobService.plumb
+                    downX: plumbBobService.downX
+                    downY: plumbBobService.downY
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: plumbBobService.hasReading
+                          ? Math.max(plumbBobService.edgeDegrees,
+                                     plumbBobService.faceDegrees).toFixed(1) + "°"
+                          : "—°"
+                    font.pixelSize: 42
+                    font.weight: Font.DemiBold
+                    color: plumbBobService.plumb ? root.uiSuccess : root.uiText
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: !plumbBobService.hasReading ? "WAITING FOR UPRIGHT READING"
+                          : plumbBobService.plumb ? "PLUMB · WITHIN ±0.75°"
+                          : "DEVIATION FROM TRUE VERTICAL"
+                    color: plumbBobService.plumb ? root.uiSuccess : root.uiMuted
+                    font.bold: true
+                    font.pixelSize: 12
+                    font.letterSpacing: 0.8
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 85
+                        radius: 13
+                        color: root.uiRaised
+                        border.color: root.uiBorder
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Label {
+                                text: "EDGE OFF VERTICAL"
+                                color: root.uiMuted
+                                font.pixelSize: 10
+                            }
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: plumbBobService.hasReading
+                                      ? plumbBobService.edgeDegrees.toFixed(1) + "°" : "—°"
+                                color: root.uiText
+                                font.pixelSize: 25
+                                font.bold: true
+                            }
+                        }
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 85
+                        radius: 13
+                        color: root.uiRaised
+                        border.color: root.uiBorder
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Label {
+                                text: "FACE LEAN"
+                                color: root.uiMuted
+                                font.pixelSize: 10
+                            }
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: plumbBobService.hasReading
+                                      ? plumbBobService.faceDegrees.toFixed(1) + "°" : "—°"
+                                color: root.uiText
+                                font.pixelSize: 25
+                                font.bold: true
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: plumbStatus.implicitHeight + 28
+                    radius: 13
+                    color: root.uiRaised
+                    border.color: root.uiBorder
+                    Label {
+                        id: plumbStatus
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        text: plumbBobService.status + " · sensor " +
+                              (plumbBobService.sensorActive ? "active" : "inactive") +
+                              " · samples " + plumbBobService.sampleCount
+                        color: plumbBobService.hasReading ? root.uiSuccess : root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: "Hold the phone upright, with its face against a vertical surface. " +
+                          "The hanging line indicates gravity, not magnetic north. " +
+                          "Both the screen edge and the phone face must be vertical. " +
+                          "Measurements are gravity-based and cannot substitute for a calibrated survey instrument."
+                    color: root.uiMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    Layout.bottomMargin: 15
+                }
+            }
+        }
+    }
+
     // All prototype instrumentation lives here, never above the normal map.
     Rectangle {
         id: diagnosticsPage
@@ -1095,6 +1251,20 @@ Window {
                 text: "Gradienter"
                 Layout.fillWidth: true
                 onClicked: root.openPage("gradienter")
+            }
+            Button {
+                palette.buttonText: root.uiText
+                palette.text: root.uiText
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 10
+                    color: parent.down ? root.uiPressed : root.uiRaised
+                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                    opacity: parent.enabled ? 1.0 : 0.55
+                }
+                text: "Plumb Bob"
+                Layout.fillWidth: true
+                onClicked: root.openPage("plumbbob")
             }
             Button {
                 palette.buttonText: root.uiText

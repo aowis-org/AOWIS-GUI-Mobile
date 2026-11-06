@@ -107,7 +107,10 @@ run_case --baseline
 assert_log "$work/data/aowis-gui-mobile/android-debug-signing:/tmp/.android"
 assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-baseline'
 assert_log 'adb -s mobile1 install -r'
-assert_log 'adb -s mobile1 shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
+assert_log 'adb -s mobile1 shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.aowis.mobile'
+assert_not_log 'monkey'
+assert_not_log 'settings put'
+assert_not_log 'accelerometer_rotation'
 
 # Multiple devices cannot be chosen implicitly, and explicit --run requires one.
 export FAKE_DEVICE_COUNT=2

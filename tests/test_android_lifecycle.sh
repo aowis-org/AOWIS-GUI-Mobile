@@ -25,7 +25,7 @@ case "$1" in
         case "$1" in
             pm) printf 'package:/data/app/org.aowis.mobile/base.apk\n' ;;
             getprop) printf 'Test Handset\n' ;;
-            monkey) : ;;
+            am) : ;;
             input) : ;;
             pidof)
                 if [[ "${FAKE_RESTART:-0}" == 1 ]]; then
@@ -67,6 +67,9 @@ cd "$work/repo"
 find benchmarks/lifecycle -name 'events.csv' | grep -q .
 grep -q 'Errors: 0' "$work/result.log"
 grep -q 'shell input keyevent KEYCODE_HOME' "$MOCK_LOG"
+grep -q 'shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.aowis.mobile' "$MOCK_LOG"
+! grep -q 'monkey' "$MOCK_LOG"
+! grep -q 'accelerometer_rotation' "$MOCK_LOG"
 grep -q 'exec-out run-as org.aowis.mobile tar' "$MOCK_LOG"
 ./tools/test_android_lifecycle.sh --pull-only > "$work/result.log" 2>&1
 ! tail -15 "$MOCK_LOG" | grep -q 'shell input keyevent KEYCODE_HOME'

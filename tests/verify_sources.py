@@ -119,8 +119,9 @@ checks = [
      'aowis-mobile-appearance-settings-tests' in cmake),
     ("settings regression test", 'aowis-mobile-map-server-settings-tests' in cmake and
      'aowis-mobile-map-server-settings' in cmake),
-    ("Android launch package", 'shell monkey -p org.aowis.mobile -c android.intent.category.LAUNCHER 1'
-     in (root / "compile_android.sh").read_text()),
+    ("Android launch package without randomized input", 'shell am start -W -a android.intent.action.MAIN'
+     in (root / "compile_android.sh").read_text() and
+     'settings put' not in (root / "compile_android.sh").read_text()),
     ("Linux executable", '--target aowis-mobile' in (root / "compile_linux.sh").read_text()),
     ("Linux desktop entry", 'Name=AOWIS Mobile\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text() and
      'Exec=aowis-mobile\n' in (root / "packaging/linux/org.aowis.mobile.desktop").read_text()),

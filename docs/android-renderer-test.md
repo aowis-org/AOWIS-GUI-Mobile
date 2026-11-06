@@ -208,3 +208,18 @@ Qt Quick owns the OpenGL/EGL window and final presentation; bgfx borrows that
 context and uses `BGFX_FRAME_FLUSH`. The app has not established a universal
 fallback for devices whose GLES implementation rejects this arrangement.
 Android device approval cannot be automated. iOS builds are not yet supported.
+
+## Deployment and phone rotation preference
+
+`compile_android.sh` installs the APK with `adb install -r` and opens its launcher
+with a direct `adb shell am start` intent. The Android lifecycle test likewise
+uses `am start` instead of the randomized-input `monkey` command. Neither
+script writes `settings put system accelerometer_rotation`, changes
+`user_rotation`, sends rotation test events, or configures the device's global
+Auto-rotate switch. Android's own rotation preference remains user-controlled.
+
+The Qt-generated manifest keeps normal activity orientation support; the app
+reads current screen orientation to transform compass/level/plumb values.
+This *does not* alter the global Android auto-rotate setting. If the phone's
+system toggle still changes, inspect device settings or other software: the
+AOWIS scripts do not include a command to change it.
