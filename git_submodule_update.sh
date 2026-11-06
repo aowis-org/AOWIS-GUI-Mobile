@@ -10,16 +10,18 @@ cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_update.sh [--render | --model | --all | --help]
+Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
   --render     Same as the default; leave bgfx.cmake and MODEL untouched.
   --model      Advance only AOWIS-SERVER-MODEL to its tracked remote branch.
+  --dvmdb      Deliberately advance only the DVMDB gitlink, without nested modules.
   --all        Advance Render and MODEL, then initialize bgfx.cmake at its pin.
                Never advance bgfx.cmake or its nested third-party submodules.
   --help       Show this help.
 
-Review and commit any changed Render/MODEL gitlinks explicitly.
+Review and commit any changed Render/MODEL/DVMDB gitlinks explicitly.
+GeographicLib always stays pinned; choose a tested release before changing it.
 To change the third-party bgfx.cmake release, use tools/init_bgfx.sh and
 validate Linux/Android before committing its gitlink.
 HELP
@@ -35,6 +37,7 @@ die() {
 
 include_bgfx=false
 update_model=false
+update_dvmdb=false
 update_render=true
 case "${1:-}" in
     '')
@@ -47,6 +50,11 @@ case "${1:-}" in
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         update_render=false
         update_model=true
+        ;;
+    --dvmdb)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        update_render=false
+        update_dvmdb=true
         ;;
     --all)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -90,4 +98,13 @@ if "$update_model"; then
     git submodule update --init --remote --checkout -- "$model_path"
     printf 'Updated %s to %s. Review and commit the gitlink.\n' \
         "$model_path" "$(git -C "$model_path" rev-parse --short HEAD)"
+fi
+
+if "$update_dvmdb"; then
+    dvmdb_path='external/AOWIS-SERVER-DVMDB'
+    [[ "$(git ls-files --stage -- "$dvmdb_path")" == '160000 '* ]] ||
+        die 'DVMDB gitlink missing. Run ./tools/init_geographiclib_dvmdb.sh --dvmdb once.'
+    git submodule update --init --remote --checkout -- "$dvmdb_path"
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$dvmdb_path" "$(git -C "$dvmdb_path" rev-parse --short HEAD)"
 fi

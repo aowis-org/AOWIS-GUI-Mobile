@@ -66,3 +66,5 @@ It collects existing CSVs, summarizes them into `benchmarks/`, and recreates
 `mobile.zip` with the reports included. See the
 [renderer instructions](renderer-lab.md#automatic-collection-for-review).
 
+
+- [Native dependencies and submodules](dependencies.md)

@@ -39,10 +39,10 @@ int main(int argc, char **argv)
         assert(prefs.formatDistance(1,prefs.revision()).contains(QStringLiteral("ft")));
         assert(prefs.renameProfile(QStringLiteral("Survey")));
         assert(prefs.activeName() == QStringLiteral("Survey"));
-        const QVariantList fields = prefs.fields(QStringLiteral("pressure"), prefs.revision());
+        const QVariantList fields = prefs.fields(QStringLiteral("pressure"), prefs.revision(), QStringLiteral("en"));
         assert(!fields.isEmpty());
         assert(fields.first().toMap().contains(QStringLiteral("choices")));
-        assert(prefs.fields(QStringLiteral("never-a-unit"), prefs.revision()).isEmpty());
+        assert(prefs.fields(QStringLiteral("never-a-unit"), prefs.revision(), QStringLiteral("en")).isEmpty());
     }
     {
         UnitProfileSettings prefs(nullptr, path);

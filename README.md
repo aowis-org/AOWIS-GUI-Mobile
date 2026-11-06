@@ -224,3 +224,11 @@ The hamburger menu also provides a live Qt Sensors **magnetic compass** with
 an animated compass rose. See [Compass](docs/compass.md). The independent [Gradienter](docs/gradienter.md)
 adds a live two-axis gravity spirit level with a bubble vial and optional
 relative zero reference.
+
+## Shared native dependencies
+
+MODEL, Render and bgfx are already used by the application. GeographicLib and
+DVMDB are recorded as pinned source dependencies for upcoming work but are not
+compiled into Mobile yet. On the first checkout, run
+`./tools/init_geographiclib_dvmdb.sh`, then commit `.gitmodules` and the Git
+gitlinks. See [dependency setup](docs/dependencies.md).

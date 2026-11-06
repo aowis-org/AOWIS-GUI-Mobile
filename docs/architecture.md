@@ -40,7 +40,9 @@ with host ADB. **Android is a working build target**; iOS is not.
 | `AOWIS-GUI-Render` | Shared rendering and map-scene engine | Pinned submodule; selected rendering components already consumed by Mobile |
 | `AOWIS-SERVER-MODEL` | Canonical domain structures and unit registry | Pinned Git submodule; `AOWIS::Model` linked into Mobile |
 | `AOWIS-SERVER-MAP` | Map/terrain service and caching | Existing elsewhere, not linked into Mobile |
-| `AOWIS-SERVER-DVMDB` | Native project/branch/revision storage and working-copy semantics | Existing elsewhere, not linked into Mobile |
+| `AOWIS-SERVER-DVMDB` | Native project/branch/revision storage and working-copy semantics | Pinned source submodule; not yet compiled or linked |
+
+GeographicLib is pinned at `external/GeographicLib` for upcoming coordinate work; it is not compiled or linked yet. See [dependency setup](dependencies.md).
 
 The Mobile scene still does not consume MAP/DVMDB network data, but it links
 MODEL for its canonical domain types and unit profiles. Its current scene remains
