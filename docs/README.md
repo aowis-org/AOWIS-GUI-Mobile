@@ -9,6 +9,7 @@ A capability in a related repository is not automatically integrated here.
 | --- | --- |
 | [Product](product.md) | What Mobile is for, scope, platform naming and product boundaries |
 | [Magnetic compass](compass.md) | Live Qt Sensors bearing, instrument UI and calibration |
+| [Gradienter](gradienter.md) | Two-axis gravity level, bubble vial, pitch/roll and relative zero |
 | [Device location](location.md) | Foreground GPS/location service, permission and fix semantics |
 | [Field workflows](survey-workflows.md) | Observation versus Direct Edit; geometry/GPS capture and review |
 | [Architecture](architecture.md) | What exists, dependencies, planned library boundary |
@@ -60,3 +61,4 @@ Run `./benchmark.sh` after recording in-app benchmarks on Linux and Android.
 It collects existing CSVs, summarizes them into `benchmarks/`, and recreates
 `mobile.zip` with the reports included. See the
 [renderer instructions](renderer-lab.md#automatic-collection-for-review).
+

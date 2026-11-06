@@ -105,3 +105,9 @@ A first useful survey release should allow GPS/manual points, lines and areas,
 classification, reliable local observation saving and offline basemaps. Direct
 hydraulic edits, synchronization and richer OSM editing follow as the relevant
 shared dependencies become ready. Advanced 3D, RTK and drainage can come later.
+
+## Gradienter
+
+The hamburger menu includes a two-axis gravity spirit level with a live
+bubble, pitch/roll and a relative zero reference. See
+[Gradienter](gradienter.md) for the implemented behavior.

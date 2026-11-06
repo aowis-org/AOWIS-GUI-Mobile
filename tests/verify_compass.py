@@ -20,7 +20,7 @@ checks = {
         "QCompass" in header and "QGeoPositionInfoSource" not in service and
         "RenderLab" not in service and "QSettings" not in service,
     "start only when compass visible and app foreground":
-        'onActivePageChanged: compassService.setPageVisible(activePage === "compass")' in qml and
+        'compassService.setPageVisible(activePage === "compass")' in qml and
         "setApplicationActive" in main and "this->m_compass.stop();" in service,
     "status for unavailable, stale and low calibration":
         "State::Unavailable" in service and "State::Stale" in service and

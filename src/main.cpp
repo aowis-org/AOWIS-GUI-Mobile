@@ -3,6 +3,7 @@
 #include "appearance_settings.h"
 #include "location_service.h"
 #include "compass_service.h"
+#include "gradienter_service.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -64,12 +65,14 @@ int main(int argc, char *argv[])
     AppearanceSettings appearanceSettings;
     LocationService locationService;
     CompassService compassService;
+    GradienterService gradienterService;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("locationService"), &locationService);
     engine.rootContext()->setContextProperty(QStringLiteral("compassService"), &compassService);
+    engine.rootContext()->setContextProperty(QStringLiteral("gradienterService"), &gradienterService);
     engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;
@@ -96,12 +99,23 @@ int main(int argc, char *argv[])
     QTimer refresh;
     refresh.setInterval(16);
     QObject::connect(&refresh, &QTimer::timeout, window, [window]() { window->update(); });
-    // The background lab refresh timer is deliberately suspended on Compass.
-    // Otherwise its independent 16ms window->update() calls fight Qt Quick's
-    // synchronized animation cadence and cause irregular dial frame pacing.
+    // The renderer-lab 16 ms refresh is useful on the map but must not run
+    // alongside the Qt animation clock of either instrument page.
     QObject::connect(&compassService, &CompassService::pageVisibleChanged,
-                     &refresh, [&refresh, &application, window](bool visible) {
-        if (visible)
+                     &refresh, [&refresh, &application, &compassService,
+                                &gradienterService, window](bool) {
+        if (compassService.pageVisible() || gradienterService.pageVisible())
+            refresh.stop();
+        else if (application.applicationState() == Qt::ApplicationActive)
+        {
+            refresh.start();
+            window->update();
+        }
+    });
+    QObject::connect(&gradienterService, &GradienterService::pageVisibleChanged,
+                     &refresh, [&refresh, &application, &compassService,
+                                &gradienterService, window](bool) {
+        if (compassService.pageVisible() || gradienterService.pageVisible())
             refresh.stop();
         else if (application.applicationState() == Qt::ApplicationActive)
         {
@@ -110,10 +124,11 @@ int main(int argc, char *argv[])
         }
     });
     QObject::connect(&application, &QGuiApplication::applicationStateChanged,
-                     &lab, [&lab, &refresh, &compassService, window](Qt::ApplicationState state) {
+                     &lab, [&lab, &refresh, &compassService,
+                            &gradienterService, window](Qt::ApplicationState state) {
         const bool active = state == Qt::ApplicationActive;
         lab.setApplicationActive(active);
-        if (active && !compassService.pageVisible())
+        if (active && !compassService.pageVisible() && !gradienterService.pageVisible())
         {
             refresh.start();
             window->update();
@@ -129,12 +144,17 @@ int main(int argc, char *argv[])
                      &compassService, [&compassService](Qt::ApplicationState state) {
         compassService.setApplicationActive(state == Qt::ApplicationActive);
     });
+    QObject::connect(&application, &QGuiApplication::applicationStateChanged,
+                     &gradienterService, [&gradienterService](Qt::ApplicationState state) {
+        gradienterService.setApplicationActive(state == Qt::ApplicationActive);
+    });
     window->show();
     const bool active = application.applicationState() == Qt::ApplicationActive;
     locationService.setApplicationActive(active);
     compassService.setApplicationActive(active);
+    gradienterService.setApplicationActive(active);
     lab.setApplicationActive(active);
-    if (active && !compassService.pageVisible())
+    if (active && !compassService.pageVisible() && !gradienterService.pageVisible())
         refresh.start();
     return application.exec();
 }

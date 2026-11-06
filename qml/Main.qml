@@ -34,7 +34,10 @@ Window {
     property real dragY: 0
     property string lastTap: "Touch or click the map"
     property string activePage: "map"
-    onActivePageChanged: compassService.setPageVisible(activePage === "compass")
+    onActivePageChanged: {
+        compassService.setPageVisible(activePage === "compass")
+        gradienterService.setPageVisible(activePage === "gradienter")
+    }
     property string saveFeedback: ""
     property bool saveSucceeded: false
 
@@ -644,6 +647,195 @@ Window {
         }
     }
 
+    // Independent two-axis gravity inclinometer. Qt Sensors + native C++
+    // filtering; no map renderer, magnetic compass, or JS animation required.
+    Rectangle {
+        id: gradienterPage
+        anchors.fill: parent
+        visible: root.activePage === "gradienter"
+        color: root.uiSurface
+
+        ScrollView {
+            id: gradienterScroll
+            anchors.fill: parent
+            anchors.topMargin: 76
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            anchors.bottomMargin: 12
+            contentWidth: availableWidth
+            clip: true
+            ColumnLayout {
+                width: gradienterScroll.availableWidth
+                spacing: 12
+                Label {
+                    text: "Gradienter"
+                    color: root.uiText
+                    font.pixelSize: 26
+                    font.bold: true
+                    Layout.leftMargin: 4
+                }
+                Label {
+                    text: "TWO-AXIS SPIRIT LEVEL · GRAVITY"
+                    color: root.uiMuted
+                    font.pixelSize: 11
+                    font.letterSpacing: 1.2
+                    Layout.leftMargin: 4
+                }
+                GradienterVial {
+                    id: gradienterVial
+                    readonly property real visualSize: Math.max(170,
+                        Math.min(gradienterScroll.availableWidth - 8, root.height * .46, 390))
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: visualSize
+                    Layout.preferredHeight: visualSize
+                    Layout.topMargin: 7
+                    darkTheme: root.darkTheme
+                    hasReading: gradienterService.hasReading
+                    level: gradienterService.level
+                    rollDegrees: gradienterService.rollDegrees
+                    pitchDegrees: gradienterService.pitchDegrees
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: gradienterService.hasReading
+                          ? gradienterService.tiltDegrees.toFixed(1) + "°"
+                          : "—°"
+                    font.pixelSize: 42
+                    font.weight: Font.DemiBold
+                    color: gradienterService.level ? root.uiSuccess : root.uiText
+                }
+                Label {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: !gradienterService.hasReading ? "WAITING FOR SENSOR"
+                          : gradienterService.level ? "LEVEL · WITHIN ±0.5°"
+                          : "TILT FROM HORIZONTAL"
+                    font.pixelSize: 13
+                    font.bold: true
+                    font.letterSpacing: 1.0
+                    color: gradienterService.level ? root.uiSuccess : root.uiMuted
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 86
+                        radius: 13
+                        color: root.uiRaised
+                        border.color: root.uiBorder
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Label { text: "ROLL · LEFT / RIGHT"; color: root.uiMuted; font.pixelSize: 10; font.letterSpacing: 0.5 }
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: gradienterService.hasReading ?
+                                      gradienterService.rollDegrees.toFixed(1) + "°" : "—°"
+                                color: root.uiText
+                                font.pixelSize: 25
+                                font.bold: true
+                            }
+                        }
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 86
+                        radius: 13
+                        color: root.uiRaised
+                        border.color: root.uiBorder
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Label { text: "PITCH · TOP / BOTTOM"; color: root.uiMuted; font.pixelSize: 10; font.letterSpacing: 0.5 }
+                            Label {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: gradienterService.hasReading ?
+                                      gradienterService.pitchDegrees.toFixed(1) + "°" : "—°"
+                                color: root.uiText
+                                font.pixelSize: 25
+                                font.bold: true
+                            }
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Button {
+                        text: "Zero reference"
+                        Layout.fillWidth: true
+                        enabled: gradienterService.hasReading
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: root.uiBorder
+                            opacity: parent.enabled ? 1 : .5
+                        }
+                        onClicked: gradienterService.setReference()
+                    }
+                    Button {
+                        text: "Reset zero"
+                        Layout.fillWidth: true
+                        enabled: gradienterService.referenceSet
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: parent.down ? root.uiPressed : root.uiRaised
+                            border.color: root.uiBorder
+                            opacity: parent.enabled ? 1 : .5
+                        }
+                        onClicked: gradienterService.resetReference()
+                    }
+                }
+                Label {
+                    text: gradienterService.referenceSet
+                          ? "Relative reference active · zero is the surface you selected."
+                          : "Absolute gravity level · zero means horizontal."
+                    color: gradienterService.referenceSet ? root.uiAccent : root.uiMuted
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: gradienterStatus.implicitHeight + 27
+                    radius: 13
+                    color: root.uiRaised
+                    border.color: root.uiBorder
+                    Label {
+                        id: gradienterStatus
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
+                        text: gradienterService.status + " · sensor " +
+                              (gradienterService.sensorActive ? "active" : "inactive") +
+                              " · samples " + gradienterService.sampleCount
+                        color: gradienterService.hasReading ? root.uiSuccess : root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: "Lay the phone flat to measure horizontal level. " +
+                          "Motion and vibration affect accelerometers; allow readings to settle. " +
+                          "Zero reference compares against the current surface (not true horizontal)."
+                    color: root.uiMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    Layout.bottomMargin: 14
+                }
+            }
+        }
+    }
+
     // All prototype instrumentation lives here, never above the normal map.
     Rectangle {
         id: diagnosticsPage
@@ -889,6 +1081,20 @@ Window {
                 text: "Compass"
                 Layout.fillWidth: true
                 onClicked: root.openPage("compass")
+            }
+            Button {
+                palette.buttonText: root.uiText
+                palette.text: root.uiText
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 10
+                    color: parent.down ? root.uiPressed : root.uiRaised
+                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                    opacity: parent.enabled ? 1.0 : 0.55
+                }
+                text: "Gradienter"
+                Layout.fillWidth: true
+                onClicked: root.openPage("gradienter")
             }
             Button {
                 palette.buttonText: root.uiText

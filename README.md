@@ -205,4 +205,6 @@ this patch does not replace that scene or modify the Android EGL lifecycle.
 
 
 The hamburger menu also provides a live Qt Sensors **magnetic compass** with
-an animated compass rose. See [Compass](docs/compass.md).
+an animated compass rose. See [Compass](docs/compass.md). The independent [Gradienter](docs/gradienter.md)
+adds a live two-axis gravity spirit level with a bubble vial and optional
+relative zero reference.
