@@ -11,6 +11,7 @@ A capability in a related repository is not automatically integrated here.
 | [Magnetic compass](compass.md) | Live Qt Sensors bearing, instrument UI and calibration |
 | [Gradienter](gradienter.md) | Two-axis gravity level, bubble vial, pitch/roll and relative zero |
 | [Plumb Bob](plumb-bob.md) | Gravity-driven plumb line, upright wall/edge alignment, sensor behavior |
+| [Flashlight](flashlight.md) | Android camera LED torch tool, permissions and lifecycle |
 | [Interface languages](localization.md) | Live EN/FR/AR/DE/ES, persistent language choice, Arabic RTL and catalogs |
 | [Device location](location.md) | Foreground GPS/location service, permission and fix semantics |
 | [Field workflows](survey-workflows.md) | Observation versus Direct Edit; geometry/GPS capture and review |

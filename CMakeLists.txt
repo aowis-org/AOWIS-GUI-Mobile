@@ -45,6 +45,8 @@ qt_add_executable(aowis-mobile
     src/plumb_bob_service.cpp
     src/plumb_bob_service.h
     src/plumb_bob_math.h
+    src/flashlight_service.cpp
+    src/flashlight_service.h
     src/render_lab.cpp
     src/render_lab.h
     src/gpu_scene_geometry.cpp
@@ -82,10 +84,11 @@ set_source_files_properties(qml/UiIcon.qml PROPERTIES QT_RESOURCE_ALIAS UiIcon.q
 set_source_files_properties(qml/CompassRose.qml PROPERTIES QT_RESOURCE_ALIAS CompassRose.qml)
 set_source_files_properties(qml/GradienterVial.qml PROPERTIES QT_RESOURCE_ALIAS GradienterVial.qml)
 set_source_files_properties(qml/PlumbBobInstrument.qml PROPERTIES QT_RESOURCE_ALIAS PlumbBobInstrument.qml)
+set_source_files_properties(qml/ToolMenuButton.qml PROPERTIES QT_RESOURCE_ALIAS ToolMenuButton.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock
@@ -105,6 +108,8 @@ if(ANDROID)
     # Never request background-location permission for this feature.
     qt_add_android_permission(aowis-mobile NAME android.permission.ACCESS_COARSE_LOCATION)
     qt_add_android_permission(aowis-mobile NAME android.permission.ACCESS_FINE_LOCATION)
+    # Camera permission is requested only when the flashlight is first enabled.
+    qt_add_android_permission(aowis-mobile NAME android.permission.CAMERA)
 endif()
 
 target_link_libraries(aowis-mobile PRIVATE
@@ -215,6 +220,12 @@ endif()
 # Pure C++ geometry/camera test: no bgfx, Qt, or GPU context required.
 include(CTest)
 if(BUILD_TESTING)
+    # Desktop safety regression: a missing hardware torch must never report ON.
+    add_executable(aowis-mobile-flashlight-tests
+        tests/flashlight_service_tests.cpp src/flashlight_service.cpp src/flashlight_service.h)
+    target_include_directories(aowis-mobile-flashlight-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-flashlight-tests PRIVATE Qt6::Core)
+    add_test(NAME aowis-mobile-flashlight COMMAND aowis-mobile-flashlight-tests)
     if(AOWIS_MOBILE_WITH_BGFX)
         # Compile and run against the production geometry headers from the
         # pinned Render submodule (not local Mobile copies). No GPU required.

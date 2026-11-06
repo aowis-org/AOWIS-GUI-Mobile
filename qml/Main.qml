@@ -1281,7 +1281,6 @@ Window {
                     radius: 10
                     color: parent.down ? root.uiPressed : root.uiRaised
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                    opacity: parent.enabled ? 1.0 : 0.55
                 }
                 text: qsTr("Map")
                 Layout.fillWidth: true
@@ -1295,54 +1294,79 @@ Window {
                     radius: 10
                     color: parent.down ? root.uiPressed : root.uiRaised
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                    opacity: parent.enabled ? 1.0 : 0.55
-                }
-                text: qsTr("Compass")
-                Layout.fillWidth: true
-                onClicked: root.openPage("compass")
-            }
-            Button {
-                palette.buttonText: root.uiText
-                palette.text: root.uiText
-                background: Rectangle {
-                    implicitHeight: 44
-                    radius: 10
-                    color: parent.down ? root.uiPressed : root.uiRaised
-                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                    opacity: parent.enabled ? 1.0 : 0.55
-                }
-                text: qsTr("Gradienter")
-                Layout.fillWidth: true
-                onClicked: root.openPage("gradienter")
-            }
-            Button {
-                palette.buttonText: root.uiText
-                palette.text: root.uiText
-                background: Rectangle {
-                    implicitHeight: 44
-                    radius: 10
-                    color: parent.down ? root.uiPressed : root.uiRaised
-                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                    opacity: parent.enabled ? 1.0 : 0.55
-                }
-                text: qsTr("Plumb Bob")
-                Layout.fillWidth: true
-                onClicked: root.openPage("plumbbob")
-            }
-            Button {
-                palette.buttonText: root.uiText
-                palette.text: root.uiText
-                background: Rectangle {
-                    implicitHeight: 44
-                    radius: 10
-                    color: parent.down ? root.uiPressed : root.uiRaised
-                    border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                    opacity: parent.enabled ? 1.0 : 0.55
                 }
                 text: qsTr("Settings")
                 Layout.fillWidth: true
                 onClicked: root.openPage("settings")
             }
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+            Label {
+                text: qsTr("Tools")
+                color: root.uiMuted
+                font.pixelSize: 12
+                font.bold: true
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 9
+                rowSpacing: 9
+                ToolMenuButton {
+                    Layout.fillWidth: true
+                    text: qsTr("Compass")
+                    iconKind: "compass"
+                    foregroundColor: root.uiText
+                    surfaceColor: root.uiRaised
+                    pressedColor: root.uiPressed
+                    borderColor: root.uiBorder
+                    focusColor: root.uiAccent
+                    onClicked: root.openPage("compass")
+                }
+                ToolMenuButton {
+                    Layout.fillWidth: true
+                    text: qsTr("Gradienter")
+                    iconKind: "gradienter"
+                    foregroundColor: root.uiText
+                    surfaceColor: root.uiRaised
+                    pressedColor: root.uiPressed
+                    borderColor: root.uiBorder
+                    focusColor: root.uiAccent
+                    onClicked: root.openPage("gradienter")
+                }
+                ToolMenuButton {
+                    Layout.fillWidth: true
+                    text: qsTr("Plumb Bob")
+                    iconKind: "plumbbob"
+                    foregroundColor: root.uiText
+                    surfaceColor: root.uiRaised
+                    pressedColor: root.uiPressed
+                    borderColor: root.uiBorder
+                    focusColor: root.uiAccent
+                    onClicked: root.openPage("plumbbob")
+                }
+                ToolMenuButton {
+                    Layout.fillWidth: true
+                    text: flashlightService.enabled ? qsTr("Flashlight On") : qsTr("Flashlight")
+                    iconKind: "flashlight"
+                    lit: flashlightService.enabled
+                    enabled: !flashlightService.busy
+                    foregroundColor: root.uiText
+                    surfaceColor: root.uiRaised
+                    pressedColor: root.uiPressed
+                    borderColor: root.uiBorder
+                    focusColor: root.uiAccent
+                    onClicked: flashlightService.toggle()
+                }
+            }
+            Label {
+                visible: flashlightService.error.length > 0
+                text: flashlightService.error
+                Layout.fillWidth: true
+                color: root.uiError
+                wrapMode: Text.WordWrap
+                font.pixelSize: 12
+            }
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
             Button {
                 palette.buttonText: root.uiText
                 palette.text: root.uiText
@@ -1351,7 +1375,6 @@ Window {
                     radius: 10
                     color: parent.down ? root.uiPressed : root.uiRaised
                     border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                    opacity: parent.enabled ? 1.0 : 0.55
                 }
                 text: qsTr("Diagnostics")
                 Layout.fillWidth: true

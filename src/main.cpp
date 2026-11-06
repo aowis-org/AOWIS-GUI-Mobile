@@ -6,6 +6,7 @@
 #include "compass_service.h"
 #include "gradienter_service.h"
 #include "plumb_bob_service.h"
+#include "flashlight_service.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -70,6 +71,7 @@ int main(int argc, char *argv[])
     CompassService compassService;
     GradienterService gradienterService;
     PlumbBobService plumbBobService;
+    FlashlightService flashlightService;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
@@ -79,6 +81,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("compassService"), &compassService);
     engine.rootContext()->setContextProperty(QStringLiteral("gradienterService"), &gradienterService);
     engine.rootContext()->setContextProperty(QStringLiteral("plumbBobService"), &plumbBobService);
+    engine.rootContext()->setContextProperty(QStringLiteral("flashlightService"), &flashlightService);
     // Qt Quick tracks qsTr() bindings; changing translations never reloads the
     // QML component tree or restarts any render/sensor services.
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
@@ -91,6 +94,8 @@ int main(int argc, char *argv[])
                      &gradienterService, &GradienterService::changed);
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
                      &plumbBobService, &PlumbBobService::changed);
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &flashlightService, &FlashlightService::changed);
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
                      &mapServerSettings, &MapServerSettings::errorChanged);
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
@@ -189,12 +194,17 @@ int main(int argc, char *argv[])
                      &plumbBobService, [&plumbBobService](Qt::ApplicationState state) {
         plumbBobService.setApplicationActive(state == Qt::ApplicationActive);
     });
+    QObject::connect(&application, &QGuiApplication::applicationStateChanged,
+                     &flashlightService, [&flashlightService](Qt::ApplicationState state) {
+        flashlightService.setApplicationActive(state == Qt::ApplicationActive);
+    });
     window->show();
     const bool active = application.applicationState() == Qt::ApplicationActive;
     locationService.setApplicationActive(active);
     compassService.setApplicationActive(active);
     gradienterService.setApplicationActive(active);
     plumbBobService.setApplicationActive(active);
+    flashlightService.setApplicationActive(active);
     lab.setApplicationActive(active);
     if (active && !compassService.pageVisible() && !gradienterService.pageVisible() &&
             !plumbBobService.pageVisible())

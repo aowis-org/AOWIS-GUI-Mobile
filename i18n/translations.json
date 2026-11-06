@@ -162,7 +162,14 @@
     "NE": "NE",
     "SE": "SE",
     "SW": "SO",
-    "NW": "NO"
+    "NW": "NO",
+    "Tools": "Outils",
+    "Flashlight": "Lampe torche",
+    "Flashlight On": "Lampe allumée",
+    "No flashlight is available on this device.": "Aucune lampe torche disponible sur cet appareil.",
+    "Could not switch on the flashlight. It may be in use by another app.": "Impossible d’allumer la lampe. Elle est peut-être utilisée par une autre application.",
+    "Could not switch off the flashlight.": "Impossible d’éteindre la lampe torche.",
+    "Camera permission is required to use the flashlight.": "L’autorisation d’accès à la caméra est nécessaire pour utiliser la lampe torche."
   },
   "ar": {
     "Source: Android fused rotation vector": "المصدر: متجه الدوران المدمج من Android",
@@ -327,7 +334,14 @@
     "NE": "ش ق",
     "SE": "ج ق",
     "SW": "ج غ",
-    "NW": "ش غ"
+    "NW": "ش غ",
+    "Tools": "الأدوات",
+    "Flashlight": "المصباح",
+    "Flashlight On": "المصباح مضاء",
+    "No flashlight is available on this device.": "لا يوجد مصباح متاح على هذا الجهاز.",
+    "Could not switch on the flashlight. It may be in use by another app.": "تعذّر تشغيل المصباح. ربما يستخدمه تطبيق آخر.",
+    "Could not switch off the flashlight.": "تعذّر إطفاء المصباح.",
+    "Camera permission is required to use the flashlight.": "يلزم إذن الكاميرا لاستخدام المصباح."
   },
   "de": {
     "Source: Android fused rotation vector": "Quelle: fusionierter Android-Rotationsvektor",
@@ -492,7 +506,14 @@
     "NE": "NO",
     "SE": "SO",
     "SW": "SW",
-    "NW": "NW"
+    "NW": "NW",
+    "Tools": "Werkzeuge",
+    "Flashlight": "Taschenlampe",
+    "Flashlight On": "Taschenlampe an",
+    "No flashlight is available on this device.": "Auf diesem Gerät ist keine Taschenlampe verfügbar.",
+    "Could not switch on the flashlight. It may be in use by another app.": "Taschenlampe konnte nicht eingeschaltet werden. Möglicherweise wird sie von einer anderen App verwendet.",
+    "Could not switch off the flashlight.": "Taschenlampe konnte nicht ausgeschaltet werden.",
+    "Camera permission is required to use the flashlight.": "Für die Taschenlampe ist die Kameraberechtigung erforderlich."
   },
   "es": {
     "Source: Android fused rotation vector": "Fuente: vector de rotación fusionado de Android",
@@ -657,6 +678,13 @@
     "NE": "NE",
     "SE": "SE",
     "SW": "SO",
-    "NW": "NO"
+    "NW": "NO",
+    "Tools": "Herramientas",
+    "Flashlight": "Linterna",
+    "Flashlight On": "Linterna encendida",
+    "No flashlight is available on this device.": "Este dispositivo no dispone de linterna.",
+    "Could not switch on the flashlight. It may be in use by another app.": "No se pudo encender la linterna. Es posible que otra aplicación la esté utilizando.",
+    "Could not switch off the flashlight.": "No se pudo apagar la linterna.",
+    "Camera permission is required to use the flashlight.": "Se necesita permiso para usar la cámara a fin de utilizar la linterna."
   }
 }

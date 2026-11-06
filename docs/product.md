@@ -61,7 +61,14 @@ Qt Quick/QML, not a QWidget desktop port.
 
 The map fills the app window with a small hamburger button in the **top-right**;
 the navigation drawer opens from the **right**. The previous permanent metrics
-and workload controls have moved to **Diagnostics** in the menu. The same
+and workload controls have moved to **Diagnostics** in the menu.
+
+The drawer lists **Map**, then **Settings**, followed by a separator and a
+2×2 grid of **Compass**, **Gradienter**, **Plumb Bob**, and **Flashlight**.
+Another separator precedes **Diagnostics**. The flashlight tile toggles the
+Android camera LED torch without opening the camera. Permission is requested
+when first needed, and the light switches off when AOWIS backgrounds.
+Desktop builds show no simulated flashlight. See [Flashlight](flashlight.md). The same
 diagnostic tools remain accessible for Android/Linux testing. Menu, selector,
 and zoom icons are drawn as Qt Quick strokes rather than Unicode font glyphs,
 so they remain visible on Android even when a system font lacks those symbols.
