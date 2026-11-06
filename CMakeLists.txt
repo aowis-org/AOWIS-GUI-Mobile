@@ -52,10 +52,11 @@ if(APPLE AND NOT ANDROID)
 endif()
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
+set_source_files_properties(qml/UiIcon.qml PROPERTIES QT_RESOURCE_ALIAS UiIcon.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock

@@ -62,7 +62,9 @@ Qt Quick/QML, not a QWidget desktop port.
 The map fills the app window with a small hamburger button in the **top-right**;
 the navigation drawer opens from the **right**. The previous permanent metrics
 and workload controls have moved to **Diagnostics** in the menu. The same
-diagnostic tools remain accessible for Android/Linux testing.
+diagnostic tools remain accessible for Android/Linux testing. Menu, selector,
+and zoom icons are drawn as Qt Quick strokes rather than Unicode font glyphs,
+so they remain visible on Android even when a system font lacks those symbols.
 
 On Android, **Back** closes an open drawer first; otherwise it returns from
 Settings or Diagnostics to the map. From the map, Back retains Android's

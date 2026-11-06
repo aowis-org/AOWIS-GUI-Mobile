@@ -256,12 +256,13 @@ Window {
                         palette.window: root.uiInput
                         palette.highlight: root.uiSelection
                         palette.highlightedText: root.uiSelectedText
-                        indicator: Text {
+                        indicator: UiIcon {
+                            kind: "down"
+                            strokeColor: root.uiText
+                            width: 22
+                            height: 22
                             x: themeSelector.width - width - 14
                             y: (themeSelector.height - height) / 2
-                            text: "▾"
-                            color: root.uiText
-                            font.pixelSize: 18
                         }
                         contentItem: Text {
                             text: themeSelector.displayText
@@ -455,12 +456,13 @@ Window {
                     palette.window: root.uiInput
                     palette.highlight: root.uiSelection
                     palette.highlightedText: root.uiSelectedText
-                    indicator: Text {
+                    indicator: UiIcon {
+                        kind: "down"
+                        strokeColor: root.uiText
+                        width: 22
+                        height: 22
                         x: workloadSelector.width - width - 14
                         y: (workloadSelector.height - height) / 2
-                        text: "▾"
-                        color: root.uiText
-                        font.pixelSize: 18
                     }
                     contentItem: Text {
                         text: workloadSelector.displayText
@@ -565,7 +567,17 @@ Window {
                             border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                             opacity: parent.enabled ? 1.0 : 0.55
                         }
-                        text: "−"
+                        contentItem: Item {
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            UiIcon {
+                                kind: "minus"
+                                strokeColor: root.uiText
+                                width: 26
+                                height: 26
+                                anchors.centerIn: parent
+                            }
+                        }
                         Layout.fillWidth: true
                         onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25)
                     }
@@ -593,7 +605,17 @@ Window {
                             border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
                             opacity: parent.enabled ? 1.0 : 0.55
                         }
-                        text: "+"
+                        contentItem: Item {
+                            implicitWidth: 26
+                            implicitHeight: 26
+                            UiIcon {
+                                kind: "plus"
+                                strokeColor: root.uiText
+                                width: 26
+                                height: 26
+                                anchors.centerIn: parent
+                            }
+                        }
                         Layout.fillWidth: true
                         onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25)
                     }
@@ -682,17 +704,17 @@ Window {
         anchors.margins: 14
         width: 52
         height: 52
-        text: "☰"
-        palette.buttonText: root.uiText
-        palette.text: root.uiText
-        contentItem: Text {
-            text: hamburgerButton.text
-            font: hamburgerButton.font
-            color: root.uiText
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+        contentItem: Item {
+            implicitWidth: 30
+            implicitHeight: 30
+            UiIcon {
+                kind: "menu"
+                strokeColor: root.uiText
+                width: 30
+                height: 30
+                anchors.centerIn: parent
+            }
         }
-        font.pixelSize: 24
         Accessible.name: "Open navigation menu"
         background: Rectangle {
             radius: 12
