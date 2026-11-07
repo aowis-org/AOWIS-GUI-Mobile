@@ -4,6 +4,7 @@ import QtQuick
 // renderer dependency. Dial texture is retained and only rotated on updates.
 Item {
     id: compass
+    property bool compact: false
     property bool darkTheme: true
     property bool hasHeading: false
     property real headingDegrees: 0
@@ -79,7 +80,7 @@ Item {
                 ctx.translate(r, r)
                 const rad = Math.PI / 180
                 // 72 independently drawn graduation marks; major every 30°.
-                for (let a = 0; a < 360; a += 5) {
+                for (let a = 0; a < 360; a += (compass.compact ? 30 : 5)) {
                     const major = a % 30 === 0
                     const intermediate = a % 10 === 0
                     const from = r * (major ? .79 : intermediate ? .835 : .87)
@@ -89,7 +90,7 @@ Item {
                     ctx.moveTo(Math.cos(theta) * from, Math.sin(theta) * from)
                     ctx.lineTo(Math.cos(theta) * to, Math.sin(theta) * to)
                     ctx.strokeStyle = a === 0 ? compass.northRed : compass.dialMuted
-                    ctx.lineWidth = major ? 2.6 : intermediate ? 1.5 : .8
+                    ctx.lineWidth = compass.compact ? 1 : major ? 2.6 : intermediate ? 1.5 : .8
                     ctx.stroke()
                 }
                 // Decorative compass rose: tapered petals, alternating colors.
@@ -114,7 +115,7 @@ Item {
                     ctx.fill()
                     ctx.globalAlpha = .62
                     ctx.strokeStyle = compass.dialFace
-                    ctx.lineWidth = 2
+                    ctx.lineWidth = compass.compact ? 0.8 : 2
                     ctx.stroke()
                 }
                 ctx.globalAlpha = 1
@@ -123,14 +124,14 @@ Item {
                 ctx.fillStyle = compass.dialMuted
                 ctx.textAlign = "center"
                 ctx.textBaseline = "middle"
-                for (let a = 30; a < 360; a += 30) {
+                for (let a = 30; !compass.compact && a < 360; a += 30) {
                     if (a % 90 === 0) continue
                     const theta = a * rad - Math.PI / 2
                     ctx.fillText(String(a), Math.cos(theta) * r * .69,
                                  Math.sin(theta) * r * .69)
                 }
                 // Always-available Latin cardinal glyphs, avoiding icon fonts.
-                ctx.font = "700 " + Math.max(19, r * .15) + "px sans-serif"
+                ctx.font = "700 " + (compass.compact ? 9 : Math.max(19, r * .15)) + "px sans-serif"
                 const cardinal = [qsTr("N"), qsTr("E"), qsTr("S"), qsTr("W")]
                 for (let a = 0; a < 4; ++a) {
                     const theta = a * 90 * rad - Math.PI / 2
@@ -174,7 +175,7 @@ Item {
                 ctx.fillStyle = compass.dialAccent
                 ctx.fill()
                 ctx.strokeStyle = compass.dialFace
-                ctx.lineWidth = 2
+                ctx.lineWidth = compass.compact ? 0.8 : 2
                 ctx.stroke()
                 ctx.restore()
             }

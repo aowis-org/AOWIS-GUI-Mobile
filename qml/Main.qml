@@ -307,30 +307,28 @@ Window {
     }
 
     Button {
+        id: mapCompass
         visible: mapView.visible && mapView.globe
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.margins: 14
-        width: 52
-        height: 52
+        width: 76
+        height: width
         z: 1
+        padding: 0
         Accessible.name: qsTr("Rotate map to north")
         onClicked: mapView.faceNorth()
-        contentItem: Item {
-            UiIcon {
-                kind: "compass"
-                anchors.centerIn: parent
-                width: 38
-                height: 38
-                strokeColor: root.uiText
-                rotation: mapView.northAngle
-            }
+        contentItem: CompassRose {
+            compact: true
+            darkTheme: root.darkTheme
+            hasHeading: true
+            // The dial rotates opposite its heading input. Local north on
+            // the map is clockwise from screen-up for positive globe yaw.
+            headingDegrees: -mapView.northAngle
+            Accessible.ignored: true
+            scale: mapCompass.down ? 0.95 : 1
         }
-        background: Rectangle {
-            radius: 12
-            color: parent.down ? root.uiPressed : root.uiRaised
-            border.color: root.uiBorder
-        }
+        background: null
     }
 
     // Back to the device position (the first fix centres the map once).
