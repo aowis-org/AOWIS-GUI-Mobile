@@ -2,7 +2,7 @@
 
 The Map page shows the AOWIS map shared with the desktop GUI: Render's
 `MapBgfxMapView` (AOWIS-GUI-Render) with 2D Web Mercator imagery, the 3D globe
-with terrain, and the map HUD. Mobile has no map code of its own beyond the
+with terrain. Mobile has no map code of its own beyond the
 Qt Quick host and its gestures.
 
 ## How it is drawn
@@ -47,15 +47,15 @@ Settings. Diagnostics → **Reload map server** reconnects.
 
 | Input | 2D | Globe |
 | --- | --- | --- |
-| One finger / left mouse drag | Pan | Turn the globe under the crosshair |
+| One finger / left mouse drag | Pan | Pan the globe |
 | Two-finger pinch / wheel | Zoom at the fingers / pointer | Zoom |
 | Two-finger twist | — | Turn (heading) |
 | Two fingers up / down | Pan | Tilt |
 | Right mouse drag | — | Orbit |
 
-Presses go to the HUD first (2D/3D switch, zoom buttons, globe toggles,
-underground mode). Globe sliders, the compass, fullscreen and the legend
-belong to desktop hosts and are ignored for now.
+Qt Quick draws the 2D/3D switch and zoom buttons above the map. Drags and
+pinches elsewhere go directly to map navigation. Mobile disables the
+renderer HUD, including its crosshair, scale bar and device-position marker.
 
 The camera is saved when the app goes to the background and restored on the
 next start. Without a saved camera the map shows Central Europe and moves to

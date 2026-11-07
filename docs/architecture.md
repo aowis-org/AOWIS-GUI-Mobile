@@ -9,7 +9,7 @@ type. `qml/Main.qml` owns the pages, the navigation drawer and the map page's
 QML controls. `src/mobile_map_view.cpp` (`MobileMapView`, a `QQuickItem`) is
 the Qt Quick host of Render's `MapBgfxMapView` in host-context mode: it draws
 the map from `beforeRenderPassRecording` into Qt Quick's EGL context, releases
-it on `sceneGraphInvalidated`, handles touch/mouse/HUD input, and owns the map
+it on `sceneGraphInvalidated`, handles touch and mouse gestures, and owns the map
 model, the provider catalog and the tile/terrain repositories connected to
 the configured aowis-server-map. See [the map](map.md).
 

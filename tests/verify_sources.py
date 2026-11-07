@@ -61,8 +61,10 @@ checks = [
     ("frames requested on demand", "hostFrameRequested" in source and "->update()" in source),
     ("map server from the settings", "serverUrl: mapServerSettings.endpointUrl" in qml and
      "InterfaceServerMapREST(server, parent)" in source and "catalog.refresh()" in source),
-    ("touch, mouse and HUD input", "void touchEvent(QTouchEvent *event) override;" in header and
-     "handleHudMouseEvent(&event)" in source and "panByPixelsGlobe" in source and
+    ("map gestures and Qt Quick HUD", "void touchEvent(QTouchEvent *event) override;" in header and
+     "mapViewHudEnabled() const override { return false; }" in source and
+     "handleHudMouseEvent" not in source and "handleHudWheelEvent" not in source and
+     "mapView.setGlobe(!mapView.globe)" in qml and "mapView.zoomBy(1)" in qml and "panByPixelsGlobe" in source and
      "zoomByAt" in source and "orbitViewGlobe" in source),
     ("map QML type", 'qmlRegisterType<MobileMapView>("AOWIS.Map", 1, 0, "MapView")' in main and
      "import AOWIS.Map 1.0" in qml and "MapView {" in qml),

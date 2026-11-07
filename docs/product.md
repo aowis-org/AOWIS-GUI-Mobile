@@ -108,7 +108,7 @@ is implemented in Mobile yet. Saving does not imply that the server is online.
 
 The **Map view** shows the AOWIS map shared with the desktop GUI: imagery
 in 2D and the 3D globe with terrain, from the aowis-server-map configured in
-Settings, with touch navigation and the map HUD. It contains no captured
+Settings, with touch navigation and Qt Quick map controls. It contains no captured
 sites or hydraulic assets yet. See [the map](map.md).
 
 A magnetic Compass page is available from the hamburger menu. It shows a
@@ -116,7 +116,7 @@ vector compass rose, magnetic bearing and calibration status from the AOWIS
 Android NDK sensor fusion, not GPS course-over-ground.
 
 Foreground-only GPS/location permissions and a live position readout are
-implemented; the map shows the device position, but survey forms, an offline
+implemented; the location button centres the map on the device, but survey forms, an offline
 DB and sync do not exist yet.
 See [the map](map.md) and [roadmap](roadmap.md).
 

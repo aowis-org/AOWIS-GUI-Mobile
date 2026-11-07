@@ -8,7 +8,6 @@
 #include "lifecycle_watchdog.h"
 #include "mobile_map_math.h"
 
-#include "map/bgfx/map_bgfx_hud.h"
 #include "map/bgfx/map_bgfx_map_view.h"
 #include "map/core/map_model.h"
 #include "map/core/map_provider_catalog.h"
@@ -26,14 +25,10 @@
 #include <QEventPoint>
 #include <QFile>
 #include <QGuiApplication>
-#include <QHoverEvent>
 #include <QImage>
 #include <QMouseEvent>
 #include <QOpenGLContext>
-#include <QPainter>
 #include <QPalette>
-#include <QPen>
-#include <QPolygonF>
 #include <QPointer>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -57,55 +52,6 @@ int64_t steadyMicroseconds()
 {
     const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
     return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
-}
-
-// The HUD's button images, drawn here: Mobile has no desktop icon resources.
-QImage hudIcon(const QString &kind)
-{
-    QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
-    image.fill(Qt::transparent);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing);
-    QPen pen(QColor(0x30, 0x30, 0x30));
-    pen.setWidthF(4.0);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    if (kind == QStringLiteral("crosshair"))
-    {
-        painter.drawEllipse(QPointF(24.0, 24.0), 11.0, 11.0);
-        painter.drawLine(QPointF(24.0, 4.0), QPointF(24.0, 15.0));
-        painter.drawLine(QPointF(24.0, 33.0), QPointF(24.0, 44.0));
-        painter.drawLine(QPointF(4.0, 24.0), QPointF(15.0, 24.0));
-        painter.drawLine(QPointF(33.0, 24.0), QPointF(44.0, 24.0));
-    }
-    else if (kind == QStringLiteral("zoom_in") || kind == QStringLiteral("zoom_out"))
-    {
-        painter.drawLine(QPointF(10.0, 24.0), QPointF(38.0, 24.0));
-        if (kind == QStringLiteral("zoom_in"))
-            painter.drawLine(QPointF(24.0, 10.0), QPointF(24.0, 38.0));
-    }
-    else
-    {
-        // Fullscreen: corner brackets at the edges (enter) or turned
-        // inwards around the centre (leave).
-        const bool leave = kind == QStringLiteral("fullscreen_undo");
-        const double edge = leave ? 18.0 : 8.0;
-        const double arm = 10.0;
-        const double far = 48.0 - edge;
-        const double sx = leave ? -1.0 : 1.0;
-        painter.drawPolyline(QPolygonF({QPointF(edge, edge + sx * arm), QPointF(edge, edge),
-                                        QPointF(edge + sx * arm, edge)}));
-        painter.drawPolyline(QPolygonF({QPointF(far - sx * arm, edge), QPointF(far, edge),
-                                        QPointF(far, edge + sx * arm)}));
-        painter.drawPolyline(QPolygonF({QPointF(edge, far - sx * arm), QPointF(edge, far),
-                                        QPointF(edge + sx * arm, far)}));
-        painter.drawPolyline(QPolygonF({QPointF(far - sx * arm, far), QPointF(far, far),
-                                        QPointF(far, far - sx * arm)}));
-    }
-    painter.end();
-    return image;
 }
 
 QPalette mapPalette(bool dark)
@@ -137,6 +83,7 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     ~Impl() override;
 
     // MapBgfxMapViewHost
+    bool mapViewHudEnabled() const override { return false; }
     bool mapViewVisible() const override;
     QFont mapViewFont() const override;
     QPalette mapViewPalette() const override;
@@ -152,9 +99,6 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     void renderPass();
     void releaseContext();
     void rebuildServer();
-    void handleHudCommand(const MapBgfxHud::Command &command);
-    MapBgfxMapView::HudPointer hudPointer(QEvent::Type type, const QPointF &position,
-                                          Qt::MouseButton button, Qt::MouseButtons buttons);
     void panBy(const QPointF &delta);
     void zoomAt(double steps, const QPointF &anchor);
     void beginOrbit();
@@ -185,10 +129,10 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     bool saved_camera = false;
 
     // Gestures.
-    enum class Pointer { None, Hud, Pan, Orbit };
+    enum class Pointer { None, Pan, Orbit };
     Pointer mouse = Pointer::None;
     QPointF mouse_last;
-    enum class Touch { None, Hud, Single, Multi };
+    enum class Touch { None, Single, Multi };
     Touch touch_mode = Touch::None;
     int touch_first_id = -1;
     int touch_second_id = -1;
@@ -221,28 +165,8 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
 {
     this->view = std::make_unique<MapBgfxMapView>(
         &this->model, this, MapBgfxMapView::RenderTarget::HostContext);
-    // No hydraulic network on Mobile yet: imagery, terrain and the HUD.
+    // No hydraulic network on Mobile yet: imagery and terrain.
     this->view->setDistributionNetworkVisible(false);
-    this->view->setHudImages(hudIcon(QStringLiteral("crosshair")), hudIcon(QStringLiteral("fullscreen")),
-                             hudIcon(QStringLiteral("fullscreen_undo")), hudIcon(QStringLiteral("zoom_in")),
-                             hudIcon(QStringLiteral("zoom_out")));
-    this->view->setHudScaleProvider([](double lon0, double lat0, double lon1, double lat1,
-                                       double bar_px)
-    {
-        MapBgfxHud::ScaleBar result;
-        const double maximum_m = AowisMobileMap::distanceMeters(lon0, lat0, lon1, lat1);
-        const double scale_m = AowisMobileMap::niceScaleDistanceMeters(maximum_m);
-        if (!(scale_m > 0.0) || !(maximum_m > 0.0))
-            return result;
-        result.valid = true;
-        result.width_px = bar_px * scale_m / maximum_m;
-        result.label = AowisMobileMap::scaleLabel(scale_m);
-        return result;
-    });
-    this->view->setHudActionHandler([this](const MapBgfxHud::Command &command)
-    {
-        handleHudCommand(command);
-    });
     QObject::connect(this->view.get(), &MapBgfxMapView::hostFrameRequested, this->item, [this]()
     {
         if (this->window != nullptr)
@@ -482,61 +406,6 @@ void MobileMapView::Impl::rebuildServer()
     this->catalog.refresh();
 }
 
-// --- HUD and gestures ------------------------------------------------------------------
-
-void MobileMapView::Impl::handleHudCommand(const MapBgfxHud::Command &command)
-{
-    switch (command.action)
-    {
-        case MapBgfxHud::Action::ViewMode2d:
-            this->model.setViewMode(MapViewMode::TwoD, viewport());
-            break;
-        case MapBgfxHud::Action::ViewMode3d:
-            if (this->view->globeAvailable())
-                this->model.setViewMode(MapViewMode::Globe, viewport());
-            break;
-        case MapBgfxHud::Action::ZoomIn:
-            zoomAt(1.0, QPointF(viewport().width() * 0.5, viewport().height() * 0.5));
-            break;
-        case MapBgfxHud::Action::ZoomOut:
-            zoomAt(-1.0, QPointF(viewport().width() * 0.5, viewport().height() * 0.5));
-            break;
-        case MapBgfxHud::Action::ToggleWireframe:
-            this->view->setTerrainWireframeVisible(!this->view->terrainWireframeVisible());
-            break;
-        case MapBgfxHud::Action::ToggleMapTiles:
-            this->view->setMapTilesVisible(!this->view->mapTilesVisible());
-            break;
-        case MapBgfxHud::Action::ToggleHillshade:
-            this->view->setTerrainHillshadeVisible(!this->view->terrainHillshadeVisible());
-            break;
-        case MapBgfxHud::Action::UndergroundMode:
-            this->view->setUndergroundMode(static_cast<MapUndergroundMode>(command.value));
-            break;
-        case MapBgfxHud::Action::CancelMapTiles:
-            if (this->tiles)
-                this->tiles->cancelUpstreamDownloads();
-            break;
-        case MapBgfxHud::Action::CancelTerrain:
-            if (this->terrain)
-                this->terrain->cancelUpstreamDownloads();
-            break;
-        default:
-            // Fullscreen, legend, joystick, globe sliders and compass belong
-            // to desktop hosts.
-            break;
-    }
-}
-
-MapBgfxMapView::HudPointer MobileMapView::Impl::hudPointer(QEvent::Type type, const QPointF &position,
-                                                           Qt::MouseButton button,
-                                                           Qt::MouseButtons buttons)
-{
-    QMouseEvent event(type, position, this->item->mapToGlobal(position), button, buttons,
-                      Qt::NoModifier);
-    return this->view->handleHudMouseEvent(&event);
-}
-
 void MobileMapView::Impl::panBy(const QPointF &delta)
 {
     // Whole pixels for the model; the remainder carries to the next move.
@@ -607,8 +476,6 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
 {
     if (event->type() == QEvent::TouchCancel)
     {
-        if (this->touch_mode == Touch::Hud)
-            hudPointer(QEvent::MouseButtonRelease, this->touch_last, Qt::LeftButton, Qt::NoButton);
         resetGestures();
         return;
     }
@@ -624,31 +491,6 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
         return a.id() < b.id();
     });
 
-    if (this->touch_mode == Touch::Hud)
-    {
-        // The HUD keeps the first finger until it lifts.
-        QPointF position = this->touch_last;
-        bool released = true;
-        for (const QEventPoint &point : event->points())
-        {
-            if (point.id() != this->touch_first_id)
-                continue;
-            position = point.position();
-            released = point.state() == QEventPoint::Released;
-        }
-        this->touch_last = position;
-        if (released)
-        {
-            hudPointer(QEvent::MouseButtonRelease, position, Qt::LeftButton, Qt::NoButton);
-            this->touch_mode = Touch::None;
-            this->touch_first_id = -1;
-        }
-        else
-        {
-            hudPointer(QEvent::MouseMove, position, Qt::NoButton, Qt::LeftButton);
-        }
-        return;
-    }
     if (down.empty())
     {
         resetGestures();
@@ -661,12 +503,6 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
         {
             this->touch_first_id = finger.id();
             this->touch_last = finger.position();
-            if (hudPointer(QEvent::MouseButtonPress, finger.position(), Qt::LeftButton,
-                           Qt::LeftButton).consumed)
-            {
-                this->touch_mode = Touch::Hud;
-                return;
-            }
             this->touch_mode = Touch::Single;
             this->pan_remainder = QPointF();
             return;
@@ -850,7 +686,6 @@ MobileMapView::MobileMapView(QQuickItem *parent)
 {
     setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
     setAcceptTouchEvents(true);
-    setAcceptHoverEvents(true);
     setFlag(QQuickItem::ItemIsFocusScope, true);
     this->impl->application_active = qGuiApp->applicationState() == Qt::ApplicationActive;
 }
@@ -963,11 +798,6 @@ void MobileMapView::zoomBy(double steps)
     this->impl->zoomAt(steps, QPointF(size.width() * 0.5, size.height() * 0.5));
 }
 
-void MobileMapView::setGpsPosition(bool valid, double longitude_deg, double latitude_deg)
-{
-    this->impl->view->setHudGpsPosition(valid, longitude_deg, latitude_deg);
-}
-
 void MobileMapView::reloadServer()
 {
     this->impl->rebuildServer();
@@ -1015,13 +845,7 @@ void MobileMapView::mousePressEvent(QMouseEvent *event)
 {
     const QPointF position = event->position();
     this->impl->mouse_last = position;
-    if (event->button() == Qt::LeftButton
-        && this->impl->hudPointer(QEvent::MouseButtonPress, position, Qt::LeftButton,
-                                  event->buttons()).consumed)
-    {
-        this->impl->mouse = Impl::Pointer::Hud;
-    }
-    else if (event->button() == Qt::RightButton && globe())
+    if (event->button() == Qt::RightButton && globe())
     {
         this->impl->mouse = Impl::Pointer::Orbit;
         this->impl->beginOrbit();
@@ -1041,9 +865,6 @@ void MobileMapView::mouseMoveEvent(QMouseEvent *event)
     this->impl->mouse_last = position;
     switch (this->impl->mouse)
     {
-        case Impl::Pointer::Hud:
-            this->impl->hudPointer(QEvent::MouseMove, position, Qt::NoButton, event->buttons());
-            break;
         case Impl::Pointer::Pan:
             this->impl->panBy(delta);
             break;
@@ -1059,9 +880,6 @@ void MobileMapView::mouseMoveEvent(QMouseEvent *event)
 
 void MobileMapView::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (this->impl->mouse == Impl::Pointer::Hud)
-        this->impl->hudPointer(QEvent::MouseButtonRelease, event->position(), event->button(),
-                               event->buttons());
     if (this->impl->mouse == Impl::Pointer::Orbit)
         this->impl->endOrbit();
     this->impl->mouse = Impl::Pointer::None;
@@ -1073,22 +891,8 @@ void MobileMapView::mouseUngrabEvent()
     this->impl->resetGestures();
 }
 
-void MobileMapView::hoverMoveEvent(QHoverEvent *event)
-{
-    // Hover feedback and tooltips of the HUD (desktop pointer).
-    const MapBgfxMapView::HudPointer pointer = this->impl->hudPointer(
-        QEvent::MouseMove, event->position(), Qt::NoButton, Qt::NoButton);
-    this->impl->mapViewSetCursor(pointer.cursor);
-    event->accept();
-}
-
 void MobileMapView::wheelEvent(QWheelEvent *event)
 {
-    if (this->impl->view->handleHudWheelEvent(event))
-    {
-        event->accept();
-        return;
-    }
     const double notches = double(event->angleDelta().y()) / 120.0;
     this->impl->zoomAt(notches * 0.5, event->position());
     event->accept();
@@ -1138,7 +942,6 @@ QString MobileMapView::lifecycle() const { return QString(); }
 void MobileMapView::centerOn(double, double, double) {}
 void MobileMapView::setGlobe(bool) {}
 void MobileMapView::zoomBy(double) {}
-void MobileMapView::setGpsPosition(bool, double, double) {}
 void MobileMapView::reloadServer() {}
 void MobileMapView::itemChange(ItemChange change, const ItemChangeData &value)
 {
@@ -1154,7 +957,6 @@ void MobileMapView::mousePressEvent(QMouseEvent *event) { QQuickItem::mousePress
 void MobileMapView::mouseMoveEvent(QMouseEvent *event) { QQuickItem::mouseMoveEvent(event); }
 void MobileMapView::mouseReleaseEvent(QMouseEvent *event) { QQuickItem::mouseReleaseEvent(event); }
 void MobileMapView::mouseUngrabEvent() {}
-void MobileMapView::hoverMoveEvent(QHoverEvent *event) { QQuickItem::hoverMoveEvent(event); }
 void MobileMapView::wheelEvent(QWheelEvent *event) { QQuickItem::wheelEvent(event); }
 
 #endif

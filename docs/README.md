@@ -9,7 +9,7 @@ capability in a related repository is not automatically integrated here.
 | Document | What it answers |
 | --- | --- |
 | [Product](product.md) | What Mobile is for, scope, platform naming and product boundaries |
-| [The map](map.md) | Render's map in Qt Quick, map server, gestures, HUD, lifecycle |
+| [The map](map.md) | Render's map in Qt Quick, map server, gestures, Qt Quick controls, lifecycle |
 | [Magnetic compass](compass.md) | Live Android magnetic heading, instrument UI and calibration |
 | [Gradienter](gradienter.md) | Two-axis gravity level, bubble vial, pitch/roll and relative zero |
 | [Plumb Bob](plumb-bob.md) | Gravity-driven plumb line, upright wall/edge alignment, sensor behavior |
@@ -27,7 +27,7 @@ capability in a related repository is not automatically integrated here.
 ## Present status — 7 November 2026
 
 **Implemented in source (needs build and device acceptance):** the AOWIS map
-on the Map page (2D imagery and globe terrain from aowis-server-map, HUD,
+on the Map page (2D imagery and globe terrain from aowis-server-map, Qt Quick controls,
 touch gestures) drawn into Qt Quick's OpenGL / OpenGL ES context; Render's
 pinned bgfx replaces the former `bgfx.cmake` test dependency. The 360° photo
 experiment and the synthetic GPU test map with its benchmark harness are

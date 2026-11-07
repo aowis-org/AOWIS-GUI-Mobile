@@ -6,7 +6,6 @@
 #include <memory>
 
 class QKeyEvent;
-class QHoverEvent;
 class QMouseEvent;
 class QTouchEvent;
 class QWheelEvent;
@@ -20,8 +19,7 @@ class QWheelEvent;
 //
 // Input: one finger (or the left mouse button) pans, two fingers pinch-zoom
 // and, on the globe, turn (rotate) and tilt (move up/down); the wheel zooms,
-// the right mouse button orbits the globe. The map HUD (2D/3D switch, zoom
-// buttons, globe toggles) receives presses first.
+// the right mouse button orbits the globe.
 //
 // Built without the renderer (AOWIS_MOBILE_WITH_BGFX=OFF) the same QML API
 // exists and draws nothing.
@@ -64,8 +62,6 @@ public:
     Q_INVOKABLE void centerOn(double longitude_deg, double latitude_deg, double zoom);
     Q_INVOKABLE void setGlobe(bool globe);
     Q_INVOKABLE void zoomBy(double steps);
-    // The device position on the HUD (valid=false hides it).
-    Q_INVOKABLE void setGpsPosition(bool valid, double longitude_deg, double latitude_deg);
     // Loads the map server's provider catalog and terrain datasets again.
     Q_INVOKABLE void reloadServer();
 
@@ -84,7 +80,6 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseUngrabEvent() override;
     void touchUngrabEvent() override;
-    void hoverMoveEvent(QHoverEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
 
 private:

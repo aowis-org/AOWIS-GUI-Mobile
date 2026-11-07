@@ -12,8 +12,7 @@ drainage is a future domain.
 The repository builds and launches a **Qt Quick** application on Linux and
 Android ARM64 whose Map page is the **AOWIS map** shared with the desktop GUI
 (AOWIS-GUI-Render `MapBgfxMapView`): 2D Web Mercator imagery and the 3D globe
-with terrain, the map HUD (2D/3D switch, zoom, globe toggles, scale bar,
-device position). bgfx draws the map *under* the QML controls inside Qt
+with terrain. Qt Quick provides the view switch, zoom and location controls. bgfx draws the map *under* the QML controls inside Qt
 Quick's own OpenGL / OpenGL ES context. One finger pans, two fingers zoom and,
 on the globe, turn and tilt; the mouse wheel zooms and the right button
 orbits the globe on desktop.

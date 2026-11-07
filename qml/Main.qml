@@ -83,8 +83,6 @@ Window {
         onActivated: root.navigateBack()
     }
     function followLocation() {
-        mapView.setGpsPosition(locationService.hasFix, locationService.longitude,
-                               locationService.latitude)
         if (!root.mapCenteredOnLocation && locationService.fresh) {
             root.mapCenteredOnLocation = true
             if (!mapView.savedCamera)
@@ -98,7 +96,7 @@ Window {
 
     // The AOWIS map (imagery and terrain from the configured aowis-server-map)
     // underneath all QML: it fills the window and handles its own touch,
-    // mouse and HUD input. Hidden pages are opaque, so it is only drawn on Map.
+    // mouse input. Hidden pages are opaque, so it is only drawn on Map.
     MapView {
         id: mapView
         anchors.fill: parent
@@ -132,6 +130,29 @@ Window {
             border.color: root.uiAccent
         }
         Accessible.name: qsTr("No map server configured. Tap to open Settings.")
+    }
+
+    Column {
+        visible: root.activePage === "map" && mapView.rendererAvailable
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.rightMargin: 14
+        spacing: 4
+
+        Button {
+            text: mapView.globe ? "2D" : "3D"
+            onClicked: mapView.setGlobe(!mapView.globe)
+        }
+        Button {
+            text: "+"
+            Accessible.name: qsTr("Zoom in")
+            onClicked: mapView.zoomBy(1)
+        }
+        Button {
+            text: "−"
+            Accessible.name: qsTr("Zoom out")
+            onClicked: mapView.zoomBy(-1)
+        }
     }
 
     // Back to the device position (the first fix centres the map once).

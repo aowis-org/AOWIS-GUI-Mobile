@@ -12,7 +12,7 @@ already shipped capabilities.
 **Implemented in source; build and device acceptance pending.** See
 [the map](map.md). Verify on Linux and Android GLES hardware: imagery and
 terrain from a real aowis-server-map, 2D and globe navigation with touch
-(directions, sensitivity), HUD presses, frame pacing and memory while
+(directions, sensitivity), Qt Quick map controls, frame pacing and memory while
 panning and zooming, Home/resume and rotation (scene-graph recreation),
 switching the map server in Settings, and QML overlays in all five
 languages.
