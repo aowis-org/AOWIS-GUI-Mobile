@@ -710,7 +710,7 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
         // them up / down together.
         const double turn = AowisMobileMap::angleDeltaDegrees(this->touch_angle, angle);
         if (turn != 0.0)
-            this->model.orbitViewGlobe(-turn, 0.0);
+            this->model.orbitViewGlobe(turn, 0.0);
         this->tilt_remainder += QPointF(0.0, moved.y());
         const int tilt = qRound(this->tilt_remainder.y());
         if (tilt != 0)
