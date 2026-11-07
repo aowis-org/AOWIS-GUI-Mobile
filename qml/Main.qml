@@ -306,6 +306,33 @@ Window {
         }
     }
 
+    Button {
+        visible: mapView.visible && mapView.globe
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: 14
+        width: 52
+        height: 52
+        z: 1
+        Accessible.name: qsTr("Rotate map to north")
+        onClicked: mapView.faceNorth()
+        contentItem: Item {
+            UiIcon {
+                kind: "compass"
+                anchors.centerIn: parent
+                width: 38
+                height: 38
+                strokeColor: root.uiText
+                rotation: mapView.northAngle
+            }
+        }
+        background: Rectangle {
+            radius: 12
+            color: parent.down ? root.uiPressed : root.uiRaised
+            border.color: root.uiBorder
+        }
+    }
+
     // Back to the device position (the first fix centres the map once).
     Button {
         id: centerOnLocationButton

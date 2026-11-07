@@ -34,6 +34,7 @@ class MobileMapView : public QQuickItem
     // The last session's camera was restored (no automatic centring then).
     Q_PROPERTY(bool savedCamera READ savedCamera CONSTANT)
     Q_PROPERTY(bool globe READ globe NOTIFY cameraChanged)
+    Q_PROPERTY(double northAngle READ northAngle NOTIFY northAngleChanged)
     Q_PROPERTY(bool globeAvailable READ globeAvailable NOTIFY statusChanged)
     Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
     Q_PROPERTY(QString providerId READ providerId WRITE setProviderId NOTIFY providerIdChanged)
@@ -58,6 +59,8 @@ public:
     bool savedCamera() const;
     bool globe() const;
     bool globeAvailable() const;
+    double northAngle() const;
+    Q_INVOKABLE void faceNorth();
     QVariantList providers() const;
     QString providerId() const;
     void setProviderId(const QString &id);
@@ -84,6 +87,7 @@ signals:
     void serverUrlChanged();
     void darkThemeChanged();
     void cameraChanged();
+    void northAngleChanged();
     void repeatedGpsReturn();
     void providersChanged();
     void providerIdChanged();

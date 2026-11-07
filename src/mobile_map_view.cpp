@@ -166,6 +166,8 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QPointF zoom_anchor;
     bool follow_fix = false;
     int64_t return_start = 0;
+    int64_t north_start = 0;
+    double north_start_angle = 0.0;
     QPointF return_origin;
     QPointF gesture_pan;
     int64_t older_return_us = 0;
@@ -248,6 +250,8 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
                      [this](CoordinateWGS84) { emit this->item->cameraChanged(); });
     QObject::connect(&this->model, &MapModel::view2dContinuousZoomChanged, this->item,
                      [this](double) { emit this->item->cameraChanged(); });
+    QObject::connect(&this->model, &MapModel::viewGlobeCameraChanged, this->item,
+                     &MobileMapView::northAngleChanged);
     QObject::connect(&this->model, &MapModel::viewModeChanged, this->item,
                      [this](MapViewMode) { emit this->item->cameraChanged(); });
 
@@ -490,6 +494,7 @@ void MobileMapView::Impl::zoomAt(double steps, const QPointF &anchor)
 void MobileMapView::Impl::stopMotion()
 {
     this->motion_timer.stop();
+    this->north_start = 0;
     this->pan_velocity = {};
     this->pinch_velocity = 0.0;
     this->zoom_remaining = 0.0;
@@ -592,7 +597,14 @@ void MobileMapView::Impl::advanceMotion()
         if (remaining == 0.0)
             this->return_start = 0;
     }
-    if (this->return_start == 0 && (dragging || this->pan_velocity.isNull()) && this->zoom_remaining == 0.0)
+    if (this->north_start != 0)
+    {
+        const double remaining = std::clamp(1.0 - (now - this->north_start) / 360000.0, 0.0, 1.0);
+        this->model.setViewGlobeYawDeg(this->north_start_angle * remaining * remaining * remaining);
+        if (remaining == 0.0)
+            this->north_start = 0;
+    }
+    if (this->north_start == 0 && this->return_start == 0 && (dragging || this->pan_velocity.isNull()) && this->zoom_remaining == 0.0)
         this->motion_timer.stop();
 }
 
@@ -1056,8 +1068,32 @@ void MobileMapView::setGlobe(bool globe_mode)
 {
     if (globe_mode && !this->impl->view->globeAvailable())
         return;
+    if (!globe_mode)
+        this->impl->north_start = 0;
     this->impl->model.setViewMode(globe_mode ? MapViewMode::Globe : MapViewMode::TwoD,
                                   this->impl->viewport());
+}
+
+double MobileMapView::northAngle() const
+{
+    // Render's positive yaw places local north clockwise from screen-up.
+    return this->impl->model.viewGlobeYawDeg();
+}
+
+void MobileMapView::faceNorth()
+{
+    if (!globe())
+        return;
+    this->impl->north_start_angle = std::remainder(northAngle(), 360.0);
+    this->impl->pan_velocity = {};
+    if (this->impl->north_start_angle == 0.0)
+    {
+        this->impl->north_start = 0;
+        this->impl->model.setViewGlobeYawDeg(0.0);
+        return;
+    }
+    this->impl->north_start = steadyMicroseconds();
+    this->impl->startMotion();
 }
 
 void MobileMapView::zoomBy(double steps)
@@ -1236,6 +1272,8 @@ bool MobileMapView::hillshade() const { return false; }
 void MobileMapView::setHillshade(bool) {}
 void MobileMapView::setLocationMarker(bool, double, double, bool, bool) {}
 void MobileMapView::setGlobe(bool) {}
+double MobileMapView::northAngle() const { return 0.0; }
+void MobileMapView::faceNorth() {}
 void MobileMapView::zoomBy(double) {}
 void MobileMapView::reloadServer() {}
 void MobileMapView::itemChange(ItemChange change, const ItemChangeData &value)
