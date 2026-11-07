@@ -74,7 +74,7 @@ public:
 
     // Camera: 2D at a Web Mercator zoom level, or the globe.
     Q_INVOKABLE void centerOn(double longitude_deg, double latitude_deg, double zoom);
-    Q_INVOKABLE void setLocationMarker(bool valid, double longitude, double latitude, bool fresh);
+    Q_INVOKABLE void setLocationMarker(bool valid, double longitude, double latitude, bool fresh, bool follow);
     Q_INVOKABLE void setGlobe(bool globe);
     Q_INVOKABLE void zoomBy(double steps);
     // Loads the map server's provider catalog and terrain datasets again.

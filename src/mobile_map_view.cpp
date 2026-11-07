@@ -157,6 +157,24 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QPointF pan_remainder;
     QPointF tilt_remainder;
 
+    QTimer motion_timer;
+    int64_t last_tick = 0;
+    int64_t last_drag = 0;
+    QPointF pan_velocity;
+    double pinch_velocity = 0.0;
+    double zoom_remaining = 0.0;
+    QPointF zoom_anchor;
+    bool follow_fix = false;
+    int64_t return_start = 0;
+    QPointF return_origin;
+
+    void stopMotion();
+    void sampleDrag(const QPointF &delta, double zoom_steps = 0.0);
+    void releaseMotion();
+    void startMotion();
+    void returnToFix();
+    void advanceMotion();
+
     // Lifecycle (first frame after resume, scene-graph recreation, resize).
     AowisMobileLifecycle::Watchdog watchdog;
     QString recovery_reason;
@@ -234,6 +252,9 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
     {
         setApplicationActive(state == Qt::ApplicationActive);
     });
+    this->motion_timer.setInterval(16);
+    this->motion_timer.setTimerType(Qt::PreciseTimer);
+    QObject::connect(&this->motion_timer, &QTimer::timeout, this->item, [this]() { advanceMotion(); });
     this->status_timer.setInterval(250);
     QObject::connect(&this->status_timer, &QTimer::timeout, this->item, [this]()
     {
@@ -462,6 +483,98 @@ void MobileMapView::Impl::zoomAt(double steps, const QPointF &anchor)
         this->model.zoomByAt(steps, anchor, size);
 }
 
+void MobileMapView::Impl::stopMotion()
+{
+    this->motion_timer.stop();
+    this->pan_velocity = {};
+    this->pinch_velocity = 0.0;
+    this->zoom_remaining = 0.0;
+    this->return_start = 0;
+    this->last_drag = steadyMicroseconds();
+}
+
+void MobileMapView::Impl::sampleDrag(const QPointF &delta, double zoom_steps)
+{
+    const int64_t now = steadyMicroseconds();
+    const double dt = std::clamp((now - this->last_drag) * 1e-6, 0.008, 0.12);
+    this->last_drag = now;
+    const double weight = 1.0 - std::exp(-dt / 0.035);
+    this->pan_velocity += (delta / dt - this->pan_velocity) * weight;
+    this->pinch_velocity += (zoom_steps / dt - this->pinch_velocity) * weight;
+}
+
+void MobileMapView::Impl::startMotion()
+{
+    if (!this->motion_timer.isActive() && this->application_active && this->item->isVisible())
+    {
+        this->last_tick = steadyMicroseconds();
+        this->motion_timer.start();
+    }
+}
+
+void MobileMapView::Impl::returnToFix()
+{
+    if (!this->follow_fix || this->touch_mode != Touch::None || this->mouse != Pointer::None)
+        return;
+    this->pan_velocity = {};
+    this->return_origin = QPointF(this->model.centerLon(), this->model.centerLat());
+    this->return_start = steadyMicroseconds();
+    startMotion();
+}
+
+void MobileMapView::Impl::releaseMotion()
+{
+    if (steadyMicroseconds() - this->last_drag > 90000)
+    {
+        this->pan_velocity = {};
+        this->pinch_velocity = 0.0;
+    }
+    this->zoom_remaining += std::clamp(this->pinch_velocity * 0.12, -0.75, 0.75);
+    this->pinch_velocity = 0.0;
+    returnToFix();
+    startMotion();
+}
+
+void MobileMapView::Impl::advanceMotion()
+{
+    const int64_t now = steadyMicroseconds();
+    const double dt = std::clamp((now - this->last_tick) * 1e-6, 0.0, 0.05);
+    this->last_tick = now;
+    const double decay = std::exp(-dt / 0.17);
+    const bool dragging = this->mouse != Pointer::None || this->touch_mode != Touch::None;
+    if (!dragging && std::hypot(this->pan_velocity.x(), this->pan_velocity.y()) >= 5.0)
+    {
+        panBy(this->pan_velocity * (0.17 * (1.0 - decay)));
+        this->pan_velocity *= decay;
+    }
+    else if (!dragging)
+        this->pan_velocity = {};
+
+    const double zoom_step = std::abs(this->zoom_remaining) < 0.001 ? this->zoom_remaining
+        : this->zoom_remaining * (1.0 - std::exp(-dt / 0.085));
+    if (zoom_step != 0.0)
+    {
+        const QSize size = viewport();
+        const QPointF anchor = this->follow_fix ? QPointF(size.width() * 0.5, size.height() * 0.5)
+                                                : this->zoom_anchor;
+        zoomAt(zoom_step, anchor);
+        this->zoom_remaining -= zoom_step;
+    }
+
+    if (this->return_start != 0)
+    {
+        const double remaining = std::clamp(1.0 - (now - this->return_start) / 420000.0, 0.0, 1.0);
+        const double fraction = 1.0 - remaining * remaining * remaining;
+        const double lon_delta = std::remainder(this->marker_coordinate.x() - this->return_origin.x(), 360.0);
+        this->model.setCenter(std::remainder(this->return_origin.x() + fraction * lon_delta, 360.0),
+            this->return_origin.y() + fraction * (this->marker_coordinate.y() - this->return_origin.y()), viewport());
+        if (remaining == 0.0)
+            this->return_start = 0;
+    }
+    if (this->return_start == 0 && (dragging || this->pan_velocity.isNull()) && this->zoom_remaining == 0.0)
+        this->motion_timer.stop();
+}
+
 void MobileMapView::Impl::beginOrbit()
 {
     if (this->orbiting || this->model.viewMode() != MapViewMode::Globe)
@@ -481,6 +594,7 @@ void MobileMapView::Impl::endOrbit()
 
 void MobileMapView::Impl::resetGestures()
 {
+    stopMotion();
     endOrbit();
     this->touch_mode = Touch::None;
     this->touch_first_id = -1;
@@ -494,6 +608,7 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
     if (event->type() == QEvent::TouchCancel)
     {
         resetGestures();
+        returnToFix();
         return;
     }
     // The fingers still down, in press order.
@@ -510,7 +625,9 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
 
     if (down.empty())
     {
-        resetGestures();
+        endOrbit();
+        this->touch_mode = Touch::None;
+        releaseMotion();
         return;
     }
     if (down.size() == 1)
@@ -518,6 +635,7 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
         const QEventPoint &finger = down.front();
         if (this->touch_mode == Touch::None)
         {
+            stopMotion();
             this->touch_first_id = finger.id();
             this->touch_last = finger.position();
             this->touch_mode = Touch::Single;
@@ -529,11 +647,13 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
             // A finger of a pinch lifted: continue panning without a jump.
             endOrbit();
             this->touch_mode = Touch::Single;
+            this->pan_velocity = {};
             this->touch_first_id = finger.id();
             this->touch_last = finger.position();
             this->pan_remainder = QPointF();
             return;
         }
+        sampleDrag(finger.position() - this->touch_last);
         panBy(finger.position() - this->touch_last);
         this->touch_last = finger.position();
         return;
@@ -546,6 +666,7 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
     if (this->touch_mode != Touch::Multi || down[0].id() != this->touch_first_id
         || down[1].id() != this->touch_second_id)
     {
+        stopMotion();
         this->touch_mode = Touch::Multi;
         this->touch_first_id = down[0].id();
         this->touch_second_id = down[1].id();
@@ -556,9 +677,12 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
         beginOrbit();
         return;
     }
-    if (this->touch_distance > 1.0 && distance > 1.0)
-        zoomAt(AowisMobileMap::zoomStepsForScale(distance / this->touch_distance), centroid);
+    const double zoom_steps = this->touch_distance > 1.0 && distance > 1.0
+        ? AowisMobileMap::zoomStepsForScale(distance / this->touch_distance) : 0.0;
+    this->zoom_anchor = centroid;
+    zoomAt(zoom_steps, centroid);
     const QPointF moved = centroid - this->touch_centroid;
+    sampleDrag(this->model.viewMode() == MapViewMode::Globe ? QPointF() : moved, zoom_steps);
     if (this->model.viewMode() == MapViewMode::Globe)
     {
         // Two fingers on the globe: turn with the fingers, tilt by moving
@@ -593,6 +717,7 @@ void MobileMapView::Impl::setApplicationActive(bool active)
     recordLifecycleEvent(active ? QStringLiteral("app_active") : QStringLiteral("app_inactive"));
     if (active)
     {
+        returnToFix();
         beginRecovery(QStringLiteral("resume"));
         if (this->window != nullptr)
             this->window->update();
@@ -801,16 +926,21 @@ void MobileMapView::centerOn(double longitude_deg, double latitude_deg, double z
     this->impl->model.setCenter(longitude_deg, latitude_deg, size);
 }
 
-void MobileMapView::setLocationMarker(bool valid, double longitude, double latitude, bool fresh)
+void MobileMapView::setLocationMarker(bool valid, double longitude, double latitude, bool fresh, bool follow)
 {
     const QPointF coordinate(longitude, latitude);
-    if (this->impl->has_marker == valid &&
+    const bool follow_changed = this->impl->follow_fix != follow;
+    this->impl->follow_fix = follow;
+    if (!follow)
+        this->impl->return_start = 0;
+    if (!follow_changed && this->impl->has_marker == valid &&
         (!valid || (this->impl->marker_coordinate == coordinate && this->impl->marker_fresh == fresh)))
         return;
     const bool had_marker = this->impl->has_marker;
     this->impl->has_marker = valid;
     this->impl->marker_coordinate = coordinate;
     this->impl->marker_fresh = fresh;
+    this->impl->returnToFix();
     if (!valid)
     {
         this->impl->view->setOverlayBuilder({});
@@ -908,7 +1038,9 @@ void MobileMapView::setGlobe(bool globe_mode)
 void MobileMapView::zoomBy(double steps)
 {
     const QSize size = this->impl->viewport();
-    this->impl->zoomAt(steps, QPointF(size.width() * 0.5, size.height() * 0.5));
+    this->impl->zoom_anchor = QPointF(size.width() * 0.5, size.height() * 0.5);
+    this->impl->zoom_remaining += steps;
+    this->impl->startMotion();
 }
 
 void MobileMapView::reloadServer()
@@ -923,7 +1055,10 @@ void MobileMapView::itemChange(ItemChange change, const ItemChangeData &value)
     if (change == ItemVisibleHasChanged)
     {
         if (value.boolValue)
+        {
             this->impl->view->handleHostShown();
+            this->impl->returnToFix();
+        }
         else
         {
             this->impl->view->handleHostHidden();
@@ -951,12 +1086,17 @@ void MobileMapView::touchEvent(QTouchEvent *event)
 
 void MobileMapView::touchUngrabEvent()
 {
-    this->impl->resetGestures();
+    if (this->impl->touch_mode != Impl::Touch::None)
+    {
+        this->impl->resetGestures();
+        this->impl->returnToFix();
+    }
 }
 
 void MobileMapView::mousePressEvent(QMouseEvent *event)
 {
     const QPointF position = event->position();
+    this->impl->stopMotion();
     this->impl->mouse_last = position;
     if (event->button() == Qt::RightButton && globe())
     {
@@ -979,6 +1119,7 @@ void MobileMapView::mouseMoveEvent(QMouseEvent *event)
     switch (this->impl->mouse)
     {
         case Impl::Pointer::Pan:
+            this->impl->sampleDrag(delta);
             this->impl->panBy(delta);
             break;
         case Impl::Pointer::Orbit:
@@ -996,18 +1137,25 @@ void MobileMapView::mouseReleaseEvent(QMouseEvent *event)
     if (this->impl->mouse == Impl::Pointer::Orbit)
         this->impl->endOrbit();
     this->impl->mouse = Impl::Pointer::None;
+    this->impl->releaseMotion();
     event->accept();
 }
 
 void MobileMapView::mouseUngrabEvent()
 {
-    this->impl->resetGestures();
+    if (this->impl->mouse != Impl::Pointer::None)
+    {
+        this->impl->resetGestures();
+        this->impl->returnToFix();
+    }
 }
 
 void MobileMapView::wheelEvent(QWheelEvent *event)
 {
     const double notches = double(event->angleDelta().y()) / 120.0;
-    this->impl->zoomAt(notches * 0.5, event->position());
+    this->impl->zoom_anchor = event->position();
+    this->impl->zoom_remaining += notches * 0.5;
+    this->impl->startMotion();
     event->accept();
 }
 
@@ -1061,7 +1209,7 @@ bool MobileMapView::wireframe() const { return false; }
 void MobileMapView::setWireframe(bool) {}
 bool MobileMapView::hillshade() const { return false; }
 void MobileMapView::setHillshade(bool) {}
-void MobileMapView::setLocationMarker(bool, double, double, bool) {}
+void MobileMapView::setLocationMarker(bool, double, double, bool, bool) {}
 void MobileMapView::setGlobe(bool) {}
 void MobileMapView::zoomBy(double) {}
 void MobileMapView::reloadServer() {}

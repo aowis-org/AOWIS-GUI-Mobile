@@ -82,15 +82,10 @@ Window {
                  (mapMenu.visible || navigationDrawer.opened || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
-    function followLocation() {
-        if (root.activePage === "map" && locationService.enabled &&
-            locationService.follow && locationService.fresh)
-            mapView.centerOn(locationService.longitude, locationService.latitude, NaN)
-    }
     function updateLocation() {
         mapView.setLocationMarker(locationService.enabled && locationService.hasFix,
-            locationService.longitude, locationService.latitude, locationService.fresh)
-        root.followLocation()
+            locationService.longitude, locationService.latitude, locationService.fresh,
+            locationService.enabled && locationService.follow && locationService.fresh)
     }
     Connections {
         target: locationService
@@ -103,8 +98,6 @@ Window {
     MapView {
         id: mapView
         Component.onCompleted: root.updateLocation()
-        onCameraChanged: if (locationService.follow && locationService.fresh) Qt.callLater(root.followLocation)
-        onVisibleChanged: if (visible) Qt.callLater(root.followLocation)
         anchors.fill: parent
         visible: root.activePage === "map"
         enabled: root.activePage === "map" && !navigationDrawer.opened
