@@ -114,7 +114,7 @@ Window {
         onRepeatedGpsReturn: gpsHintTimer.restart()
         anchors.fill: parent
         visible: root.activePage === "map"
-        enabled: root.activePage === "map" && !navigationDrawer.opened && !lookAround
+        enabled: root.activePage === "map" && !navigationDrawer.opened
         serverUrl: mapServerSettings.endpointUrl
         darkTheme: root.darkTheme
     }
@@ -308,7 +308,6 @@ Window {
                           ? qsTr("Geographic north") : qsTr("Magnetic north · no location correction")
                 }
                 RowLayout {
-                    enabled: !mapView.lookAround
                     Button {
                         Layout.fillWidth: true
                         Accessible.name: qsTr("Zoom out")

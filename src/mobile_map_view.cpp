@@ -486,6 +486,11 @@ void MobileMapView::Impl::zoomAt(double steps, const QPointF &anchor)
 {
     if (!std::isfinite(steps) || steps == 0.0)
         return;
+    if (this->model.globeEyePose())
+    {
+        this->model.zoomGlobeEyeBy(steps);
+        return;
+    }
     const QSize size = viewport();
     if (this->model.viewMode() == MapViewMode::Globe)
         this->model.setViewGlobeZoomLevel(this->model.viewGlobeZoomLevel(size) + steps, size);
@@ -688,6 +693,8 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
             this->pan_remainder = QPointF();
             return;
         }
+        if (this->model.globeEyePose())
+            return;
         sampleDrag(finger.position() - this->touch_last);
         panBy(finger.position() - this->touch_last);
         this->touch_last = finger.position();
@@ -709,13 +716,20 @@ void MobileMapView::Impl::touch(QTouchEvent *event)
         this->touch_distance = distance;
         this->touch_angle = angle;
         this->pan_remainder = QPointF();
-        beginOrbit();
+        if (!this->model.globeEyePose())
+            beginOrbit();
         return;
     }
     const double zoom_steps = this->touch_distance > 1.0 && distance > 1.0
         ? AowisMobileMap::zoomStepsForScale(distance / this->touch_distance) : 0.0;
     this->zoom_anchor = centroid;
     zoomAt(zoom_steps, centroid);
+    if (this->model.globeEyePose())
+    {
+        sampleDrag(QPointF(), zoom_steps);
+        this->touch_distance = distance;
+        return;
+    }
     const QPointF moved = centroid - this->touch_centroid;
     sampleDrag(this->model.viewMode() == MapViewMode::Globe ? QPointF() : moved, zoom_steps);
     if (this->model.viewMode() == MapViewMode::Globe)
@@ -1230,6 +1244,11 @@ void MobileMapView::touchUngrabEvent()
 
 void MobileMapView::mousePressEvent(QMouseEvent *event)
 {
+    if (lookAround())
+    {
+        event->ignore();
+        return;
+    }
     const QPointF position = event->position();
     this->impl->stopMotion();
     this->impl->mouse_last = position;

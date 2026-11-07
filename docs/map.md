@@ -67,7 +67,8 @@ current zoom. The location button also re-centres the map on demand.
 ## Look around
 
 In the Android 3D map menu, **Look around** holds the camera at its current
-position and altitude while the phone controls its orientation. The map
+position and altitude while the phone controls its orientation. Pinch or use the
+zoom buttons to change magnification from 0.5× to 8× around the center of the screen. The map
 uses the Compass instrument’s orientation sensor. With a location fix,
 it adjusts for magnetic declination at the phone’s physical location,
 even while viewing a distant part of the globe. The menu shows the active
