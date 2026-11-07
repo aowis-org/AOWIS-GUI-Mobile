@@ -1,0 +1,1160 @@
+#include "mobile_map_view.h"
+
+#include <QCoreApplication>
+#include <QCursor>
+
+#if AOWIS_MOBILE_WITH_MAP
+
+#include "lifecycle_watchdog.h"
+#include "mobile_map_math.h"
+
+#include "map/bgfx/map_bgfx_hud.h"
+#include "map/bgfx/map_bgfx_map_view.h"
+#include "map/core/map_model.h"
+#include "map/core/map_provider_catalog.h"
+#include "map/core/map_view_types.h"
+#include "map/data/map_server_transport.h"
+#include "map/data/map_terrain_repository.h"
+#include "map/data/map_tile_repository.h"
+#include "map/render/map_render_types.h"
+#include "services/interface_server_map_rest.h"
+#include "services/map_server_rest_configuration.h"
+
+#include <QDateTime>
+#include <QDebug>
+#include <QDir>
+#include <QEventPoint>
+#include <QFile>
+#include <QGuiApplication>
+#include <QHoverEvent>
+#include <QImage>
+#include <QMouseEvent>
+#include <QOpenGLContext>
+#include <QPainter>
+#include <QPalette>
+#include <QPen>
+#include <QPolygonF>
+#include <QPointer>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QTextStream>
+#include <QTimer>
+#include <QTouchEvent>
+#include <QWheelEvent>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <utility>
+#include <vector>
+
+namespace
+{
+int64_t steadyMicroseconds()
+{
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+}
+
+// The HUD's button images, drawn here: Mobile has no desktop icon resources.
+QImage hudIcon(const QString &kind)
+{
+    QImage image(48, 48, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(QColor(0x30, 0x30, 0x30));
+    pen.setWidthF(4.0);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    if (kind == QStringLiteral("crosshair"))
+    {
+        painter.drawEllipse(QPointF(24.0, 24.0), 11.0, 11.0);
+        painter.drawLine(QPointF(24.0, 4.0), QPointF(24.0, 15.0));
+        painter.drawLine(QPointF(24.0, 33.0), QPointF(24.0, 44.0));
+        painter.drawLine(QPointF(4.0, 24.0), QPointF(15.0, 24.0));
+        painter.drawLine(QPointF(33.0, 24.0), QPointF(44.0, 24.0));
+    }
+    else if (kind == QStringLiteral("zoom_in") || kind == QStringLiteral("zoom_out"))
+    {
+        painter.drawLine(QPointF(10.0, 24.0), QPointF(38.0, 24.0));
+        if (kind == QStringLiteral("zoom_in"))
+            painter.drawLine(QPointF(24.0, 10.0), QPointF(24.0, 38.0));
+    }
+    else
+    {
+        // Fullscreen: corner brackets at the edges (enter) or turned
+        // inwards around the centre (leave).
+        const bool leave = kind == QStringLiteral("fullscreen_undo");
+        const double edge = leave ? 18.0 : 8.0;
+        const double arm = 10.0;
+        const double far = 48.0 - edge;
+        const double sx = leave ? -1.0 : 1.0;
+        painter.drawPolyline(QPolygonF({QPointF(edge, edge + sx * arm), QPointF(edge, edge),
+                                        QPointF(edge + sx * arm, edge)}));
+        painter.drawPolyline(QPolygonF({QPointF(far - sx * arm, edge), QPointF(far, edge),
+                                        QPointF(far, edge + sx * arm)}));
+        painter.drawPolyline(QPolygonF({QPointF(edge, far - sx * arm), QPointF(edge, far),
+                                        QPointF(edge + sx * arm, far)}));
+        painter.drawPolyline(QPolygonF({QPointF(far - sx * arm, far), QPointF(far, far),
+                                        QPointF(far, far - sx * arm)}));
+    }
+    painter.end();
+    return image;
+}
+
+QPalette mapPalette(bool dark)
+{
+    QPalette palette = QGuiApplication::palette();
+    const QColor window = dark ? QColor(0x10, 0x25, 0x35) : QColor(0xf3, 0xf7, 0xfa);
+    const QColor text = dark ? QColor(0xf2, 0xf8, 0xfa) : QColor(0x17, 0x30, 0x40);
+    const QColor button = dark ? QColor(0x25, 0x43, 0x54) : QColor(0xff, 0xff, 0xff);
+    const QColor highlight = dark ? QColor(0x34, 0x6f, 0x86) : QColor(0x00, 0x6b, 0x57);
+    palette.setColor(QPalette::Window, window);
+    palette.setColor(QPalette::WindowText, text);
+    palette.setColor(QPalette::Base, button);
+    palette.setColor(QPalette::AlternateBase, window);
+    palette.setColor(QPalette::Text, text);
+    palette.setColor(QPalette::Button, button);
+    palette.setColor(QPalette::ButtonText, text);
+    palette.setColor(QPalette::Highlight, highlight);
+    palette.setColor(QPalette::HighlightedText, QColor(0xff, 0xff, 0xff));
+    palette.setColor(QPalette::ToolTipBase, button);
+    palette.setColor(QPalette::ToolTipText, text);
+    palette.setColor(QPalette::Mid, dark ? QColor(0x6c, 0x91, 0xa1) : QColor(0x9f, 0xb5, 0xc0));
+    return palette;
+}
+}
+
+struct MobileMapView::Impl final : public MapBgfxMapViewHost
+{
+    explicit Impl(MobileMapView *owner);
+    ~Impl() override;
+
+    // MapBgfxMapViewHost
+    bool mapViewVisible() const override;
+    QFont mapViewFont() const override;
+    QPalette mapViewPalette() const override;
+    void mapViewFocusNavigationInput(Qt::FocusReason reason) override;
+    QSize mapViewLogicalSize() const override;
+    qreal mapViewDevicePixelRatio() const override;
+    QScreen *mapViewScreen() const override;
+    QPoint mapViewGlobalPosition() const override;
+    void mapViewSetCursor(Qt::CursorShape shape) override;
+
+    QSize viewport() const;
+    void attachWindow(QQuickWindow *window);
+    void renderPass();
+    void releaseContext();
+    void rebuildServer();
+    void handleHudCommand(const MapBgfxHud::Command &command);
+    MapBgfxMapView::HudPointer hudPointer(QEvent::Type type, const QPointF &position,
+                                          Qt::MouseButton button, Qt::MouseButtons buttons);
+    void panBy(const QPointF &delta);
+    void zoomAt(double steps, const QPointF &anchor);
+    void beginOrbit();
+    void endOrbit();
+    void touch(QTouchEvent *event);
+    void resetGestures();
+    void setApplicationActive(bool active);
+    void beginRecovery(const QString &reason);
+    void inspectRecovery();
+    void recordLifecycleEvent(const QString &event, int64_t duration_us = -1);
+    void restoreCamera();
+    void saveCamera();
+    void refreshStatus();
+
+    MobileMapView *item = nullptr;
+    QString server_url;
+    bool dark = false;
+    MapProviderCatalog catalog;
+    MapModel model;
+    std::unique_ptr<MapTileRepository> tiles;
+    std::unique_ptr<MapTerrainRepository> terrain;
+    // Destroyed first: it holds the repositories and the model.
+    std::unique_ptr<MapBgfxMapView> view;
+    QPointer<QQuickWindow> window;
+    std::vector<QMetaObject::Connection> window_connections;
+    QString render_problem;
+    QString server_status;
+    bool saved_camera = false;
+
+    // Gestures.
+    enum class Pointer { None, Hud, Pan, Orbit };
+    Pointer mouse = Pointer::None;
+    QPointF mouse_last;
+    enum class Touch { None, Hud, Single, Multi };
+    Touch touch_mode = Touch::None;
+    int touch_first_id = -1;
+    int touch_second_id = -1;
+    QPointF touch_last;
+    QPointF touch_centroid;
+    double touch_distance = 0.0;
+    double touch_angle = 0.0;
+    bool orbiting = false;
+    QPointF pan_remainder;
+    QPointF tilt_remainder;
+
+    // Lifecycle (first frame after resume, scene-graph recreation, resize).
+    AowisMobileLifecycle::Watchdog watchdog;
+    QString recovery_reason;
+    QTimer status_timer;
+    bool application_active = false;
+    bool was_initialized = false;
+    quint64 frames = 0;
+    quint32 scene_graph_starts = 0;
+    quint32 scene_graph_releases = 0;
+    quint32 bgfx_initializations = 0;
+    quint32 recoveries = 0;
+    quint32 timeouts = 0;
+    int64_t last_frame_us = 0;
+    int64_t last_recovery_us = -1;
+};
+
+MobileMapView::Impl::Impl(MobileMapView *owner)
+    : item(owner), model(&this->catalog)
+{
+    this->view = std::make_unique<MapBgfxMapView>(
+        &this->model, this, MapBgfxMapView::RenderTarget::HostContext);
+    // No hydraulic network on Mobile yet: imagery, terrain and the HUD.
+    this->view->setDistributionNetworkVisible(false);
+    this->view->setHudImages(hudIcon(QStringLiteral("crosshair")), hudIcon(QStringLiteral("fullscreen")),
+                             hudIcon(QStringLiteral("fullscreen_undo")), hudIcon(QStringLiteral("zoom_in")),
+                             hudIcon(QStringLiteral("zoom_out")));
+    this->view->setHudScaleProvider([](double lon0, double lat0, double lon1, double lat1,
+                                       double bar_px)
+    {
+        MapBgfxHud::ScaleBar result;
+        const double maximum_m = AowisMobileMap::distanceMeters(lon0, lat0, lon1, lat1);
+        const double scale_m = AowisMobileMap::niceScaleDistanceMeters(maximum_m);
+        if (!(scale_m > 0.0) || !(maximum_m > 0.0))
+            return result;
+        result.valid = true;
+        result.width_px = bar_px * scale_m / maximum_m;
+        result.label = AowisMobileMap::scaleLabel(scale_m);
+        return result;
+    });
+    this->view->setHudActionHandler([this](const MapBgfxHud::Command &command)
+    {
+        handleHudCommand(command);
+    });
+    QObject::connect(this->view.get(), &MapBgfxMapView::hostFrameRequested, this->item, [this]()
+    {
+        if (this->window != nullptr)
+            this->window->update();
+    });
+    QObject::connect(this->view.get(), &MapBgfxMapView::signalRendererFailed, this->item,
+                     [this](const QString &reason)
+    {
+        this->render_problem = reason;
+        qWarning().noquote() << "AOWIS map:" << reason;
+        emit this->item->statusChanged();
+    });
+    QObject::connect(this->view.get(), &MapBgfxMapView::signalRendererReady, this->item, [this]()
+    {
+        qInfo().noquote() << "AOWIS map: first frame," << this->view->graphicsApiName();
+        emit this->item->statusChanged();
+    });
+
+    // Server providers: the model re-resolves its provider, the tiles their
+    // provider URLs.
+    QObject::connect(&this->catalog, &MapProviderCatalog::catalogChanged, this->item, [this]()
+    {
+        this->model.providerCatalogChanged();
+        if (this->tiles)
+            this->tiles->invalidateProviderCatalog();
+        this->server_status = MobileMapView::tr("Map server: %1 imagery providers").arg(this->catalog.providers().size());
+        emit this->item->statusChanged();
+    });
+    QObject::connect(&this->catalog, &MapProviderCatalog::fallbackChanged, this->item, [this]()
+    {
+        this->model.providerFallbackChanged();
+    });
+    QObject::connect(&this->catalog, &MapProviderCatalog::errorOccurred, this->item,
+                     [this](const QString &message)
+    {
+        this->server_status = MobileMapView::tr("Map server error: %1")
+                                  .arg(message);
+        emit this->item->statusChanged();
+    });
+    QObject::connect(&this->model, &MapModel::centerChangedWGS84, this->item,
+                     [this](CoordinateWGS84) { emit this->item->cameraChanged(); });
+    QObject::connect(&this->model, &MapModel::view2dContinuousZoomChanged, this->item,
+                     [this](double) { emit this->item->cameraChanged(); });
+    QObject::connect(&this->model, &MapModel::viewModeChanged, this->item,
+                     [this](MapViewMode) { emit this->item->cameraChanged(); });
+
+    QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, this->item,
+                     [this](Qt::ApplicationState state)
+    {
+        setApplicationActive(state == Qt::ApplicationActive);
+    });
+    this->status_timer.setInterval(250);
+    QObject::connect(&this->status_timer, &QTimer::timeout, this->item, [this]()
+    {
+        inspectRecovery();
+        emit this->item->statusChanged();
+    });
+    this->status_timer.start();
+    restoreCamera();
+    this->server_status = MobileMapView::tr("No map server configured");
+}
+
+MobileMapView::Impl::~Impl()
+{
+    saveCamera();
+    for (const QMetaObject::Connection &connection : this->window_connections)
+        QObject::disconnect(connection);
+}
+
+// --- MapBgfxMapViewHost ------------------------------------------------------------
+
+bool MobileMapView::Impl::mapViewVisible() const
+{
+    return this->item->isVisible() && this->window != nullptr && this->window->isVisible()
+        && this->item->width() > 0.0 && this->item->height() > 0.0;
+}
+
+QFont MobileMapView::Impl::mapViewFont() const
+{
+    return QGuiApplication::font();
+}
+
+QPalette MobileMapView::Impl::mapViewPalette() const
+{
+    return mapPalette(this->dark);
+}
+
+void MobileMapView::Impl::mapViewFocusNavigationInput(Qt::FocusReason reason)
+{
+    this->item->forceActiveFocus(reason);
+}
+
+QSize MobileMapView::Impl::mapViewLogicalSize() const
+{
+    return viewport();
+}
+
+qreal MobileMapView::Impl::mapViewDevicePixelRatio() const
+{
+    return this->window != nullptr ? this->window->effectiveDevicePixelRatio() : 1.0;
+}
+
+QScreen *MobileMapView::Impl::mapViewScreen() const
+{
+    return this->window != nullptr ? this->window->screen() : nullptr;
+}
+
+QPoint MobileMapView::Impl::mapViewGlobalPosition() const
+{
+    return this->item->mapToGlobal(QPointF(0.0, 0.0)).toPoint();
+}
+
+void MobileMapView::Impl::mapViewSetCursor(Qt::CursorShape shape)
+{
+    if (shape == Qt::ArrowCursor)
+        this->item->unsetCursor();
+    else
+        this->item->setCursor(shape);
+}
+
+// --- Rendering ----------------------------------------------------------------------
+
+QSize MobileMapView::Impl::viewport() const
+{
+    return QSize(std::max(1, qRound(this->item->width())), std::max(1, qRound(this->item->height())));
+}
+
+void MobileMapView::Impl::attachWindow(QQuickWindow *new_window)
+{
+    if (this->window == new_window)
+        return;
+    for (const QMetaObject::Connection &connection : this->window_connections)
+        QObject::disconnect(connection);
+    this->window_connections.clear();
+    this->window = new_window;
+    if (new_window == nullptr)
+        return;
+    // Qt Quick's basic render loop (main.cpp): these run on the GUI thread,
+    // the map view's thread, with Qt's OpenGL context current.
+    this->window_connections.push_back(QObject::connect(
+        new_window, &QQuickWindow::beforeRenderPassRecording, this->item,
+        [this]() { renderPass(); }, Qt::DirectConnection));
+    this->window_connections.push_back(QObject::connect(
+        new_window, &QQuickWindow::sceneGraphInvalidated, this->item,
+        [this]() { releaseContext(); }, Qt::DirectConnection));
+    this->window_connections.push_back(QObject::connect(
+        new_window, &QQuickWindow::sceneGraphInitialized, this->item, [this]()
+    {
+        ++this->scene_graph_starts;
+    }, Qt::DirectConnection));
+    this->window_connections.push_back(QObject::connect(
+        new_window, &QWindow::widthChanged, this->item, [this](int) { beginRecovery(QStringLiteral("resize")); }));
+    this->window_connections.push_back(QObject::connect(
+        new_window, &QWindow::heightChanged, this->item, [this](int) { beginRecovery(QStringLiteral("resize")); }));
+    new_window->update();
+}
+
+void MobileMapView::Impl::renderPass()
+{
+    if (this->window == nullptr || !mapViewVisible())
+        return;
+    if (this->window->rendererInterface()->graphicsApi() != QSGRendererInterface::OpenGL)
+    {
+        this->render_problem = MobileMapView::tr("Qt Quick is not using OpenGL; the map needs an OpenGL or OpenGL ES scene graph");
+        return;
+    }
+    QOpenGLContext *context = QOpenGLContext::currentContext();
+    const QNativeInterface::QEGLContext *egl = context != nullptr
+        ? context->nativeInterface<QNativeInterface::QEGLContext>() : nullptr;
+    if (egl == nullptr || egl->nativeContext() == nullptr)
+    {
+        this->render_problem = MobileMapView::tr("No EGL context available (GLX is not supported)");
+        return;
+    }
+    MapBgfxMapView::HostContext host_context;
+    host_context.native_context = static_cast<void *>(egl->nativeContext());
+    host_context.opengl_es = context->isOpenGLES();
+    this->window->beginExternalCommands();
+    const bool drawn = this->view->renderHostFrame(host_context);
+    this->window->endExternalCommands();
+    const bool initialized = this->view->graphicsApiName() != QStringLiteral("bgfx (not initialized)");
+    if (initialized && !this->was_initialized)
+    {
+        ++this->bgfx_initializations;
+        recordLifecycleEvent(QStringLiteral("bgfx_initialized"));
+    }
+    this->was_initialized = initialized;
+    if (drawn)
+    {
+        ++this->frames;
+        this->last_frame_us = steadyMicroseconds();
+    }
+}
+
+void MobileMapView::Impl::releaseContext()
+{
+    ++this->scene_graph_releases;
+    const bool context_current = QOpenGLContext::currentContext() != nullptr;
+    if (!context_current)
+        qWarning("AOWIS map: scene graph released without a current OpenGL context");
+    this->view->releaseHostContext();
+    this->was_initialized = false;
+    recordLifecycleEvent(QStringLiteral("scene_graph_released"));
+    if (this->application_active)
+        beginRecovery(QStringLiteral("scene_graph_recreate"));
+}
+
+// --- Map server ------------------------------------------------------------------------
+
+void MobileMapView::Impl::rebuildServer()
+{
+    this->view->setTileRepository(nullptr);
+    this->view->setTerrainRepository(nullptr);
+    this->tiles.reset();
+    this->terrain.reset();
+    MapServerRestConfiguration server;
+    server.base_url = this->server_url;
+    this->catalog.setServer(server);
+    if (!server.configured())
+    {
+        this->server_status = MobileMapView::tr("No map server configured");
+        emit this->item->statusChanged();
+        return;
+    }
+    MapServerTransport transport;
+    transport.create = [server](QObject *parent) -> InterfaceServerMap *
+    {
+        return new InterfaceServerMapREST(server, parent);
+    };
+    this->tiles = std::make_unique<MapTileRepository>(transport);
+    this->terrain = std::make_unique<MapTerrainRepository>(transport);
+    this->view->setTileRepository(this->tiles.get());
+    this->view->setTerrainRepository(this->terrain.get());
+    this->server_status = MobileMapView::tr("Map server: connecting to %1")
+                              .arg(this->server_url);
+    emit this->item->statusChanged();
+    this->catalog.refresh();
+}
+
+// --- HUD and gestures ------------------------------------------------------------------
+
+void MobileMapView::Impl::handleHudCommand(const MapBgfxHud::Command &command)
+{
+    switch (command.action)
+    {
+        case MapBgfxHud::Action::ViewMode2d:
+            this->model.setViewMode(MapViewMode::TwoD, viewport());
+            break;
+        case MapBgfxHud::Action::ViewMode3d:
+            if (this->view->globeAvailable())
+                this->model.setViewMode(MapViewMode::Globe, viewport());
+            break;
+        case MapBgfxHud::Action::ZoomIn:
+            zoomAt(1.0, QPointF(viewport().width() * 0.5, viewport().height() * 0.5));
+            break;
+        case MapBgfxHud::Action::ZoomOut:
+            zoomAt(-1.0, QPointF(viewport().width() * 0.5, viewport().height() * 0.5));
+            break;
+        case MapBgfxHud::Action::ToggleWireframe:
+            this->view->setTerrainWireframeVisible(!this->view->terrainWireframeVisible());
+            break;
+        case MapBgfxHud::Action::ToggleMapTiles:
+            this->view->setMapTilesVisible(!this->view->mapTilesVisible());
+            break;
+        case MapBgfxHud::Action::ToggleHillshade:
+            this->view->setTerrainHillshadeVisible(!this->view->terrainHillshadeVisible());
+            break;
+        case MapBgfxHud::Action::UndergroundMode:
+            this->view->setUndergroundMode(static_cast<MapUndergroundMode>(command.value));
+            break;
+        case MapBgfxHud::Action::CancelMapTiles:
+            if (this->tiles)
+                this->tiles->cancelUpstreamDownloads();
+            break;
+        case MapBgfxHud::Action::CancelTerrain:
+            if (this->terrain)
+                this->terrain->cancelUpstreamDownloads();
+            break;
+        default:
+            // Fullscreen, legend, joystick, globe sliders and compass belong
+            // to desktop hosts.
+            break;
+    }
+}
+
+MapBgfxMapView::HudPointer MobileMapView::Impl::hudPointer(QEvent::Type type, const QPointF &position,
+                                                           Qt::MouseButton button,
+                                                           Qt::MouseButtons buttons)
+{
+    QMouseEvent event(type, position, this->item->mapToGlobal(position), button, buttons,
+                      Qt::NoModifier);
+    return this->view->handleHudMouseEvent(&event);
+}
+
+void MobileMapView::Impl::panBy(const QPointF &delta)
+{
+    // Whole pixels for the model; the remainder carries to the next move.
+    this->pan_remainder += delta;
+    const QPoint step(qRound(this->pan_remainder.x()), qRound(this->pan_remainder.y()));
+    if (step.isNull())
+        return;
+    this->pan_remainder -= QPointF(step);
+    const QSize size = viewport();
+    if (this->model.viewMode() != MapViewMode::Globe)
+    {
+        this->model.panByPixels(step, size);
+        return;
+    }
+    // The ground under the crosshair follows the finger: the globe turns on
+    // the sphere through the drawn surface there (as the desktop map).
+    double crosshair_radius_m = 0.0;
+    GeoWgs84Ellipsoid::EcefPositionD crosshair_point;
+    if (this->view->globeSurfacePointAtScreen(QPointF(size.width() * 0.5, size.height() * 0.5),
+                                              &crosshair_point))
+    {
+        crosshair_radius_m = std::sqrt(crosshair_point.x * crosshair_point.x
+                                       + crosshair_point.y * crosshair_point.y
+                                       + crosshair_point.z * crosshair_point.z);
+    }
+    this->model.panByPixelsGlobe(step, size, crosshair_radius_m);
+}
+
+void MobileMapView::Impl::zoomAt(double steps, const QPointF &anchor)
+{
+    if (!std::isfinite(steps) || steps == 0.0)
+        return;
+    const QSize size = viewport();
+    if (this->model.viewMode() == MapViewMode::Globe)
+        this->model.setViewGlobeZoomLevel(this->model.viewGlobeZoomLevel(size) + steps, size);
+    else
+        this->model.zoomByAt(steps, anchor, size);
+}
+
+void MobileMapView::Impl::beginOrbit()
+{
+    if (this->orbiting || this->model.viewMode() != MapViewMode::Globe)
+        return;
+    this->orbiting = true;
+    this->tilt_remainder = QPointF();
+    this->model.beginView3dRotateInteraction();
+}
+
+void MobileMapView::Impl::endOrbit()
+{
+    if (!this->orbiting)
+        return;
+    this->orbiting = false;
+    this->model.endView3dRotateInteraction();
+}
+
+void MobileMapView::Impl::resetGestures()
+{
+    endOrbit();
+    this->touch_mode = Touch::None;
+    this->touch_first_id = -1;
+    this->touch_second_id = -1;
+    this->mouse = Pointer::None;
+    this->pan_remainder = QPointF();
+}
+
+void MobileMapView::Impl::touch(QTouchEvent *event)
+{
+    if (event->type() == QEvent::TouchCancel)
+    {
+        if (this->touch_mode == Touch::Hud)
+            hudPointer(QEvent::MouseButtonRelease, this->touch_last, Qt::LeftButton, Qt::NoButton);
+        resetGestures();
+        return;
+    }
+    // The fingers still down, in press order.
+    std::vector<QEventPoint> down;
+    for (const QEventPoint &point : event->points())
+    {
+        if (point.state() != QEventPoint::Released)
+            down.push_back(point);
+    }
+    std::sort(down.begin(), down.end(), [](const QEventPoint &a, const QEventPoint &b)
+    {
+        return a.id() < b.id();
+    });
+
+    if (this->touch_mode == Touch::Hud)
+    {
+        // The HUD keeps the first finger until it lifts.
+        QPointF position = this->touch_last;
+        bool released = true;
+        for (const QEventPoint &point : event->points())
+        {
+            if (point.id() != this->touch_first_id)
+                continue;
+            position = point.position();
+            released = point.state() == QEventPoint::Released;
+        }
+        this->touch_last = position;
+        if (released)
+        {
+            hudPointer(QEvent::MouseButtonRelease, position, Qt::LeftButton, Qt::NoButton);
+            this->touch_mode = Touch::None;
+            this->touch_first_id = -1;
+        }
+        else
+        {
+            hudPointer(QEvent::MouseMove, position, Qt::NoButton, Qt::LeftButton);
+        }
+        return;
+    }
+    if (down.empty())
+    {
+        resetGestures();
+        return;
+    }
+    if (down.size() == 1)
+    {
+        const QEventPoint &finger = down.front();
+        if (this->touch_mode == Touch::None)
+        {
+            this->touch_first_id = finger.id();
+            this->touch_last = finger.position();
+            if (hudPointer(QEvent::MouseButtonPress, finger.position(), Qt::LeftButton,
+                           Qt::LeftButton).consumed)
+            {
+                this->touch_mode = Touch::Hud;
+                return;
+            }
+            this->touch_mode = Touch::Single;
+            this->pan_remainder = QPointF();
+            return;
+        }
+        if (this->touch_mode == Touch::Multi || finger.id() != this->touch_first_id)
+        {
+            // A finger of a pinch lifted: continue panning without a jump.
+            endOrbit();
+            this->touch_mode = Touch::Single;
+            this->touch_first_id = finger.id();
+            this->touch_last = finger.position();
+            this->pan_remainder = QPointF();
+            return;
+        }
+        panBy(finger.position() - this->touch_last);
+        this->touch_last = finger.position();
+        return;
+    }
+    const QPointF p0 = down[0].position();
+    const QPointF p1 = down[1].position();
+    const QPointF centroid = (p0 + p1) * 0.5;
+    const double distance = AowisMobileMap::pointDistance(p0.x(), p0.y(), p1.x(), p1.y());
+    const double angle = AowisMobileMap::pointAngleDegrees(p0.x(), p0.y(), p1.x(), p1.y());
+    if (this->touch_mode != Touch::Multi || down[0].id() != this->touch_first_id
+        || down[1].id() != this->touch_second_id)
+    {
+        this->touch_mode = Touch::Multi;
+        this->touch_first_id = down[0].id();
+        this->touch_second_id = down[1].id();
+        this->touch_centroid = centroid;
+        this->touch_distance = distance;
+        this->touch_angle = angle;
+        this->pan_remainder = QPointF();
+        beginOrbit();
+        return;
+    }
+    if (this->touch_distance > 1.0 && distance > 1.0)
+        zoomAt(AowisMobileMap::zoomStepsForScale(distance / this->touch_distance), centroid);
+    const QPointF moved = centroid - this->touch_centroid;
+    if (this->model.viewMode() == MapViewMode::Globe)
+    {
+        // Two fingers on the globe: turn with the fingers, tilt by moving
+        // them up / down together.
+        const double turn = AowisMobileMap::angleDeltaDegrees(this->touch_angle, angle);
+        if (turn != 0.0)
+            this->model.orbitViewGlobe(-turn, 0.0);
+        this->tilt_remainder += QPointF(0.0, moved.y());
+        const int tilt = qRound(this->tilt_remainder.y());
+        if (tilt != 0)
+        {
+            this->tilt_remainder.setY(this->tilt_remainder.y() - tilt);
+            this->model.orbitViewGlobeByPointerDelta(QPoint(0, tilt), true);
+        }
+    }
+    else
+    {
+        panBy(moved);
+    }
+    this->touch_centroid = centroid;
+    this->touch_distance = distance;
+    this->touch_angle = angle;
+}
+
+// --- Lifecycle ----------------------------------------------------------------------------
+
+void MobileMapView::Impl::setApplicationActive(bool active)
+{
+    if (this->application_active == active)
+        return;
+    this->application_active = active;
+    recordLifecycleEvent(active ? QStringLiteral("app_active") : QStringLiteral("app_inactive"));
+    if (active)
+    {
+        beginRecovery(QStringLiteral("resume"));
+        if (this->window != nullptr)
+            this->window->update();
+    }
+    else
+    {
+        this->watchdog.cancel();
+        resetGestures();
+        saveCamera();
+    }
+}
+
+void MobileMapView::Impl::beginRecovery(const QString &reason)
+{
+    if (!this->application_active || !mapViewVisible())
+        return;
+    // Width and height change separately on rotation: one watch per change.
+    if (reason == this->recovery_reason && this->watchdog.pending())
+        return;
+    this->recovery_reason = reason;
+    this->watchdog.arm(steadyMicroseconds());
+    recordLifecycleEvent(QStringLiteral("watch_") + reason);
+}
+
+void MobileMapView::Impl::inspectRecovery()
+{
+    const AowisMobileLifecycle::Outcome outcome = this->watchdog.poll(
+        steadyMicroseconds(), this->last_frame_us, this->application_active,
+        this->window != nullptr && this->window->isExposed() && mapViewVisible());
+    if (outcome == AowisMobileLifecycle::Outcome::Recovered
+        || outcome == AowisMobileLifecycle::Outcome::LateRecovered)
+    {
+        ++this->recoveries;
+        this->last_recovery_us = this->watchdog.lastDurationUs();
+        recordLifecycleEvent(outcome == AowisMobileLifecycle::Outcome::LateRecovered
+                                 ? QStringLiteral("late_recovery") : QStringLiteral("recovered"),
+                             this->last_recovery_us);
+    }
+    else if (outcome == AowisMobileLifecycle::Outcome::TimedOut)
+    {
+        ++this->timeouts;
+        recordLifecycleEvent(QStringLiteral("timeout"));
+    }
+}
+
+void MobileMapView::Impl::recordLifecycleEvent(const QString &event, int64_t duration_us)
+{
+    // Read by tools/test_android_lifecycle.sh (adb run-as); event names are
+    // constants, never translated.
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/lifecycle");
+    if (!QDir().mkpath(directory))
+        return;
+    QFile file(directory + QStringLiteral("/events.csv"));
+    const bool first = !file.exists() || file.size() == 0;
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text))
+        return;
+    QTextStream stream(&file);
+    if (first)
+        stream << "utc,event,duration_us,app_active,exposed,frames,sg_init,sg_release,bgfx_init,width,height\n";
+    stream << QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs) << ',' << event << ','
+           << duration_us << ',' << (this->application_active ? 1 : 0) << ','
+           << (this->window != nullptr && this->window->isExposed() ? 1 : 0) << ','
+           << this->frames << ',' << this->scene_graph_starts << ',' << this->scene_graph_releases
+           << ',' << this->bgfx_initializations << ',' << viewport().width() << ','
+           << viewport().height() << '\n';
+    stream.flush();
+    qInfo().noquote() << "AOWIS lifecycle:" << event << "duration_us=" << duration_us
+                      << "bgfx_inits=" << this->bgfx_initializations << "frames=" << this->frames;
+}
+
+void MobileMapView::Impl::restoreCamera()
+{
+    QSettings settings(QSettings::NativeFormat, QSettings::UserScope,
+                       QStringLiteral("AOWIS"), QStringLiteral("AOWIS-GUI-Mobile"));
+    bool lon_valid = false;
+    bool lat_valid = false;
+    bool zoom_valid = false;
+    const double lon = settings.value(QStringLiteral("map/longitude")).toDouble(&lon_valid);
+    const double lat = settings.value(QStringLiteral("map/latitude")).toDouble(&lat_valid);
+    const double zoom = settings.value(QStringLiteral("map/zoom")).toDouble(&zoom_valid);
+    if (lon_valid && lat_valid && zoom_valid && std::isfinite(lon) && std::isfinite(lat)
+        && std::isfinite(zoom))
+    {
+        this->saved_camera = true;
+        this->model.setView2dContinuousZoom(zoom);
+        this->model.setCenter(lon, lat);
+        return;
+    }
+    // Before the first fix: Central Europe, the whole region in view.
+    this->model.setView2dContinuousZoom(4.0);
+    this->model.setCenter(10.0, 50.0);
+}
+
+void MobileMapView::Impl::saveCamera()
+{
+    QSettings settings(QSettings::NativeFormat, QSettings::UserScope,
+                       QStringLiteral("AOWIS"), QStringLiteral("AOWIS-GUI-Mobile"));
+    settings.setValue(QStringLiteral("map/longitude"), this->model.centerLon());
+    settings.setValue(QStringLiteral("map/latitude"), this->model.centerLat());
+    settings.setValue(QStringLiteral("map/zoom"), this->model.view2dContinuousZoom());
+}
+
+// --- MobileMapView -------------------------------------------------------------------------
+
+MobileMapView::MobileMapView(QQuickItem *parent)
+    : QQuickItem(parent), impl(std::make_unique<Impl>(this))
+{
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
+    setAcceptTouchEvents(true);
+    setAcceptHoverEvents(true);
+    setFlag(QQuickItem::ItemIsFocusScope, true);
+    this->impl->application_active = qGuiApp->applicationState() == Qt::ApplicationActive;
+}
+
+MobileMapView::~MobileMapView() = default;
+
+QString MobileMapView::serverUrl() const
+{
+    return this->impl->server_url;
+}
+
+void MobileMapView::setServerUrl(const QString &url)
+{
+    if (this->impl->server_url == url)
+        return;
+    this->impl->server_url = url;
+    this->impl->rebuildServer();
+    emit serverUrlChanged();
+}
+
+bool MobileMapView::darkTheme() const
+{
+    return this->impl->dark;
+}
+
+void MobileMapView::setDarkTheme(bool dark)
+{
+    if (this->impl->dark == dark)
+        return;
+    this->impl->dark = dark;
+    this->impl->view->handleHostChange(QEvent::PaletteChange);
+    this->impl->view->requestRedraw();
+    emit darkThemeChanged();
+}
+
+bool MobileMapView::rendererAvailable() const
+{
+    return true;
+}
+
+bool MobileMapView::savedCamera() const
+{
+    return this->impl->saved_camera;
+}
+
+bool MobileMapView::globe() const
+{
+    return this->impl->model.viewMode() == MapViewMode::Globe;
+}
+
+double MobileMapView::centerLongitude() const
+{
+    return this->impl->model.centerLon();
+}
+
+double MobileMapView::centerLatitude() const
+{
+    return this->impl->model.centerLat();
+}
+
+QString MobileMapView::status() const
+{
+    if (!this->impl->render_problem.isEmpty())
+        return this->impl->render_problem;
+    return tr("Map renderer: %1").arg(this->impl->view->graphicsApiName());
+}
+
+QString MobileMapView::serverStatus() const
+{
+    return this->impl->server_status;
+}
+
+QString MobileMapView::diagnostics() const
+{
+    return this->impl->view->startupDiagnostics();
+}
+
+QString MobileMapView::lifecycle() const
+{
+    return tr("Map frames: %1 | scene graph: %2 inits / %3 releases | bgfx inits: %4\n"
+              "Recoveries: %5 | stalled: %6 | last recovery: %7 ms")
+        .arg(this->impl->frames).arg(this->impl->scene_graph_starts)
+        .arg(this->impl->scene_graph_releases).arg(this->impl->bgfx_initializations)
+        .arg(this->impl->recoveries).arg(this->impl->timeouts)
+        .arg(this->impl->last_recovery_us < 0 ? QStringLiteral("-")
+             : QString::number(double(this->impl->last_recovery_us) / 1000.0, 'f', 1));
+}
+
+void MobileMapView::centerOn(double longitude_deg, double latitude_deg, double zoom)
+{
+    if (!std::isfinite(longitude_deg) || !std::isfinite(latitude_deg))
+        return;
+    const QSize size = this->impl->viewport();
+    if (this->impl->model.viewMode() != MapViewMode::Globe && std::isfinite(zoom))
+        this->impl->model.setView2dContinuousZoom(zoom, size);
+    this->impl->model.setCenter(longitude_deg, latitude_deg, size);
+}
+
+void MobileMapView::setGlobe(bool globe_mode)
+{
+    if (globe_mode && !this->impl->view->globeAvailable())
+        return;
+    this->impl->model.setViewMode(globe_mode ? MapViewMode::Globe : MapViewMode::TwoD,
+                                  this->impl->viewport());
+}
+
+void MobileMapView::zoomBy(double steps)
+{
+    const QSize size = this->impl->viewport();
+    this->impl->zoomAt(steps, QPointF(size.width() * 0.5, size.height() * 0.5));
+}
+
+void MobileMapView::setGpsPosition(bool valid, double longitude_deg, double latitude_deg)
+{
+    this->impl->view->setHudGpsPosition(valid, longitude_deg, latitude_deg);
+}
+
+void MobileMapView::reloadServer()
+{
+    this->impl->rebuildServer();
+}
+
+void MobileMapView::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    if (change == ItemSceneChange)
+        this->impl->attachWindow(value.window);
+    if (change == ItemVisibleHasChanged)
+    {
+        if (value.boolValue)
+            this->impl->view->handleHostShown();
+        else
+        {
+            this->impl->view->handleHostHidden();
+            this->impl->resetGestures();
+        }
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+void MobileMapView::geometryChange(const QRectF &new_geometry, const QRectF &old_geometry)
+{
+    QQuickItem::geometryChange(new_geometry, old_geometry);
+    if (new_geometry.size() != old_geometry.size())
+    {
+        this->impl->view->handleHostResized();
+        this->impl->view->requestRedraw();
+    }
+}
+
+void MobileMapView::touchEvent(QTouchEvent *event)
+{
+    this->impl->touch(event);
+    event->accept();
+}
+
+void MobileMapView::touchUngrabEvent()
+{
+    this->impl->resetGestures();
+}
+
+void MobileMapView::mousePressEvent(QMouseEvent *event)
+{
+    const QPointF position = event->position();
+    this->impl->mouse_last = position;
+    if (event->button() == Qt::LeftButton
+        && this->impl->hudPointer(QEvent::MouseButtonPress, position, Qt::LeftButton,
+                                  event->buttons()).consumed)
+    {
+        this->impl->mouse = Impl::Pointer::Hud;
+    }
+    else if (event->button() == Qt::RightButton && globe())
+    {
+        this->impl->mouse = Impl::Pointer::Orbit;
+        this->impl->beginOrbit();
+    }
+    else
+    {
+        this->impl->mouse = Impl::Pointer::Pan;
+        this->impl->pan_remainder = QPointF();
+    }
+    event->accept();
+}
+
+void MobileMapView::mouseMoveEvent(QMouseEvent *event)
+{
+    const QPointF position = event->position();
+    const QPointF delta = position - this->impl->mouse_last;
+    this->impl->mouse_last = position;
+    switch (this->impl->mouse)
+    {
+        case Impl::Pointer::Hud:
+            this->impl->hudPointer(QEvent::MouseMove, position, Qt::NoButton, event->buttons());
+            break;
+        case Impl::Pointer::Pan:
+            this->impl->panBy(delta);
+            break;
+        case Impl::Pointer::Orbit:
+            this->impl->model.orbitViewGlobeByPointerDelta(
+                QPoint(qRound(delta.x()), qRound(delta.y())), true);
+            break;
+        case Impl::Pointer::None:
+            break;
+    }
+    event->accept();
+}
+
+void MobileMapView::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (this->impl->mouse == Impl::Pointer::Hud)
+        this->impl->hudPointer(QEvent::MouseButtonRelease, event->position(), event->button(),
+                               event->buttons());
+    if (this->impl->mouse == Impl::Pointer::Orbit)
+        this->impl->endOrbit();
+    this->impl->mouse = Impl::Pointer::None;
+    event->accept();
+}
+
+void MobileMapView::mouseUngrabEvent()
+{
+    this->impl->resetGestures();
+}
+
+void MobileMapView::hoverMoveEvent(QHoverEvent *event)
+{
+    // Hover feedback and tooltips of the HUD (desktop pointer).
+    const MapBgfxMapView::HudPointer pointer = this->impl->hudPointer(
+        QEvent::MouseMove, event->position(), Qt::NoButton, Qt::NoButton);
+    this->impl->mapViewSetCursor(pointer.cursor);
+    event->accept();
+}
+
+void MobileMapView::wheelEvent(QWheelEvent *event)
+{
+    if (this->impl->view->handleHudWheelEvent(event))
+    {
+        event->accept();
+        return;
+    }
+    const double notches = double(event->angleDelta().y()) / 120.0;
+    this->impl->zoomAt(notches * 0.5, event->position());
+    event->accept();
+}
+
+#else // !AOWIS_MOBILE_WITH_MAP
+
+// Built without the renderer: the QML API exists, nothing is drawn.
+struct MobileMapView::Impl
+{
+    QString server_url;
+    bool dark = false;
+};
+
+MobileMapView::MobileMapView(QQuickItem *parent)
+    : QQuickItem(parent), impl(std::make_unique<Impl>())
+{
+}
+
+MobileMapView::~MobileMapView() = default;
+
+QString MobileMapView::serverUrl() const { return this->impl->server_url; }
+void MobileMapView::setServerUrl(const QString &url)
+{
+    if (this->impl->server_url == url)
+        return;
+    this->impl->server_url = url;
+    emit serverUrlChanged();
+}
+bool MobileMapView::darkTheme() const { return this->impl->dark; }
+void MobileMapView::setDarkTheme(bool dark)
+{
+    if (this->impl->dark == dark)
+        return;
+    this->impl->dark = dark;
+    emit darkThemeChanged();
+}
+bool MobileMapView::rendererAvailable() const { return false; }
+bool MobileMapView::savedCamera() const { return false; }
+bool MobileMapView::globe() const { return false; }
+double MobileMapView::centerLongitude() const { return 0.0; }
+double MobileMapView::centerLatitude() const { return 0.0; }
+QString MobileMapView::status() const { return tr("Built without the map renderer"); }
+QString MobileMapView::serverStatus() const { return QString(); }
+QString MobileMapView::diagnostics() const { return QString(); }
+QString MobileMapView::lifecycle() const { return QString(); }
+void MobileMapView::centerOn(double, double, double) {}
+void MobileMapView::setGlobe(bool) {}
+void MobileMapView::zoomBy(double) {}
+void MobileMapView::setGpsPosition(bool, double, double) {}
+void MobileMapView::reloadServer() {}
+void MobileMapView::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    QQuickItem::itemChange(change, value);
+}
+void MobileMapView::geometryChange(const QRectF &new_geometry, const QRectF &old_geometry)
+{
+    QQuickItem::geometryChange(new_geometry, old_geometry);
+}
+void MobileMapView::touchEvent(QTouchEvent *event) { QQuickItem::touchEvent(event); }
+void MobileMapView::touchUngrabEvent() {}
+void MobileMapView::mousePressEvent(QMouseEvent *event) { QQuickItem::mousePressEvent(event); }
+void MobileMapView::mouseMoveEvent(QMouseEvent *event) { QQuickItem::mouseMoveEvent(event); }
+void MobileMapView::mouseReleaseEvent(QMouseEvent *event) { QQuickItem::mouseReleaseEvent(event); }
+void MobileMapView::mouseUngrabEvent() {}
+void MobileMapView::hoverMoveEvent(QHoverEvent *event) { QQuickItem::hoverMoveEvent(event); }
+void MobileMapView::wheelEvent(QWheelEvent *event) { QQuickItem::wheelEvent(event); }
+
+#endif

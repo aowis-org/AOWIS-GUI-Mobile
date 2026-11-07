@@ -1,7 +1,8 @@
 # Geographic data, observations and topology
 
 This is a **target model contract**, not an implemented Mobile schema. The
-existing code contains only synthetic GPU vertices and camera transforms.
+map view currently renders server tiles and terrain only (see `map.md`); no
+domain features are stored on the device yet.
 
 ## Geometry is not domain identity
 

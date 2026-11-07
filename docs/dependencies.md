@@ -6,9 +6,8 @@ relative and independent of the checkout directory name.
 | Submodule | Git remote | Current use |
 | --- | --- | --- |
 | `external/AOWIS-SERVER-MODEL` | `https://github.com/aowis-org/AOWIS-SERVER-MODEL.git` | `AOWIS::Model` linked for units and domain model |
-| `external/AOWIS-GUI-Render` | `https://github.com/aowis-org/AOWIS-GUI-Render.git` | bgfx GPU rendering components |
-| `external/bgfx.cmake` | `https://github.com/bkaradzic/bgfx.cmake.git` | existing renderer bootstrap and shaders |
-| `external/GeographicLib` | `https://github.com/geographiclib/geographiclib.git` | Pinned source dependency for future geo/coordinate APIs; not compiled or linked yet |
+| `external/AOWIS-GUI-Render` | `https://github.com/aowis-org/AOWIS-GUI-Render.git` | The AOWIS map (2D/globe, imagery, terrain, HUD, map server client) and its nested pinned bgfx/bx/bimg |
+| `external/GeographicLib` | `https://github.com/geographiclib/geographiclib.git` | Render's geodesy; built by Render from this checkout (`AOWIS_RENDER_GEOGRAPHICLIB_SOURCE_DIR`) |
 | `external/AOWIS-SERVER-DVMDB` | `https://github.com/aowis-org/AOWIS-SERVER-DVMDB.git` | Pinned source dependency for future native personal repository; not compiled, linked or started yet |
 
 The GeographicLib path and URL match those used in Desktop AOWIS-GUI. Git
@@ -48,12 +47,13 @@ resolve that nested URL explicitly when the embedded DVMDB build is needed.
 
 ## Build boundary
 
-Mobile still builds its existing Qt Quick/bgfx app plus `AOWIS::Model`. It does
-not compile GeographicLib or DVMDB just because their source is present.
+Mobile builds its Qt Quick app with `AOWIS::Model`, Render's map stack and
+GeographicLib (through Render). It does not compile DVMDB just because its
+source is present.
 Linking DVMDB now would introduce native-store, filesystem and nested MODEL
 requirements before the mobile working-copy design is implemented. Adding the
 submodules early establishes a reproducible pin without doing that premature
-integration. Runtime map/tile requests also remain unimplemented.
+integration.
 
 `tools/zip_mobile_project.sh` exports Mobile's own files and dependency metadata,
 not source trees owned by Git submodules. The resulting `mobile.zip` is a source

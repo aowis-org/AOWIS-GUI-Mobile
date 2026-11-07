@@ -24,8 +24,9 @@ checks = {
         "QSensor" not in service and "CompassSensorSource m_source" in header and
         "QGeoPositionInfoSource" not in service and
         "RenderLab" not in service and "QSettings" not in service,
-    "start only when compass visible and app foreground":
+    "start only on the foreground Compass page, stop on other pages":
         'compassService.setPageVisible(activePage === "compass")' in qml and
+        'compassService.setPageVisible(true)' not in qml and
         "setApplicationActive" in main and "this->m_source.stop();" in service,
     "status for unavailable, stale and low calibration":
         "State::Unavailable" in service and "State::Stale" in service and
@@ -59,8 +60,7 @@ checks = {
         "emit headingChanged()" in service and
         "sensorRateHz" in header and
         "displayRateHz" in header and
-        "pageVisibleChanged" in main and
-        "!compassService.pageVisible()" in main and
+        "pageVisibleChanged" in header and
         "FrameAnimation" not in rose and "CompassMotion" not in rose,
     "NDK rotation vector preferred, own fusion fallback":
         "kRotationVectorType = 11" in rv and "kGyroscopeType = 4" in rv and

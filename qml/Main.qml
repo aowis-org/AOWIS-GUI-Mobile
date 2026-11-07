@@ -1,12 +1,13 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
+import AOWIS.Map 1.0
 
 Window {
     id: root
     width: 480
     height: 800
-    // C++ attaches the Qt/bgfx callbacks before making the window visible.
+    // The map item connects to the render pass before the window is shown.
     visible: false
     title: Qt.application.name
     color: root.darkTheme ? "#102f45" : "#e3edf4"
@@ -29,13 +30,10 @@ Window {
     readonly property color uiSuccess: darkTheme ? "#a2ebc2" : "#086b3c"
     readonly property color uiError: darkTheme ? "#ffb7ad" : "#ab2730"
 
-    property real viewZoom: 1.0
-    property real dragX: 0
-    property real dragY: 0
-    property bool hasLastTap: false
-    property real lastTapX: 0
-    property real lastTapY: 0
     property string activePage: "map"
+    // The map follows the first location fix once, unless the last
+    // session's camera was restored.
+    property bool mapCenteredOnLocation: false
     onActivePageChanged: {
         compassService.setPageVisible(activePage === "compass")
         gradienterService.setPageVisible(activePage === "gradienter")
@@ -44,17 +42,6 @@ Window {
     property string saveFeedback: ""
     property bool saveSucceeded: false
 
-    function publishView() {
-        lab.setView(viewZoom, dragX, dragY)
-    }
-    function zoomAround(factor, x, y) {
-        const previous = viewZoom
-        const next = Math.max(0.3, Math.min(3, previous * factor))
-        const ratio = next / previous
-        dragX = dragX * ratio + (x - width / 2) * (1 - ratio)
-        dragY = dragY * ratio + (y - height / 2) * (1 - ratio)
-        viewZoom = next
-    }
     function openPage(page) {
         navigationDrawer.close()
         if (page === "settings" && activePage !== "units") {
@@ -95,131 +82,96 @@ Window {
                  (navigationDrawer.opened || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
-    onViewZoomChanged: publishView()
-    onDragXChanged: publishView()
-    onDragYChanged: publishView()
-    Component.onCompleted: publishView()
-
-    // Keep the QML baseline for validation. In normal mode bgfx renders
-    // directly underneath these Qt Quick controls.
-    Canvas {
-        id: referenceMap
-        anchors.fill: parent
-        visible: !lab.bgfxMode
-        renderStrategy: Canvas.Threaded
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.reset()
-            ctx.fillStyle = root.darkTheme ? "#102f45" : "#e3edf4"
-            ctx.fillRect(0, 0, width, height)
-            ctx.strokeStyle = root.darkTheme ? "#306078" : "#a5c1d1"
-            ctx.lineWidth = 1
-            const step = 44 * root.viewZoom
-            for (let x = (root.dragX % step); x < width; x += step) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke()
-            }
-            for (let y = (root.dragY % step); y < height; y += step) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
-            }
-            ctx.strokeStyle = root.darkTheme ? "#67c5a9" : "#007d68"
-            ctx.lineWidth = 3
-            ctx.beginPath()
-            ctx.moveTo(width * 0.1 + root.dragX, height * 0.55 + root.dragY)
-            ctx.lineTo(width * 0.36 + root.dragX, height * 0.38 + root.dragY)
-            ctx.lineTo(width * 0.65 + root.dragX, height * 0.53 + root.dragY)
-            ctx.lineTo(width * 0.86 + root.dragX, height * 0.23 + root.dragY)
-            ctx.stroke()
-        }
-        Connections {
-            target: root
-            function onViewZoomChanged() { referenceMap.requestPaint() }
-            function onDragXChanged() { referenceMap.requestPaint() }
-            function onDragYChanged() { referenceMap.requestPaint() }
-            function onDarkThemeChanged() { referenceMap.requestPaint() }
+    function followLocation() {
+        mapView.setGpsPosition(locationService.hasFix, locationService.longitude,
+                               locationService.latitude)
+        if (!root.mapCenteredOnLocation && locationService.fresh) {
+            root.mapCenteredOnLocation = true
+            if (!mapView.savedCamera)
+                mapView.centerOn(locationService.longitude, locationService.latitude, 16)
         }
     }
+    Connections {
+        target: locationService
+        function onChanged() { root.followLocation() }
+    }
 
-    // Gestures are disabled whenever the hamburger drawer or another page
-    // is open, so they cannot accidentally pan the map behind a text field.
-    Item {
-        id: mapArea
+    // The AOWIS map (imagery and terrain from the configured aowis-server-map)
+    // underneath all QML: it fills the window and handles its own touch,
+    // mouse and HUD input. Hidden pages are opaque, so it is only drawn on Map.
+    MapView {
+        id: mapView
         anchors.fill: parent
+        visible: root.activePage === "map"
         enabled: root.activePage === "map" && !navigationDrawer.opened
-
-        TapHandler {
-            onTapped: function(point) {
-                root.hasLastTap = true
-                root.lastTapX = Math.round(point.position.x)
-                root.lastTapY = Math.round(point.position.y)
-            }
-        }
-        DragHandler {
-            id: panGesture
-            target: null
-            property real previousX: 0
-            property real previousY: 0
-            onActiveChanged: {
-                previousX = 0
-                previousY = 0
-            }
-            onActiveTranslationChanged: {
-                if (!active || pinchGesture.active)
-                    return
-                const deltaX = activeTranslation.x - previousX
-                const deltaY = activeTranslation.y - previousY
-                previousX = activeTranslation.x
-                previousY = activeTranslation.y
-                root.dragX += deltaX
-                root.dragY += deltaY
-            }
-        }
-        PinchHandler {
-            id: pinchGesture
-            target: null
-            property real baseZoom: 1
-            property real baseX: 0
-            property real baseY: 0
-            property real anchorX: 0
-            property real anchorY: 0
-            onActiveChanged: {
-                if (active) {
-                    baseZoom = root.viewZoom
-                    baseX = root.dragX
-                    baseY = root.dragY
-                    anchorX = centroid.position.x - mapArea.width / 2
-                    anchorY = centroid.position.y - mapArea.height / 2
-                }
-            }
-            function updatePinch() {
-                if (!active)
-                    return
-                const newZoom = Math.max(0.3, Math.min(3, baseZoom * activeScale))
-                const ratio = newZoom / baseZoom
-                root.viewZoom = newZoom
-                root.dragX = baseX * ratio + anchorX * (1 - ratio) + activeTranslation.x
-                root.dragY = baseY * ratio + anchorY * (1 - ratio) + activeTranslation.y
-            }
-            onActiveScaleChanged: updatePinch()
-            onActiveTranslationChanged: updatePinch()
-        }
-        WheelHandler {
-            target: null
-            onWheel: function(event) {
-                const factor = Math.pow(1.25, event.angleDelta.y / 120)
-                root.zoomAround(factor, point.position.x, point.position.y)
-            }
-        }
+        serverUrl: mapServerSettings.endpointUrl
+        darkTheme: root.darkTheme
     }
 
-    // Location tracking starts automatically in the foreground. Only a
-    // compact status pill overlays the map; synthetic geometry has no geo projection.
+    // No map server yet: say where to configure one, over the map.
+    Button {
+        visible: root.activePage === "map" && !mapServerSettings.configured
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: hamburgerButton.left
+        anchors.margins: 14
+        height: 52
+        z: 2
+        onClicked: root.openPage("settings")
+        contentItem: Text {
+            text: qsTr("No map server configured. Tap to open Settings.")
+            color: root.uiText
+            font.pixelSize: 13
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: 11
+            color: root.uiRaised
+            border.color: root.uiAccent
+        }
+        Accessible.name: qsTr("No map server configured. Tap to open Settings.")
+    }
+
+    // Back to the device position (the first fix centres the map once).
+    Button {
+        id: centerOnLocationButton
+        visible: root.activePage === "map" && locationService.hasFix
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 14
+        width: 52
+        height: 52
+        z: 1
+        contentItem: Item {
+            implicitWidth: 30
+            implicitHeight: 30
+            UiIcon {
+                kind: "location"
+                strokeColor: root.uiText
+                width: 30
+                height: 30
+                anchors.centerIn: parent
+            }
+        }
+        background: Rectangle {
+            radius: 12
+            color: root.uiRaised
+            border.color: locationService.fresh ? root.uiAccent : root.uiBorder
+        }
+        onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)
+        Accessible.name: qsTr("Center the map on my location")
+    }
+
+    // Location tracking starts automatically in the foreground.
     Button {
         id: locationChip
         visible: root.activePage === "map"
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         anchors.margins: 14
-        width: Math.min(root.width - 28, Math.max(168, locationChipText.implicitWidth + 28))
+        width: Math.min(root.width - 94, Math.max(168, locationChipText.implicitWidth + 28))
         height: 44
         z: 1
         onClicked: root.openPage("settings")
@@ -616,7 +568,7 @@ Window {
                         Layout.fillWidth: true
                     }
                     Label {
-                        text: qsTr("The endpoint is saved locally. Map-server requests are not implemented yet; the visible network is still synthetic test geometry.")
+                        text: qsTr("Map tiles, terrain and imagery providers are loaded from this aowis-server-map.")
                         color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -1180,181 +1132,31 @@ Window {
                 width: Math.max(0, diagnosticScroll.width - 32)
                 spacing: 12
                 Label { text: qsTr("Diagnostics"); color: root.uiText; font.pixelSize: 26; font.bold: true }
-                Label { text: lab.bgfxMode ? qsTr("BGFX renderer") : qsTr("QML baseline"); color: root.uiAccent; font.pixelSize: 13 }
-                ComboBox {
-                    id: workloadSelector
-                    palette.text: root.uiText
-                    palette.buttonText: root.uiText
-                    palette.base: root.uiInput
-                    palette.window: root.uiInput
-                    palette.highlight: root.uiSelection
-                    palette.highlightedText: root.uiSelectedText
-                    indicator: UiIcon {
-                        kind: "down"
-                        strokeColor: root.uiText
-                        width: 22
-                        height: 22
-                        x: languageSettings.rightToLeft ? 14 : workloadSelector.width - width - 14
-                        y: (workloadSelector.height - height) / 2
-                    }
-                    contentItem: Text {
-                        text: workloadSelector.displayText
-                        color: root.uiText
-                        leftPadding: 12
-                        rightPadding: 32
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                    background: Rectangle {
-                        implicitHeight: 48
-                        radius: 10
-                        color: root.uiInput
-                        border.color: workloadSelector.activeFocus ? root.uiAccent : root.uiBorder
-                    }
-                    delegate: ItemDelegate {
-                        width: workloadSelector.width
-                        text: modelData
-                        highlighted: workloadSelector.highlightedIndex === index
-                        palette.text: root.uiText
-                        palette.highlightedText: root.uiSelectedText
-                        background: Rectangle {
-                            color: parent.highlighted ? root.uiSelection : root.uiInput
-                        }
-                    }
-                    popup: Popup {
-                        y: workloadSelector.height - 1
-                        width: workloadSelector.width
-                        implicitHeight: Math.min(contentItem.implicitHeight + 4, 270)
-                        padding: 2
-                        contentItem: ListView {
-                            clip: true
-                            implicitHeight: contentHeight
-                            model: workloadSelector.popup.visible ? workloadSelector.delegateModel : null
-                            currentIndex: workloadSelector.highlightedIndex
-                            ScrollIndicator.vertical: ScrollIndicator { }
-                        }
-                        background: Rectangle {
-                            radius: 10
-                            color: root.uiInput
-                            border.color: root.uiBorder
-                        }
-                    }
-                    Layout.fillWidth: true
-                    enabled: lab.bgfxMode && !lab.benchmarkActive
-                    model: [qsTr("Demo"), qsTr("~1k features"), qsTr("~10k features"), qsTr("~100k features"), qsTr("~1M features")]
-                    onActivated: function(index) { lab.setWorkload(index) }
-                }
-                Button {
-                    palette.buttonText: root.uiText
-                    palette.text: root.uiText
-                    background: Rectangle {
-                        implicitHeight: 44
-                        radius: 10
-                        color: parent.down ? root.uiPressed : root.uiRaised
-                        border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                        opacity: parent.enabled ? 1.0 : 0.55
-                    }
-                    
-                    text: lab.benchmarkActive ? qsTr("Recording…") : qsTr("Record 15s")
-                    Layout.fillWidth: true
-                    enabled: lab.bgfxMode && !lab.benchmarkActive
-                    onClicked: lab.startBenchmark()
-                }
-                Button {
-                    palette.buttonText: root.uiText
-                    palette.text: root.uiText
-                    background: Rectangle {
-                        implicitHeight: 44
-                        radius: 10
-                        color: parent.down ? root.uiPressed : root.uiRaised
-                        border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                        opacity: parent.enabled ? 1.0 : 0.55
-                    }
-                    
-                    text: qsTr("Recreate GPU resources (test)")
-                    Layout.fillWidth: true
-                    enabled: lab.bgfxMode && !lab.benchmarkActive
-                    onClicked: lab.requestGpuRecreation()
-                }
-                Label { text: lab.status; color: root.uiAccent; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                Label { text: lab.details; color: root.uiText; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
-                Label { text: qsTr("bgfx frames: %1 | %2").arg(lab.frames).arg(root.hasLastTap
-                    ? qsTr("Map tap: %1, %2").arg(root.lastTapX).arg(root.lastTapY)
-                    : qsTr("Touch or click the map")); color: root.uiText; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                Label { text: lab.timings; color: root.uiMuted; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 12 }
-                Label { text: lab.recoveryStatus; color: root.uiAccent; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11 }
-                Label { text: lab.lifecycle; color: root.uiMuted; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
-                Label { text: lab.sceneStats; color: root.uiAccent; Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11 }
-                Label { text: lab.benchmarkResult; color: root.uiSuccess; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font.pixelSize: 11; visible: lab.benchmarkResult !== "" }
+                Label { text: qsTr("Map"); color: root.uiAccent; font.bold: true; font.pixelSize: 19 }
+                Label { text: mapView.status; color: root.uiAccent; font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Label { text: mapView.serverStatus; color: root.uiText; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true; font.pixelSize: 12 }
+                Label { text: mapView.diagnostics; color: root.uiMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12 }
+                Label { text: mapView.lifecycle; color: root.uiMuted; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 11 }
                 Label {
-                    text: qsTr("Zoom: %1× | Pan: %2, %3")
-                        .arg(root.viewZoom.toFixed(2)).arg(Math.round(root.dragX)).arg(Math.round(root.dragY))
+                    text: qsTr("Center: %1, %2 | %3")
+                        .arg(mapView.centerLatitude.toFixed(5)).arg(mapView.centerLongitude.toFixed(5))
+                        .arg(mapView.globe ? qsTr("Globe") : qsTr("2D"))
                     color: root.uiText; Layout.fillWidth: true; font.pixelSize: 12
                 }
-                RowLayout {
+                Button {
+                    palette.buttonText: root.uiText
+                    palette.text: root.uiText
+                    background: Rectangle {
+                        implicitHeight: 44
+                        radius: 10
+                        color: parent.down ? root.uiPressed : root.uiRaised
+                        border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
+                        opacity: parent.enabled ? 1.0 : 0.55
+                    }
+                    text: qsTr("Reload map server")
                     Layout.fillWidth: true
-                    Button {
-                        palette.buttonText: root.uiText
-                        palette.text: root.uiText
-                        background: Rectangle {
-                            implicitHeight: 44
-                            radius: 10
-                            color: parent.down ? root.uiPressed : root.uiRaised
-                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                            opacity: parent.enabled ? 1.0 : 0.55
-                        }
-                        contentItem: Item {
-                            implicitWidth: 26
-                            implicitHeight: 26
-                            UiIcon {
-                                kind: "minus"
-                                strokeColor: root.uiText
-                                width: 26
-                                height: 26
-                                anchors.centerIn: parent
-                            }
-                        }
-                        Layout.fillWidth: true
-                        onClicked: root.viewZoom = Math.max(0.3, root.viewZoom / 1.25)
-                    }
-                    Button {
-                        palette.buttonText: root.uiText
-                        palette.text: root.uiText
-                        background: Rectangle {
-                            implicitHeight: 44
-                            radius: 10
-                            color: parent.down ? root.uiPressed : root.uiRaised
-                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                            opacity: parent.enabled ? 1.0 : 0.55
-                        }
-                        text: qsTr("Center")
-                        Layout.fillWidth: true
-                        onClicked: { root.dragX = 0; root.dragY = 0 }
-                    }
-                    Button {
-                        palette.buttonText: root.uiText
-                        palette.text: root.uiText
-                        background: Rectangle {
-                            implicitHeight: 44
-                            radius: 10
-                            color: parent.down ? root.uiPressed : root.uiRaised
-                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                            opacity: parent.enabled ? 1.0 : 0.55
-                        }
-                        contentItem: Item {
-                            implicitWidth: 26
-                            implicitHeight: 26
-                            UiIcon {
-                                kind: "plus"
-                                strokeColor: root.uiText
-                                width: 26
-                                height: 26
-                                anchors.centerIn: parent
-                            }
-                        }
-                        Layout.fillWidth: true
-                        onClicked: root.viewZoom = Math.min(3, root.viewZoom * 1.25)
-                    }
+                    enabled: mapServerSettings.configured && mapView.rendererAvailable
+                    onClicked: mapView.reloadServer()
                 }
             }
         }
@@ -1507,7 +1309,7 @@ Window {
     }
 
     // A single unobtrusive control on the map replaces the old diagnostic
-    // header and permanently expanded metrics/benchmark overlays.
+    // header and permanently expanded metrics overlays.
     Button {
         id: hamburgerButton
         anchors.right: parent.right

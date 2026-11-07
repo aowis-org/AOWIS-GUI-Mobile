@@ -76,15 +76,16 @@ if "$TMP_DIR/repo/compile_linux.sh" --build-only >"$TMP_DIR/error.log" 2>&1; the
 fi
 grep -F './git_submodule_init.sh' "$TMP_DIR/error.log" >/dev/null
 [[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
-printf 'PASS: missing pinned bgfx diagnostics\n'
+printf 'PASS: missing pinned map submodules diagnostics\n'
 
-mkdir -p "$TMP_DIR/repo/external/bgfx.cmake/bgfx/include/bgfx" \
-    "$TMP_DIR/repo/external/bgfx.cmake/bx/include/bx" \
-    "$TMP_DIR/repo/external/bgfx.cmake/bimg/include/bimg"
-touch "$TMP_DIR/repo/external/bgfx.cmake/CMakeLists.txt" \
-      "$TMP_DIR/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" \
-      "$TMP_DIR/repo/external/bgfx.cmake/bx/include/bx/bx.h" \
-      "$TMP_DIR/repo/external/bgfx.cmake/bimg/include/bimg/bimg.h"
+render="$TMP_DIR/repo/external/AOWIS-GUI-Render"
+mkdir -p "$render/external/bgfx/include/bgfx" "$render/external/bx/include/bx" \
+    "$render/external/bimg/include/bimg" "$TMP_DIR/repo/external/GeographicLib"
+touch "$render/CMakeLists.txt" \
+      "$render/external/bgfx/include/bgfx/bgfx.h" \
+      "$render/external/bx/include/bx/bx.h" \
+      "$render/external/bimg/include/bimg/bimg.h" \
+      "$TMP_DIR/repo/external/GeographicLib/CMakeLists.txt"
 
 : > "$AOWIS_LINUX_TEST_LOG"
 "$TMP_DIR/repo/compile_linux.sh"
@@ -92,24 +93,24 @@ assert_contains '-DAOWIS_MOBILE_WITH_BGFX=ON'
 assert_contains '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
 assert_contains '-DBUILD_TESTING=OFF'
 assert_contains 'build-linux-bgfx'
-assert_contains 'run --bgfx-underlay'
+assert_contains 'run '
 assert_not_contains 'ctest '
-printf 'PASS: targeted optimized bgfx build and launch\n'
+printf 'PASS: targeted optimized map build and launch\n'
 
 : > "$AOWIS_LINUX_TEST_LOG"
 AOWIS_BUILD_TYPE=Debug "$TMP_DIR/repo/compile_linux.sh" --build-only --tests
 assert_contains '-DCMAKE_BUILD_TYPE=Debug'
 assert_contains '-DBUILD_TESTING=ON'
-assert_contains '--target aowis-mobile-gpu-scene-tests aowis-mobile-gpu-stress-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel 3'
-assert_contains '^aowis-mobile-(gpu-(scene|stress)|lifecycle|map-server-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|gradienter-math|plumb-bob-math|flashlight)$'
+assert_contains '--target aowis-mobile-map-math-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel 3'
+assert_contains '^aowis-mobile-(map-math|lifecycle|map-server-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|gradienter-math|plumb-bob-math|flashlight)$'
 assert_contains 'ctest --test-dir '
 assert_not_contains 'run '
-printf 'PASS: optional geometry, stress and lifecycle tests and build type override\n'
+printf 'PASS: optional map-math, settings and lifecycle tests and build type override\n'
 
 : > "$AOWIS_LINUX_TEST_LOG"
 "$TMP_DIR/repo/compile_linux.sh" --baseline
-assert_contains 'run --baseline'
-assert_not_contains 'run --bgfx-underlay'
+assert_contains '-DAOWIS_MOBILE_WITH_BGFX=OFF'
+assert_contains 'run '
 printf 'PASS: baseline launch\n'
 
 if AOWIS_LINUX_JOBS=xyz "$TMP_DIR/repo/compile_linux.sh" --build-only >"$TMP_DIR/error.log" 2>&1; then

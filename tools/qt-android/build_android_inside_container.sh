@@ -31,12 +31,16 @@ android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
 }
 render_cmake_args=()
 if [[ "$bgfx" == ON ]]; then
-    [[ -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]] || {
-        echo 'bgfx submodules missing; run ./git_submodule_init.sh --bgfx on the host.' >&2
-        exit 1
-    }
     [[ -f "${AOWIS_ANDROID_RENDER_SOURCE_DIR:-}/CMakeLists.txt" ]] || {
         echo 'AOWIS-GUI-Render checkout missing from Android container.' >&2
+        exit 1
+    }
+    [[ -f "$AOWIS_ANDROID_RENDER_SOURCE_DIR/external/bgfx/include/bgfx/bgfx.h" ]] || {
+        echo "Render's bgfx submodules missing; run ./git_submodule_init.sh --render on the host." >&2
+        exit 1
+    }
+    [[ -f "$project_dir/external/GeographicLib/CMakeLists.txt" ]] || {
+        echo 'GeographicLib submodule missing; run ./git_submodule_init.sh --geographiclib on the host.' >&2
         exit 1
     }
     render_cmake_args=(-DAOWIS_RENDER_SOURCE_DIR="$AOWIS_ANDROID_RENDER_SOURCE_DIR")

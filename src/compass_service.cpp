@@ -8,6 +8,8 @@
 #include <QScreen>
 #include <QtGlobal>
 
+#include <cmath>
+
 namespace
 {
 constexpr qint64 kStaleAfterMs = 4000;
@@ -51,6 +53,7 @@ CompassService::CompassService(QObject *parent)
                     this->m_displayRotationDegrees = screen->angleBetween(
                         screen->nativeOrientation(), current);
                     emit headingChanged();
+                    emit poseChanged();
                     emit changed();
                 });
     }
@@ -64,6 +67,23 @@ CompassService::CompassService(QObject *parent)
     this->m_watchdog.setInterval(1000);
     connect(&this->m_watchdog, &QTimer::timeout,
             this, &CompassService::handleTimeout);
+}
+
+bool CompassService::hasOrientation() const
+{
+    return this->m_pageVisible && this->m_applicationActive &&
+           this->m_lastPoseMs >= 0 &&
+           (this->m_clock.elapsed() - this->m_lastPoseMs <= kStaleAfterMs);
+}
+
+QQuaternion CompassService::orientationQuaternion() const
+{
+    return this->m_orientation;
+}
+
+int CompassService::screenRotationDegrees() const
+{
+    return this->m_displayRotationDegrees;
 }
 
 bool CompassService::hasHeading() const
@@ -227,6 +247,8 @@ void CompassService::updateActivity()
         this->m_lastFrameRateCheckMs = -1;
         this->m_framesSinceCheck = 0;
         this->m_lastReadingMs = -1;
+        this->m_lastPoseMs = -1;
+        emit poseChanged();
         this->m_lastStatusEmitMs = -1;
         this->m_lastSampleSeconds = -1.0;
         this->m_headingAccuracy = -1.0;
@@ -239,6 +261,8 @@ void CompassService::updateActivity()
 
     // A reading from before backgrounding or a different page must not be
     // presented as live immediately after returning.
+    this->m_lastPoseMs = -1;
+    emit poseChanged();
     this->m_lastReadingMs = -1;
     this->m_lastStatusEmitMs = -1;
     this->m_frameAnimation->stop();
@@ -282,6 +306,19 @@ void CompassService::handleSample(const CompassSensorSource::Sample &sample)
 {
     if (!this->m_pageVisible || !this->m_applicationActive)
         return;
+    // Keep the complete device-to-world rotation (orientationQuaternion). Heading
+    // alone is insufficient: camera pitch and roll must follow the phone.
+    // This reading is separate from the low-pass compass-rose animation.
+    const double norm = std::hypot(std::hypot(sample.x, sample.y),
+                                   std::hypot(sample.z, sample.w));
+    if (!std::isfinite(norm) || norm < 0.5)
+        return;
+    this->m_orientation = QQuaternion(static_cast<float>(sample.w / norm),
+                                      static_cast<float>(sample.x / norm),
+                                      static_cast<float>(sample.y / norm),
+                                      static_cast<float>(sample.z / norm));
+    this->m_lastPoseMs = this->m_clock.elapsed();
+    emit poseChanged();
     const double heading = AowisCompass::headingFromRotationVector(
         sample.x, sample.y, sample.z, sample.w, this->m_displayRotationDegrees);
     if (heading < 0.0)
@@ -339,6 +376,12 @@ void CompassService::handleTimeout()
         this->m_clock.elapsed() - this->m_startMs > kFirstReadingTimeoutMs)
     {
         changeState(State::NoSamples);
+    }
+    if (this->m_lastPoseMs >= 0 &&
+        this->m_clock.elapsed() - this->m_lastPoseMs > kStaleAfterMs)
+    {
+        this->m_lastPoseMs = -1;
+        emit poseChanged();
     }
     if (this->m_lastReadingMs >= 0 &&
         this->m_clock.elapsed() - this->m_lastReadingMs > kStaleAfterMs)

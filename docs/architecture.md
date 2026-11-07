@@ -3,16 +3,18 @@
 ## The current application
 
 The Mobile source contains **one** Qt Quick application. `src/main.cpp`
-starts Qt, supplies the platform title/icon, selects bgfx underlay or QML
-baseline, attaches a `RenderLab` to the hidden `QQuickWindow` *before* showing
-it, and schedules redraws while active. `qml/Main.qml` owns the temporary
-UI, gesture handling and diagnostic panel. `src/render_lab.cpp` bridges Qt's
-render thread to bgfx; `src/gpu_scene_renderer.cpp` and
-`src/gpu_scene_geometry.cpp` supply synthetic geometry, shaders and camera
-math. The geometry has a dependency-free C++ unit test.
+starts Qt (basic render loop, OpenGL / OpenGL ES scene graph, EGL on X11),
+supplies the platform title/icon and registers the `AOWIS.Map` `MapView` QML
+type. `qml/Main.qml` owns the pages, the navigation drawer and the map page's
+QML controls. `src/mobile_map_view.cpp` (`MobileMapView`, a `QQuickItem`) is
+the Qt Quick host of Render's `MapBgfxMapView` in host-context mode: it draws
+the map from `beforeRenderPassRecording` into Qt Quick's EGL context, releases
+it on `sceneGraphInvalidated`, handles touch/mouse/HUD input, and owns the map
+model, the provider catalog and the tile/terrain repositories connected to
+the configured aowis-server-map. See [the map](map.md).
 
-`external/bgfx.cmake` is a **temporary pinned submodule** with nested
-`bgfx`, `bx` and `bimg`. It is not part of a shared AOWIS renderer library yet.
+Render's nested `external/bgfx`, `external/bx` and `external/bimg` (the
+revisions the desktop GUI builds) are the only bgfx sources.
 
 The renderer-independent `LocationService` uses Qt Positioning and runtime
 `QLocationPermission` for automatically started foreground positioning; `LocationSnapshot`
@@ -35,18 +37,18 @@ with host ADB. **Android is a working build target**; iOS is not.
 
 | Repository | Responsibility | Present relationship |
 | --- | --- | --- |
-| `AOWIS-GUI` | Desktop QWidget application, current production-oriented map/editor stack | Separate existing repository; no renderer extraction yet |
+| `AOWIS-GUI` | Desktop QWidget application, map editor | Separate repository; hosts the same Render map view in Qt Widgets |
 | `AOWIS-GUI-Mobile` | Touch UI, platform adapters, survey workflow, mobile deployment | This repository |
-| `AOWIS-GUI-Render` | Shared rendering and map-scene engine | Pinned submodule; selected rendering components already consumed by Mobile |
+| `AOWIS-GUI-Render` | Shared map engine (2D/globe, imagery, terrain, HUD, map server client) | Pinned submodule; the Mobile map |
 | `AOWIS-SERVER-MODEL` | Canonical domain structures and unit registry | Pinned Git submodule; `AOWIS::Model` linked into Mobile |
-| `AOWIS-SERVER-MAP` | Map/terrain service and caching | Existing elsewhere, not linked into Mobile |
+| `AOWIS-SERVER-MAP` | Map/terrain service and caching | Reached over HTTP(S) at the URL from Settings |
 | `AOWIS-SERVER-DVMDB` | Native project/branch/revision storage and working-copy semantics | Pinned source submodule; not yet compiled or linked |
 
-GeographicLib is pinned at `external/GeographicLib` for upcoming coordinate work; it is not compiled or linked yet. See [dependency setup](dependencies.md).
+GeographicLib at `external/GeographicLib` is Render's geodesy library, built
+by Render from Mobile's checkout. See [dependency setup](dependencies.md).
 
-The Mobile scene still does not consume MAP/DVMDB network data, but it links
-MODEL for its canonical domain types and unit profiles. Its current scene remains
-synthetic geometry rather than a project network.
+The Mobile map does not yet show MAP/DVMDB network data; it links MODEL for
+its canonical domain types and unit profiles.
 
 ## Planned shared renderer boundary
 
@@ -98,5 +100,5 @@ implemented. A personal working DVMDB is the agreed editing destination;
 projects on other servers must first be checked out to it for direct edits.
 
 See [data model](data-model.md) and [offline/sync](offline-sync.md) for
-intended contracts, and [renderer integration](renderer-lab.md) for current
+intended contracts, and [the map](map.md) for current
 GPU-thread details.

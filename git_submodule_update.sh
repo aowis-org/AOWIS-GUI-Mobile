@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deliberate upstream update for the AOWIS-owned renderer. bgfx.cmake stays
-# pinned at the release chosen by tools/init_bgfx.sh; never use --remote on it
-# or its nested bgfx/bx/bimg dependencies.
+# Deliberate upstream update for the AOWIS-owned renderer. Render's nested
+# bgfx/bx/bimg follow the commits recorded by that Render revision; never use
+# --remote on them.
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd -- "$project_dir"
@@ -13,17 +13,16 @@ usage() {
 Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
-  --render     Same as the default; leave bgfx.cmake and MODEL untouched.
+  --render     Same as the default; leave MODEL untouched.
   --model      Advance only AOWIS-SERVER-MODEL to its tracked remote branch.
   --dvmdb      Deliberately advance only the DVMDB gitlink, without nested modules.
-  --all        Advance Render and MODEL, then initialize bgfx.cmake at its pin.
-               Never advance bgfx.cmake or its nested third-party submodules.
+  --all        Advance Render and MODEL. Render's nested third-party
+               submodules stay at the commits that Render revision records.
   --help       Show this help.
 
 Review and commit any changed Render/MODEL/DVMDB gitlinks explicitly.
 GeographicLib always stays pinned; choose a tested release before changing it.
-To change the third-party bgfx.cmake release, use tools/init_bgfx.sh and
-validate Linux/Android before committing its gitlink.
+bgfx is pinned by Render (the GUI pins the same revisions).
 HELP
 }
 
@@ -35,7 +34,6 @@ die() {
 [[ "$(git rev-parse --show-toplevel 2>/dev/null)" == "$project_dir" ]] ||
     die "Expected a Git working-tree root at $project_dir"
 
-include_bgfx=false
 update_model=false
 update_dvmdb=false
 update_render=true
@@ -58,7 +56,6 @@ case "${1:-}" in
         ;;
     --all)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
-        include_bgfx=true
         update_model=true
         ;;
     --help|-h)
@@ -75,12 +72,6 @@ esac
 render_path='external/AOWIS-GUI-Render'
 if "$update_render" && [[ "$(git ls-files --stage -- "$render_path")" != '160000 '* ]]; then
     die "Missing Git submodule gitlink for $render_path. First run 'git submodule add https://github.com/aowis-org/AOWIS-GUI-Render.git $render_path' and commit the gitlink and .gitmodules."
-fi
-
-if "$include_bgfx"; then
-    # Initialize third-party dependencies at their *recorded* commits, not
-    # their remote HEADs. This must not advance a tested bgfx.cmake pin.
-    "$project_dir/git_submodule_init.sh" --bgfx
 fi
 
 git submodule sync --recursive

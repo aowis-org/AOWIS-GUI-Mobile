@@ -25,10 +25,10 @@ The default is English. There is no extra Android permission or Docker module.
   standard translation lookup API, rather than an external gettext runtime.
 - QML uses `qsTr("English source text")`. The language-change signal invokes
   `QQmlApplicationEngine::retranslate()` to reevaluate the existing bindings.
-  UI strings stored as state (e.g. benchmark/recovery messages) are represented
+  UI strings stored as state (e.g. map status and recovery messages) are represented
   by stable status types and formatted again on demand.
 - `LocationService`, `CompassService`, `GradienterService`, `PlumbBobService`,
-  `MapServerSettings`, and `RenderLab` expose translated descriptions through
+  `MapServerSettings`, and `MobileMapView` expose translated descriptions through
   `tr()` or `QCoreApplication::translate()` and notify their QML properties
   when the active language changes. Status logic is based on explicit states,
   **never on matching translated English sentences**.
@@ -53,7 +53,7 @@ The default is English. There is no extra Android permission or Docker module.
    Linux and Android, especially Arabic RTL layout, long labels, fields with
    keyboard focus, GPS readouts, all instruments and Android Back.
 
-Machine-readable benchmark CSV headers, event IDs, package names and URLs are
+Machine-readable lifecycle CSV headers, event IDs, package names and URLs are
 intentionally **not localized**: automation and API consumers rely on stable
 field identifiers. The UI *presenting* their measurements is localized.
 

@@ -9,34 +9,32 @@ drainage is a future domain.
 
 ## What works today
 
-The repository already builds and launches a **Qt Quick + bgfx** application on
-Linux and Android ARM64. bgfx draws real GPU geometry *under* QML controls using
-Qt's OpenGL/EGL context. The app has mouse/touch pan, pinch/wheel zoom, a QML
-baseline, frame diagnostics, and Android application-lifecycle counters.
-Selectable synthetic networks (~1k to ~1M total node/pipe features) use
-viewport tiles, bounded GPU buffers and explicit LOD sampling. A 15-second
-benchmark saves frame-level CSV and frame-pacing percentiles.
-The mobile UI now starts with a clean, map-first view. Its hamburger menu
-opens **Settings → Appearance** (system/dark/light interface theme),
-**Settings → Language** (English, Français, العربية, Deutsch, Español;
-live change without restart), and
-**Settings → Map server** (persistent HTTP/HTTPS URL and numeric port)
-and **Diagnostics** (stress presets, recording, GPU recovery, zoom/recenter).
-Settings reports automatically acquired foreground phone position,
-provider status, latitude/longitude and reported accuracy. A small status pill
-appears on the map. The sample is not persisted or
-placed on the synthetic map.
-These map-server settings only configure a future map client; they do **not** yet load
-map imagery or establish a server connection.
-The Android APK builds in a pinned Docker toolchain on Arch Linux and has been
-launched on a physical Android phone. Linux rendering has also been exercised.
+The repository builds and launches a **Qt Quick** application on Linux and
+Android ARM64 whose Map page is the **AOWIS map** shared with the desktop GUI
+(AOWIS-GUI-Render `MapBgfxMapView`): 2D Web Mercator imagery and the 3D globe
+with terrain, the map HUD (2D/3D switch, zoom, globe toggles, scale bar,
+device position). bgfx draws the map *under* the QML controls inside Qt
+Quick's own OpenGL / OpenGL ES context. One finger pans, two fingers zoom and,
+on the globe, turn and tilt; the mouse wheel zooms and the right button
+orbits the globe on desktop.
 
-**This is not yet a survey editor.** The visible grid, pipes and junctions are a
-synthetic rendering test scene—not actual georeferenced maps or saved network
-objects. There is no GPS-based survey capture, feature classification, point/line/area editor,
-offline map package, local observation store or DVMDB synchronization in this
-repository yet. The stress harness has initial Linux/Android recordings; further controlled
-performance and genuine context-loss testing remain open.
+Imagery tiles, terrain and the imagery provider catalog come from the
+**aowis-server-map** configured under **Settings → Map server** (HTTP/HTTPS
+URL and port); changing it reconnects at once. The map follows the first
+location fix once (unless the last session's camera was restored); the
+location button re-centres it. See [the map](docs/map.md).
+
+The hamburger menu opens **Settings → Appearance** (system/dark/light theme),
+**Settings → Language** (English, Français, العربية, Deutsch, Español; live
+change without restart), **Settings → Map server**, the instruments (compass,
+gradienter, plumb bob, flashlight) and **Diagnostics** (map renderer state,
+map server status, lifecycle recovery counters, map server reload).
+The Android APK builds in a pinned Docker toolchain on Arch Linux.
+
+**This is not yet a survey editor.** There is no hydraulic network on the
+mobile map yet, no GPS-based survey capture, feature classification,
+point/line/area editor, offline map package, local observation store or DVMDB
+synchronization in this repository yet.
 
 ## Names and repository family
 
@@ -61,8 +59,8 @@ creates both `.gitmodules` metadata and the Git submodule gitlink):
 ./tools/init_model.sh
 ```
 
-For new clones, initialize all pinned submodules, including bgfx.cmake's
-nested bgfx/bx/bimg revisions:
+For new clones, initialize all pinned submodules, including Render's nested
+bgfx/bx/bimg revisions (the same ones the desktop GUI builds):
 
 ```bash
 ./git_submodule_init.sh
@@ -77,13 +75,10 @@ git add external/AOWIS-GUI-Render
 # Review/test, then commit the new gitlink in Mobile.
 ```
 
-The updater deliberately does **not** advance third-party bgfx.cmake or its
-nested vendor repositories. `./git_submodule_update.sh --all` additionally
-initializes the third-party dependencies at their recorded pins, without
-advancing them. `./git_submodule_init.sh --render`, `--bgfx` and `--model` permit
-selective initialization. `./git_submodule_update.sh --model` deliberately
-advances the MODEL gitlink, while the default updater changes only Render. Changing the independently pinned bgfx.cmake release remains
-an explicit operation through `./tools/init_bgfx.sh`.
+The updater never advances Render's nested third-party repositories beyond
+the commits the new Render revision records. `./git_submodule_update.sh --all`
+also advances MODEL. `./git_submodule_init.sh --render`, `--model`,
+`--geographiclib` and `--dvmdb` permit selective initialization.
 
 A `.gitmodules` entry is not enough: the repository must also track a gitlink
 (mode `160000`) for each submodule. The initialization/update scripts reject missing gitlinks
@@ -93,10 +88,10 @@ or run `./git_submodule_init.sh` afterwards.
 Linux (installed Qt 6 including Qt Positioning, CMake, Ninja, C++ compiler):
 
 ```bash
-./compile_linux.sh                # build and launch bgfx underlay
+./compile_linux.sh                # build and launch with the map
 ./compile_linux.sh --build-only   # build only
-./compile_linux.sh --baseline     # separate QML-only comparison build
-./compile_linux.sh --tests        # run scene/camera and stress/percentile tests
+./compile_linux.sh --baseline     # separate QML-only build without the map renderer
+./compile_linux.sh --tests        # run the map-math, settings and lifecycle tests
 ```
 
 Android ARM64 (Docker on host; optional Arch `adb` for deployment):
@@ -118,38 +113,12 @@ Android dependencies. See [interface languages](docs/localization.md) for live t
 [device location](docs/location.md) for GPS/permissions and
 [Android build and device guide](docs/android-renderer-test.md)
 for setup, diagnostics and APK paths, and
-[renderer integration](docs/renderer-lab.md) for the current GPU design.
-
-## Collecting benchmark results (Linux + Android)
-
-Record **15-second** captures using the app's **Record 15s** control on
-Linux and Android. Then run one command from the repository root:
-
-```bash
-./benchmark.sh
-```
-
-This discovers Linux reports and every authorized USB/Wi-Fi Android device,
-reads Android's debug-app private CSVs via `adb run-as`, and copies everything
-into `benchmarks/`. It also retrieves available lifecycle event logs, creates
-`benchmarks/summary.csv` and `benchmarks/summary.md`, and automatically updates
-`../mobile.zip`. **Just upload that refreshed ZIP** for analysis—no ADB
-extraction or manual copying required. Missing phones produce a warning rather
-than preventing Linux results from being collected. Use `--strict` to require
-all requested sources, or `--desktop-only`/`--android-only` as needed.
-
-The collection script does not create new frame measurements: initiate captures
-in the app first. Optionally, `./benchmark.sh --run-lifecycle` performs the
-existing Android background/resume test before collecting logs. Details:
-[renderer benchmark procedure](docs/renderer-lab.md).
+[the map](docs/map.md) for the map integration.
 
 ## What happens next
 
-**Next agreed work:** move the production map/terrain/HUD rendering code into
-`AOWIS-GUI-Render`, retaining Desktop GUI, Android, and WebAssembly rendering
-behavior. The shared device layer is already linked by Mobile; the Mobile
-scene still uses its existing stress-test renderer. The real mapping and
-survey tools follow that foundation.
+The hydraulic network on the mobile map (Render's network snapshot from the
+working copy), then survey capture and editing.
 
 Read the [documentation index](docs/README.md) or the
 [current roadmap](docs/roadmap.md).
@@ -193,8 +162,8 @@ This upgrade procedure does not depend on the local checkout directory name.
 Patch ZIPs may include `AOWIS-GUI-Mobile/.aowis-patch-delete.txt` containing
 repository-relative file removals. Applying a patch refreshes file timestamps
 and regenerates `mobile.zip`. The source snapshot excludes build outputs,
-secrets, Git metadata and nested submodule contents. The `external/bgfx.cmake` and `external/AOWIS-GUI-Render`
-submodules and the MODEL dependency are pinned separately by Git gitlinks.
+secrets, Git metadata and nested submodule contents. The `external/AOWIS-GUI-Render`
+submodule (with its bgfx) and the MODEL dependency are pinned separately by Git gitlinks.
 
 License: Apache-2.0.
 
@@ -211,14 +180,10 @@ which supplies the canonical quantity and unit-profile definitions used in
 Settings. Register MODEL once with `./tools/init_model.sh` after applying the
 MODEL integration patch; future clones automatically restore its gitlink.
 
-The pinned `external/AOWIS-GUI-Render` submodule exports
-`AOWIS::RenderGeometry` (continuous Mercator camera, globe icon visibility,
-terrain-height cache and imagery fallback UV transforms) without Qt Widgets
-or GUI network-model dependencies. `aowis-mobile-shared-render-geometry`
-tests this public API alongside the existing Mobile lab camera/geometry tests.
-The Mobile renderer still shows its established Qt Quick/bgfx stress scene;
-this patch does not replace that scene or modify the Android EGL lifecycle.
-
+The pinned `external/AOWIS-GUI-Render` submodule supplies the whole map
+(`AOWIS::RenderMap`, `AOWIS::RenderMapRest` and their dependencies) and its
+pinned bgfx. `aowis-mobile-shared-render-geometry` tests Render's geometry
+headers directly.
 
 The hamburger menu also provides a live Qt Sensors **magnetic compass** with
 an animated compass rose. See [Compass](docs/compass.md). The independent [Gradienter](docs/gradienter.md)
@@ -227,8 +192,8 @@ relative zero reference.
 
 ## Shared native dependencies
 
-MODEL, Render and bgfx are already used by the application. GeographicLib and
-DVMDB are recorded as pinned source dependencies for upcoming work but are not
-compiled into Mobile yet. On the first checkout, run
+MODEL, Render (with its pinned bgfx) and GeographicLib (Render's geodesy) are
+compiled into the application. DVMDB is recorded as a pinned source dependency
+for upcoming work but is not compiled into Mobile yet. On the first checkout, run
 `./tools/init_geographiclib_dvmdb.sh`, then commit `.gitmodules` and the Git
 gitlinks. See [dependency setup](docs/dependencies.md).

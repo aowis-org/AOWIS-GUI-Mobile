@@ -151,7 +151,7 @@ else
     errors=$((errors + 1))
 fi
 "${adb_cmd[@]}" shell dumpsys meminfo "$package" > "$output/meminfo.txt" 2>/dev/null || true
-"${adb_cmd[@]}" logcat -d -v time 2>/dev/null | grep -E 'AOWIS lifecycle:|AOWIS render lab:|FATAL EXCEPTION|Fatal signal' \
+"${adb_cmd[@]}" logcat -d -v time 2>/dev/null | grep -E 'AOWIS lifecycle:|AOWIS map:|FATAL EXCEPTION|Fatal signal' \
     > "$output/logcat-filtered.txt" || true
 printf 'Errors: %d\nLogs: %s\n' "$errors" "$output" | tee -a "$output/summary.txt"
 (( errors == 0 ))

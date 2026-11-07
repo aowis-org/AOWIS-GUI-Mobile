@@ -6,13 +6,14 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
-mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/bgfx.cmake/bgfx/include/bgfx" \
-    "$work/repo/external/AOWIS-GUI-Render" \
+mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx" \
+    "$work/repo/external/GeographicLib" \
     "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units" "$work/bin" "$work/cache"
 cp "$root/compile_android.sh" "$root/prepare_android_docker.sh" "$work/repo/"
 cp "$root/tools/qt-android/"*.sh "$work/repo/tools/qt-android/"
 cp "$root/tools/launch_android_app.sh" "$work/repo/tools/"
-touch "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" \
+touch "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx/bgfx.h" \
+    "$work/repo/external/GeographicLib/CMakeLists.txt" \
     "$work/repo/external/AOWIS-GUI-Render/CMakeLists.txt" \
     "$work/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
     "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
@@ -238,7 +239,7 @@ assert_not_log 'docker run '
 rm -f "$signing_dir/.aowis-debug-keystore-created"
 
 # No bgfx sources must fail before trying Docker (but baseline can work).
-rm "$work/repo/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h"
+rm "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx/bgfx.h"
 : > "$MOCK_LOG"
 if ./compile_android.sh --build-only > "$work/output.log" 2>&1; then fail 'missing bgfx accepted'; fi
 assert_not_log 'docker run '

@@ -6,8 +6,8 @@
 
 class QSettings;
 
-// Stores the future map-service endpoint; this class does not initiate network
-// requests. The renderer still displays a synthetic test scene.
+// Stores the AOWIS-SERVER-MAP endpoint; this class does not initiate network
+// requests. MobileMapView reads the URL and loads tiles and terrain from it.
 class MapServerSettings final : public QObject
 {
     Q_OBJECT

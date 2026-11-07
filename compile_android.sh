@@ -15,7 +15,7 @@ Usage: ./compile_android.sh [options]
                                 authorized USB (preferred) or Wi-Fi device exists.
   --run                         Require a device and install/launch after building.
   --build-only                  Build APK; do not use ADB.
-  --baseline                    Build QML-only baseline without bgfx.
+  --baseline                    Build QML-only baseline without the map renderer.
   --devices                     List USB/Wi-Fi ADB devices without building.
   --wifi                        Discover/reconnect paired Wi-Fi devices via mDNS;
                                 prefer Wi-Fi for deployment.
@@ -196,7 +196,7 @@ if [[ -n "$wifi_connect" ]]; then
     wifi_preferred=true
 fi
 if "$list_devices"; then
-    # --devices must work without Docker, Qt, or initialized bgfx submodules.
+    # --devices must work without Docker, Qt, or initialized map submodules.
     connect_discovered_wifi
     read_devices
     show_devices
@@ -207,16 +207,18 @@ command -v docker >/dev/null 2>&1 || die 'Docker is missing (Arch: sudo pacman -
 [[ -f "$project_dir/external/AOWIS-SERVER-MODEL/CMakeLists.txt" &&
    -f "$project_dir/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h" ]] ||
     die 'AOWIS-SERVER-MODEL missing. Run ./tools/init_model.sh once, then retry.'
-if [[ "$bgfx" == ON && ! -f "$project_dir/external/bgfx.cmake/bgfx/include/bgfx/bgfx.h" ]]; then
-    die 'bgfx is not initialized. Run ./git_submodule_init.sh first.'
-fi
-# Bind the pinned Render submodule read-only into Docker. Only an explicit
-# AOWIS_RENDER_SOURCE_DIR override may point to an alternate checkout.
+# Bind the pinned Render submodule (with its pinned bgfx, bx and bimg)
+# read-only into Docker. Only an explicit AOWIS_RENDER_SOURCE_DIR override may
+# point to an alternate checkout.
 renderer_mount=()
 if [[ "$bgfx" == ON ]]; then
     renderer_host="${AOWIS_RENDER_SOURCE_DIR:-$project_dir/external/AOWIS-GUI-Render}"
     [[ -f "$renderer_host/CMakeLists.txt" ]] ||
         die 'AOWIS-GUI-Render missing: run ./git_submodule_init.sh --render.'
+    [[ -f "$renderer_host/external/bgfx/include/bgfx/bgfx.h" ]] ||
+        die "Render's bgfx is not initialized. Run ./git_submodule_init.sh --render first."
+    [[ -f "$project_dir/external/GeographicLib/CMakeLists.txt" ]] ||
+        die 'GeographicLib missing: run ./git_submodule_init.sh --geographiclib.'
     renderer_host="$(realpath -- "$renderer_host")"
     renderer_mount=(-v "$renderer_host:/aowis-render:ro")
 fi

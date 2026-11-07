@@ -26,7 +26,7 @@ changes; no restart, scene reload, hydraulic edit, commit or DB write occurs.
 **Current live unit-aware values** are GPS accuracy (distance), GPS altitude
 (altitude) and GPS reported speed (velocity), as available. Coordinates are
 angular degrees and do not change. Compass and inclinometer angles stay
-in degrees. The map still shows synthetic geometry; map scale, hydraulic
+in degrees. The map scale bar is currently always metric; hydraulic
 inspectors and simulation tables have not yet been integrated into Mobile.
 
 ## MODEL dependency boundary

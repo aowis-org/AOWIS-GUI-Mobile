@@ -112,8 +112,9 @@ still, slow and fast turns, turn-and-stop without overshoot, frame-rate
 consistency, long sensor gaps and continuous north crossing. These simulations are not a substitute for
 real-device visual acceptance.
 
-Sensors are started **on entering Compass while the app is active**, and
-stopped when leaving the page or backgrounding AOWIS. A new reading is required
+Sensors start while **the Compass page is visible** and the app is active;
+they stop when switching to another tool or backgrounding AOWIS. The map
+does not use compass sensors. A new reading is required
 after every resume. Values older than four seconds are marked stale.
 If a started sensor delivers no samples for six seconds, the UI reports that
 explicitly instead of waiting forever. The Compass status card shows whether
@@ -123,7 +124,7 @@ visual dial animation problem. If the
 phone has no supported compass sensor, the UI explicitly reports this and does
 not display an invented bearing. There is no separate runtime permission for
 Android's magnetic compass. No compass readings are transmitted, persisted or
-added to benchmark CSV files.
+written to lifecycle diagnostics.
 
 Poor calibration is indicated rather than presenting false precision. When
 comparing with another compass app, check whether it shows **true** north:

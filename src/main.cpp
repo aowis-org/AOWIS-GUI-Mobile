@@ -1,4 +1,4 @@
-#include "render_lab.h"
+#include "mobile_map_view.h"
 #include "map_server_settings.h"
 #include "appearance_settings.h"
 #include "language_settings.h"
@@ -9,7 +9,6 @@
 #include "plumb_bob_service.h"
 #include "flashlight_service.h"
 
-#include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QDebug>
 #include <QGuiApplication>
@@ -17,11 +16,23 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <qqml.h>
 #include <QSGRendererInterface>
-#include <QTimer>
 
 int main(int argc, char *argv[])
 {
+    // The map (AOWIS-GUI-Render) draws into Qt Quick's OpenGL / OpenGL ES
+    // context from the render pass. Its frame works on the map model, the
+    // tile/terrain repositories and their signals, all on the GUI thread:
+    // the basic render loop renders on that thread too. Set before the
+    // application object exists; an explicit environment value still wins.
+    if (qEnvironmentVariableIsEmpty("QSG_RENDER_LOOP"))
+        qputenv("QSG_RENDER_LOOP", "basic");
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    // The map borrows an EGL context; X11 sessions otherwise get GLX.
+    if (qEnvironmentVariableIsEmpty("QT_XCB_GL_INTEGRATION"))
+        qputenv("QT_XCB_GL_INTEGRATION", "xcb_egl");
+#endif
     // Select before the first QQuickWindow is created. For Android this asks
     // Qt Quick to use OpenGL ES, for Linux desktop it requests OpenGL.
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
@@ -39,32 +50,9 @@ int main(int argc, char *argv[])
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("AOWIS mobile field survey application"));
     parser.addHelpOption();
-    QCommandLineOption experimental(QStringLiteral("bgfx-underlay"),
-        QStringLiteral("EXPERIMENTAL: run bgfx on Qt Quick's OpenGL render thread and surface"));
-    QCommandLineOption baseline(QStringLiteral("baseline"),
-        QStringLiteral("Force QML-only baseline without initializing bgfx"));
-    parser.addOption(experimental);
-    parser.addOption(baseline);
     parser.process(application);
-#if defined(Q_OS_ANDROID) && AOWIS_LAB_WITH_BGFX
-    // Android launchers do not reliably forward arbitrary CLI arguments.
-    // ON builds therefore exercise the experiment on device by default.
-    const bool androidExperimentalDefault = true;
-#else
-    const bool androidExperimentalDefault = false;
-#endif
-    const bool useBgfx = !parser.isSet(baseline) &&
-        (parser.isSet(experimental) || androidExperimentalDefault);
 
-#if !AOWIS_LAB_WITH_BGFX
-    if (useBgfx)
-    {
-        qCritical("This binary was built with AOWIS_MOBILE_WITH_BGFX=OFF.");
-        return 2;
-    }
-#endif
-
-    RenderLab lab(useBgfx);
+    qmlRegisterType<MobileMapView>("AOWIS.Map", 1, 0, "MapView");
     MapServerSettings mapServerSettings;
     AppearanceSettings appearanceSettings;
     LanguageSettings languageSettings;
@@ -75,7 +63,6 @@ int main(int argc, char *argv[])
     PlumbBobService plumbBobService;
     FlashlightService flashlightService;
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty(QStringLiteral("lab"), &lab);
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("languageSettings"), &languageSettings);
@@ -101,8 +88,6 @@ int main(int argc, char *argv[])
                      &flashlightService, &FlashlightService::changed);
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
                      &mapServerSettings, &MapServerSettings::errorChanged);
-    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
-                     &lab, &RenderLab::statusChanged);
     engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;
@@ -113,8 +98,8 @@ int main(int argc, char *argv[])
         qCritical("QML root must be a Qt Quick Window");
         return 1;
     }
-    // QML deliberately creates the window invisible. Attach all render-thread
-    // callbacks BEFORE it can create a scenegraph or GL context.
+    // QML creates the window invisible: the map item has connected to the
+    // window's render-pass signals before a scene graph or GL context exists.
 #if defined(Q_OS_ANDROID)
     // Exercise resource teardown/recreation across Android backgrounding.
     // Qt's persistence settings are hints, not guarantees on EGL context loss.
@@ -122,65 +107,6 @@ int main(int argc, char *argv[])
     window->setPersistentGraphics(false);
 #endif
     window->setIcon(QIcon(QStringLiteral(":/aowis/icon.png")));
-    lab.attach(window);
-    QObject::connect(window, &QWindow::widthChanged, &lab, [&lab](int) { lab.noteSurfaceResize(); });
-    QObject::connect(window, &QWindow::heightChanged, &lab, [&lab](int) { lab.noteSurfaceResize(); });
-
-    QTimer refresh;
-    refresh.setInterval(16);
-    QObject::connect(&refresh, &QTimer::timeout, window, [window]() { window->update(); });
-    // The renderer-lab 16 ms refresh is useful on the map but must not run
-    // alongside the Qt animation clock of either instrument page.
-    QObject::connect(&compassService, &CompassService::pageVisibleChanged,
-                     &refresh, [&refresh, &application, &compassService,
-                                &gradienterService, &plumbBobService, window](bool) {
-        if (compassService.pageVisible() || gradienterService.pageVisible() ||
-            plumbBobService.pageVisible())
-            refresh.stop();
-        else if (application.applicationState() == Qt::ApplicationActive)
-        {
-            refresh.start();
-            window->update();
-        }
-    });
-    QObject::connect(&gradienterService, &GradienterService::pageVisibleChanged,
-                     &refresh, [&refresh, &application, &compassService,
-                                &gradienterService, &plumbBobService, window](bool) {
-        if (compassService.pageVisible() || gradienterService.pageVisible() ||
-            plumbBobService.pageVisible())
-            refresh.stop();
-        else if (application.applicationState() == Qt::ApplicationActive)
-        {
-            refresh.start();
-            window->update();
-        }
-    });
-    QObject::connect(&plumbBobService, &PlumbBobService::pageVisibleChanged,
-                     &refresh, [&refresh, &application, &compassService,
-                                &gradienterService, &plumbBobService, window](bool) {
-        if (compassService.pageVisible() || gradienterService.pageVisible() ||
-            plumbBobService.pageVisible())
-            refresh.stop();
-        else if (application.applicationState() == Qt::ApplicationActive)
-        {
-            refresh.start();
-            window->update();
-        }
-    });
-    QObject::connect(&application, &QGuiApplication::applicationStateChanged,
-                     &lab, [&lab, &refresh, &compassService,
-                            &gradienterService, &plumbBobService, window](Qt::ApplicationState state) {
-        const bool active = state == Qt::ApplicationActive;
-        lab.setApplicationActive(active);
-        if (active && !compassService.pageVisible() && !gradienterService.pageVisible() &&
-            !plumbBobService.pageVisible())
-        {
-            refresh.start();
-            window->update();
-        }
-        else
-            refresh.stop();
-    });
     QObject::connect(&application, &QGuiApplication::applicationStateChanged,
                      &locationService, [&locationService](Qt::ApplicationState state) {
         locationService.setApplicationActive(state == Qt::ApplicationActive);
@@ -208,9 +134,5 @@ int main(int argc, char *argv[])
     gradienterService.setApplicationActive(active);
     plumbBobService.setApplicationActive(active);
     flashlightService.setApplicationActive(active);
-    lab.setApplicationActive(active);
-    if (active && !compassService.pageVisible() && !gradienterService.pageVisible() &&
-            !plumbBobService.pageVisible())
-        refresh.start();
     return application.exec();
 }

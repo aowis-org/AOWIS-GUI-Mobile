@@ -45,6 +45,13 @@ Item {
                     context.moveTo(width * 0.50, height * 0.25)
                     context.lineTo(width * 0.50, height * 0.75)
                 }
+            } else if (icon.kind === "reset") {
+                // Circular rewind arrow rendered as vector lines, not a font.
+                context.arc(width * 0.52, height * 0.50,
+                            scale * 0.28, -Math.PI * 0.60, Math.PI * 1.15, false)
+                context.moveTo(width * 0.22, height * 0.30)
+                context.lineTo(width * 0.24, height * 0.53)
+                context.lineTo(width * 0.46, height * 0.46)
             } else if (icon.kind === "compass") {
                 context.arc(width * 0.50, height * 0.50, scale * 0.31, 0, Math.PI * 2)
                 context.moveTo(width * 0.50, height * 0.24)
@@ -71,6 +78,17 @@ Item {
                 context.lineTo(width * 0.50, height * 0.88)
                 context.lineTo(width * 0.31, height * 0.69)
                 context.closePath()
+            } else if (icon.kind === "location") {
+                // Target: ring with four ticks, the map's device position.
+                context.arc(width * 0.50, height * 0.50, scale * 0.22, 0, Math.PI * 2)
+                context.moveTo(width * 0.50, height * 0.10)
+                context.lineTo(width * 0.50, height * 0.26)
+                context.moveTo(width * 0.50, height * 0.74)
+                context.lineTo(width * 0.50, height * 0.90)
+                context.moveTo(width * 0.10, height * 0.50)
+                context.lineTo(width * 0.26, height * 0.50)
+                context.moveTo(width * 0.74, height * 0.50)
+                context.lineTo(width * 0.90, height * 0.50)
             } else if (icon.kind === "flashlight") {
                 context.moveTo(width * 0.36, height * 0.12)
                 context.lineTo(width * 0.64, height * 0.12)

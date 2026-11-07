@@ -6,9 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 
-# AOWIS mobile application, currently retaining an instrumented renderer scene.
-# Keep the proven Qt Quick/bgfx integration while product features are added.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Positioning Sensors)
+# AOWIS mobile application with the shared AOWIS map (AOWIS-GUI-Render),
+# drawn inside Qt Quick's OpenGL / OpenGL ES scene graph.
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Positioning Sensors OpenGL Network)
 # Opt in to Qt's modern Android deployment-path behavior (Qt 6.12).
 # Avoid a QTP0002 developer warning at target finalization.
 if(QT_KNOWN_POLICY_QTP0002)
@@ -16,7 +16,7 @@ if(QT_KNOWN_POLICY_QTP0002)
 endif()
 qt_standard_project_setup(REQUIRES 6.5)
 
-option(AOWIS_MOBILE_WITH_BGFX "Build the experimental bgfx/Qt Quick direct-underlay path" ON)
+option(AOWIS_MOBILE_WITH_BGFX "Build the AOWIS map (bgfx in Qt Quick); OFF: QML-only baseline" ON)
 
 # Keep application artwork shared across build targets; platform-specific
 # launcher/file icons are derived from assets/icons/aowis-source.png.
@@ -56,12 +56,9 @@ qt_add_executable(aowis-mobile
     src/plumb_bob_math.h
     src/flashlight_service.cpp
     src/flashlight_service.h
-    src/render_lab.cpp
-    src/render_lab.h
-    src/gpu_scene_geometry.cpp
-    src/gpu_scene_geometry.h
-    src/performance_samples.cpp
-    src/performance_samples.h
+    src/mobile_map_view.cpp
+    src/mobile_map_view.h
+    src/mobile_map_math.h
     src/lifecycle_watchdog.cpp
     src/lifecycle_watchdog.h
 )
@@ -138,7 +135,8 @@ if(ANDROID)
 endif()
 
 target_link_libraries(aowis-mobile PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Positioning Qt6::Sensors
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Positioning Qt6::Sensors Qt6::OpenGL
+    Qt6::Network
 )
 if(ANDROID)
     # NDK ASensorManager / ALooper for the compass (no Qt Sensors involved).
@@ -146,81 +144,78 @@ if(ANDROID)
 endif()
 
 if(AOWIS_MOBILE_WITH_BGFX)
-    # No FetchContent: builds must be reproducible and never download dependencies.
-    # tools/init_bgfx.sh establishes a pinned git submodule (and its nested deps).
-    set(AOWIS_BGFX_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/bgfx.cmake")
-    if(NOT EXISTS "${AOWIS_BGFX_CMAKE_DIR}/CMakeLists.txt" OR
-       NOT EXISTS "${AOWIS_BGFX_CMAKE_DIR}/bgfx/include/bgfx/bgfx.h" OR
-       NOT EXISTS "${AOWIS_BGFX_CMAKE_DIR}/bx/include/bx/bx.h" OR
-       NOT EXISTS "${AOWIS_BGFX_CMAKE_DIR}/bimg/include/bimg/bimg.h")
-        message(FATAL_ERROR
-            "bgfx.cmake and its nested submodules are not initialized.\n"
-            "Run ./git_submodule_init.sh --bgfx and reconfigure, or configure with "
-            "-DAOWIS_MOBILE_WITH_BGFX=OFF for the QML-only baseline.")
-    endif()
-
-    # The Qt Quick scenegraph owns the render thread, therefore bgfx must not
-    # launch a second render thread for this experiment.
-    set(BGFX_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(BGFX_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
-    set(BGFX_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(BGFX_INSTALL OFF CACHE BOOL "" FORCE)
-    set(BGFX_AMALGAMATED ON CACHE BOOL "" FORCE)
-    set(BX_AMALGAMATED ON CACHE BOOL "" FORCE)
-    set(BGFX_CONFIG_MULTITHREADED OFF CACHE BOOL "" FORCE)
-    set(BGFX_CONFIG_VIDEO OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${AOWIS_BGFX_CMAKE_DIR}" "${CMAKE_BINARY_DIR}/bgfx-dependency" EXCLUDE_FROM_ALL)
-    # Use the pinned bgfx sample's already compiled, matched vertex-color
-    # shaders. No shaderc cross-compilation or downloaded shader pack needed.
-    # QRC embeds both GL and GLES variants for Linux + Android deployment.
-    set(AOWIS_BGFX_SHADER_ROOT "${AOWIS_BGFX_CMAKE_DIR}/bgfx/examples/runtime/shaders")
-    set(AOWIS_BGFX_SHADER_FILES
-        "${AOWIS_BGFX_SHADER_ROOT}/glsl/vs_cubes.bin"
-        "${AOWIS_BGFX_SHADER_ROOT}/glsl/fs_cubes.bin"
-        "${AOWIS_BGFX_SHADER_ROOT}/essl/vs_cubes.bin"
-        "${AOWIS_BGFX_SHADER_ROOT}/essl/fs_cubes.bin"
-    )
-    foreach(AOWIS_SHADER IN LISTS AOWIS_BGFX_SHADER_FILES)
-        if(NOT EXISTS "${AOWIS_SHADER}")
-            message(FATAL_ERROR "Missing pinned bgfx example shader: ${AOWIS_SHADER}")
-        endif()
-    endforeach()
-    qt_add_resources(aowis-mobile "aowis_lab_vertex_color_shaders"
-        PREFIX "/aowis_lab/shaders"
-        BASE "${AOWIS_BGFX_SHADER_ROOT}"
-        FILES ${AOWIS_BGFX_SHADER_FILES}
-    )
-    # Shared GPU device lifecycle and view/target ownership. Mobile retains
-    # the pinned bgfx.cmake runtime and its Qt-owned EGL underlay.
-    # Use the pinned submodule by default. Android Docker may explicitly set
-    # AOWIS_RENDER_SOURCE_DIR to its read-only /aowis-render mount.
+    # The whole map stack of AOWIS-GUI-Render: geodesy, map model, imagery
+    # and terrain repositories with the aowis-server-map REST client, the
+    # globe terrain and network scenes and the bgfx map view. Nothing is
+    # fetched: every source is a pinned Git submodule.
     set(AOWIS_RENDER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-GUI-Render"
         CACHE PATH "AOWIS-GUI-Render source checkout (normally the pinned submodule)")
     if(NOT EXISTS "${AOWIS_RENDER_SOURCE_DIR}/CMakeLists.txt")
         message(FATAL_ERROR "AOWIS-GUI-Render missing at ${AOWIS_RENDER_SOURCE_DIR}. "
             "Run ./git_submodule_init.sh --render or initialize the pinned Git submodule.")
     endif()
-    set(AOWIS_RENDER_BUILD_MAP_CORE OFF CACHE BOOL "" FORCE)
+    # bgfx, bx and bimg are Render's own pinned submodules (the GUI builds the
+    # same revisions), so Render's committed shader binaries match. bgfx runs
+    # single-threaded inside Qt Quick's render pass (Render's bgfx build script
+    # sets BGFX_CONFIG_MULTITHREADED=0).
+    foreach(aowis_vendor_header IN ITEMS
+            external/bgfx/include/bgfx/bgfx.h external/bx/include/bx/bx.h
+            external/bimg/include/bimg/bimg.h)
+        if(NOT EXISTS "${AOWIS_RENDER_SOURCE_DIR}/${aowis_vendor_header}")
+            message(FATAL_ERROR
+                "Render's bgfx sources are not initialized (${aowis_vendor_header}).\n"
+                "Run ./git_submodule_init.sh --render and reconfigure, or configure with "
+                "-DAOWIS_MOBILE_WITH_BGFX=OFF for the QML-only baseline.")
+        endif()
+    endforeach()
+    # GeographicLib: Mobile's pinned submodule, built by Render in its own
+    # scope (no Mobile cache switches change). MODEL is Mobile's (added above).
+    set(AOWIS_MOBILE_GEOGRAPHICLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/GeographicLib")
+    if(NOT EXISTS "${AOWIS_MOBILE_GEOGRAPHICLIB_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "GeographicLib missing at ${AOWIS_MOBILE_GEOGRAPHICLIB_DIR}. "
+            "Run ./git_submodule_init.sh --geographiclib.")
+    endif()
+    set(AOWIS_RENDER_GEOGRAPHICLIB_SOURCE_DIR "${AOWIS_MOBILE_GEOGRAPHICLIB_DIR}" CACHE PATH "" FORCE)
+    # Qt Quick's OpenGL scene graph: desktop OpenGL on Linux, OpenGL ES on
+    # Android. Only those shader families are embedded.
+    if(ANDROID)
+        set(AOWIS_BGFX_RENDERERS "OPENGLES" CACHE STRING "" FORCE)
+    else()
+        set(AOWIS_BGFX_RENDERERS "OPENGL" CACHE STRING "" FORCE)
+    endif()
+    set(AOWIS_RENDER_BUILD_DEVICE ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_MAP_CORE ON CACHE BOOL "" FORCE)
     set(AOWIS_RENDER_BUILD_NETWORK_SCENE ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_GLOBE_MODELS ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_GEO ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_TERRAIN_DATA ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_VIEW ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_GLOBE_TERRAIN ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_MAP_DATA ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_MAP_REST ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_GLOBE_NETWORK ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_QT_SURFACE ON CACHE BOOL "" FORCE)
+    set(AOWIS_RENDER_BUILD_MAP ON CACHE BOOL "" FORCE)
+    # Render's CPU regression tests build with Render's own entry points.
+    set(AOWIS_RENDER_BUILD_GEOMETRY_TESTS OFF CACHE BOOL "" FORCE)
     add_subdirectory("${AOWIS_RENDER_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-render" EXCLUDE_FROM_ALL)
-    target_sources(aowis-mobile PRIVATE
-        src/gpu_scene_renderer.cpp src/gpu_scene_renderer.h)
-    target_link_libraries(aowis-mobile PRIVATE AOWIS::RenderDevice AOWIS::RenderGeometry AOWIS::RenderNetwork)
+    target_link_libraries(aowis-mobile PRIVATE
+        AOWIS::RenderMap AOWIS::RenderMapRest AOWIS::RenderGeometry AOWIS::RenderNetwork)
     if(ANDROID)
         # bgfx's EGL backend calls ANativeWindow_setBuffersGeometry. This
         # function is provided by the Android NDK's libandroid, not EGL/GLES.
         target_link_libraries(aowis-mobile PRIVATE android)
     endif()
-    target_compile_definitions(aowis-mobile PRIVATE AOWIS_LAB_WITH_BGFX=1)
+    target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_MAP=1)
 else()
-    target_compile_definitions(aowis-mobile PRIVATE AOWIS_LAB_WITH_BGFX=0)
+    target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_MAP=0)
 endif()
 
-# The experiment uses native OpenGL/EGL context access. It is deliberately
-# limited to Linux and Android: support for other hosts needs its own adapter.
+# The map borrows Qt Quick's EGL context. It is limited to Linux and
+# Android: other hosts need their own context adapter.
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
     if(AOWIS_MOBILE_WITH_BGFX)
-        message(FATAL_ERROR "bgfx direct-underlay lab currently targets Linux and Android only")
+        message(FATAL_ERROR "The Qt Quick map currently targets Linux and Android only")
     endif()
 endif()
 
@@ -242,7 +237,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
         RENAME org.aowis.mobile.png)
 endif()
 
-# Pure C++ geometry/camera test: no bgfx, Qt, or GPU context required.
 include(CTest)
 if(BUILD_TESTING)
     # Desktop safety regression: a missing hardware torch must never report ON.
@@ -267,18 +261,12 @@ if(BUILD_TESTING)
         add_test(NAME aowis-mobile-shared-render-network-input
             COMMAND aowis-mobile-shared-render-network-input-tests)
     endif()
-    add_executable(aowis-mobile-gpu-scene-tests
-        tests/gpu_scene_geometry_tests.cpp
-        src/gpu_scene_geometry.cpp
-        src/performance_samples.cpp
-    )
-    add_test(NAME aowis-mobile-gpu-scene COMMAND aowis-mobile-gpu-scene-tests)
-    add_executable(aowis-mobile-gpu-stress-tests
-        tests/gpu_scene_stress_tests.cpp
-        src/gpu_scene_geometry.cpp
-        src/performance_samples.cpp
-    )
-    add_test(NAME aowis-mobile-gpu-stress COMMAND aowis-mobile-gpu-stress-tests)
+    # Scale bar and gesture geometry of the map item: no GPU, no Render.
+    add_executable(aowis-mobile-map-math-tests
+        tests/mobile_map_math_tests.cpp src/mobile_map_math.h)
+    target_include_directories(aowis-mobile-map-math-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-map-math-tests PRIVATE Qt6::Core)
+    add_test(NAME aowis-mobile-map-math COMMAND aowis-mobile-map-math-tests)
     add_executable(aowis-mobile-compass-heading-tests
         tests/compass_heading_tests.cpp src/compass_heading.h src/compass_heading_filter.h src/compass_fusion.h)
     target_include_directories(aowis-mobile-compass-heading-tests PRIVATE src)

@@ -15,7 +15,7 @@ help with USB permissions. The Android debug package is `org.aowis.mobile`
 and its visible launcher label is **AOWIS**.
 
 ```bash
-./tools/init_bgfx.sh           # first checkout only
+./git_submodule_init.sh        # Render with its pinned bgfx, GeographicLib, MODEL
 ./compile_android.sh          # build and deploy if one authorized device exists
 ./compile_android.sh --build-only
 ./compile_android.sh --devices
@@ -87,27 +87,17 @@ intentionally do not enable legacy unauthenticated `adb tcpip 5555`.
 
 ## Current device-tested behavior
 
-The synthetic bgfx grid, colored network lines and junctions appear under QML
-on a physical Android phone, matching the Linux scene. Basic map gestures
-have been reported working. **Initial 15-second workload recordings were supplied for
-Linux and Android; comprehensive lifecycle and sustained stress acceptance
-remain open.** Do not interpret successful APK compilation as
-proof of rotation/resume behavior.
-
-## Automatic benchmark collection
-
-After capturing scenes on Linux and Android with **Record 15s**, run
-`./benchmark.sh` once. It pulls all Android reports via ADB, includes Linux
-reports, gathers lifecycle logs when present and refreshes `mobile.zip`.
-Android USB and paired Wi-Fi devices are both supported; no manual
-`adb run-as` extraction or root is necessary. See
-[renderer benchmark collection](renderer-lab.md#automatic-collection-for-review).
+The bgfx underlay in Qt's EGL context (the former synthetic test map) has been
+exercised on a physical Android phone and on Linux. The AOWIS map that
+replaces it uses the same integration ([the map](map.md)) and still needs
+device testing. Do not interpret successful APK compilation as proof of
+rotation/resume behavior.
 
 ## Android lifecycle recovery testing (harness implemented; device results pending)
 
 After installing the latest debug APK (`./compile_android.sh --run`),
-select **~100k** or **~1M** in the app and move its camera away from the
-initial position. Then run the non-destructive, repeatable ADB test:
+configure a map server, let imagery and terrain load and move the camera
+away from the initial position. Then run the non-destructive, repeatable ADB test:
 
 ```bash
 ./tools/test_android_lifecycle.sh --cycles 12
@@ -130,11 +120,9 @@ stalled and late recoveries, the slowest observed recovery and any scene-graph
 invalidation without a current OpenGL context. It records each event to
 private app storage immediately, rather than keeping only in-memory counters.
 
-Tap **Recreate GPU resources (test)** in the scrolled Metrics panel to force
-bgfx shutdown/reinitialization on Qt's current render thread without restarting
-the application. Do this repeatedly in each stress preset. This validates GPU
-resource teardown/recreation **with a valid context**, not a genuine Android
-EGL_CONTEXT_LOST event. Compare `bgfx inits` and the recovery report.
+Explicit GPU resource recreation is not offered by the map; scene-graph
+invalidation on backgrounding (persistent scene graph and graphics are off on
+Android) exercises the same teardown and re-initialization.
 
 A recovery timeout is recorded after **five seconds while the application is
 active and its window exposed**. Screen-off/background intervals are not
@@ -168,37 +156,22 @@ changed. **A test that never caused resource recreation cannot prove context
 recovery.** Missing functionality or difficult-to-force context loss should
 remain an explicit open test.
 
-## Acceptance protocol: performance (HARNESS READY; RESULTS PENDING)
+## Acceptance protocol: map performance (RESULTS PENDING)
 
-Select Demo/~1k/~10k/~100k/~1M in the top bar. Wait until tile uploads settle
-then tap **Record 15s** for a per-frame CSV and p50/p95/p99 frame intervals.
-Presets describe total model features (nodes + pipes), whereas the UI reports
-currently visible sampled nodes/pipes, LOD and tile count. The private CSV
-location appears in the results and logcat. Use `adb shell run-as org.aowis.mobile`
-for debug-package retrieval where supported; no extra Android permission is
-needed.
-
-Run the same geometry size and script of
-pan/zoom interactions on Linux and Android. Record frame interval median,
-p95/p99 and inferred frame misses relative to the device refresh period; app CPU, bgfx GPU timing if valid, RSS, GPU
-resource sizes, draw calls, startup and sustained/thermal behavior. Compare a
-cold run and a warmed-up run. State visible-object count and whether culling
-is active. Record platform display refresh rate and resolution.
-
-Do not claim that the current QML-only Canvas is a fair performance baseline
-for a large vertex-buffer network. Compare rendering strategies only with
-similar geometry, visual output and input workloads.
+With a configured map server, pan and zoom the same route in 2D and on the
+globe on Linux and Android, cold and with warm tile caches. Record frame
+smoothness against the display refresh, memory (`dumpsys meminfo`), startup
+and sustained/thermal behaviour, and the device, refresh rate and resolution.
 
 ## Diagnostics
 
 ```bash
-adb logcat -v time | grep --line-buffered -E 'AOWIS lifecycle:|AOWIS render lab|AOWIS Mobile benchmark'
+adb logcat -v time | grep --line-buffered -E 'AOWIS lifecycle:|AOWIS map|bgfx map'
 adb devices -l
 ```
 
-The log message prefix retains `render lab` as an **internal diagnostic
-identifier**. It is not the app name. Look at `bgfx frames`, `frame interval`,
-`bgfx inits`, and `Scenegraph inits/releases` in the on-screen status panel.
+Diagnostics shows the map renderer, the map server status, map frames,
+bgfx initializations and scene-graph inits/releases.
 Capture full logcat if the app crashes; a filtered log alone may miss EGL,
 Android or driver errors.
 

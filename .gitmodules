@@ -1,6 +1,3 @@
-[submodule "external/bgfx.cmake"]
-	path = external/bgfx.cmake
-	url = https://github.com/bkaradzic/bgfx.cmake.git
 [submodule "external/AOWIS-GUI-Render"]
 	path = external/AOWIS-GUI-Render
 	url = https://github.com/aowis-org/AOWIS-GUI-Render.git

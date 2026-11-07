@@ -60,8 +60,8 @@ Qt Quick/QML, not a QWidget desktop port.
 ## Implemented navigation and server configuration
 
 The map fills the app window with a small hamburger button in the **top-right**;
-the navigation drawer opens from the **right**. The previous permanent metrics
-and workload controls have moved to **Diagnostics** in the menu.
+the navigation drawer opens from the **right**. Map renderer and server status
+are under **Diagnostics** in the menu.
 
 The drawer lists **Map**, then **Settings**, followed by a separator and a
 2×2 grid of **Compass**, **Gradienter**, **Plumb Bob**, and **Flashlight**.
@@ -106,17 +106,19 @@ is implemented in Mobile yet. Saving does not imply that the server is online.
 
 ## Current implementation boundary
 
-The **existing** grid, colored segments and junctions are synthetic graphics
-for GPU integration tests. None represent captured sites or hydraulic assets.
+The **Map view** shows the AOWIS map shared with the desktop GUI: imagery
+in 2D and the 3D globe with terrain, from the aowis-server-map configured in
+Settings, with touch navigation and the map HUD. It contains no captured
+sites or hydraulic assets yet. See [the map](map.md).
+
 A magnetic Compass page is available from the hamburger menu. It shows a
-vector compass rose, magnetic bearing and calibration status using Qt Sensors;
-it does not rely on GPS course-over-ground or the shared map renderer.
+vector compass rose, magnetic bearing and calibration status from the AOWIS
+Android NDK sensor fusion, not GPS course-over-ground.
 
 Foreground-only GPS/location permissions and a live position readout are
-implemented; no position-to-map projection, survey forms, offline DB, maps or
-sync exist yet.
-The rendering foundation has been exercised on Linux and Android. See
-[renderer integration](renderer-lab.md) and [roadmap](roadmap.md).
+implemented; the map shows the device position, but survey forms, an offline
+DB and sync do not exist yet.
+See [the map](map.md) and [roadmap](roadmap.md).
 
 A first useful survey release should allow GPS/manual points, lines and areas,
 classification, reliable local observation saving and offline basemaps. Direct

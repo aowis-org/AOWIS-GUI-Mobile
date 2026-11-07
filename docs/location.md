@@ -28,12 +28,11 @@ vertical-datum conversion or guarantee of survey-grade accuracy is made.
 
 A small status pill is visible at the bottom-left of the map while the map
 is open, showing acquisition, accuracy or permission/provider errors. Tapping
-it opens Settings. The current map is synthetic
-and has no geographic camera projection, so this version deliberately **does
-not place a potentially misleading location marker on that scene**.
+it opens Settings. The map has a centre-on-location button that moves the
+camera to the current fix; a rendered position marker is not drawn yet.
 
 Location coordinates are kept **in memory only**. They are neither saved to
-QSettings nor uploaded to the map server, included in benchmark captures, or
+QSettings nor uploaded to the map server, included in lifecycle diagnostics, or
 written to the Mobile source snapshot. This service does not record GPS tracks
 or survey observations yet.
 
