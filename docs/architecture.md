@@ -17,9 +17,9 @@ Render's nested `external/bgfx`, `external/bx` and `external/bimg` (the
 revisions the desktop GUI builds) are the only bgfx sources.
 
 The renderer-independent `LocationService` uses Qt Positioning and runtime
-`QLocationPermission` for automatically started foreground positioning; `LocationSnapshot`
+`QLocationPermission` for user-controlled foreground positioning; `LocationSnapshot`
 validates the fields returned by providers. It never persists or transfers
-coordinates. The QML Settings panel and compact status pill consume its
+coordinates. The QML Settings panel and map menu consume its
 reactive properties.
 
 `UnitProfileSettings` is another renderer-independent Qt adapter. It uses the

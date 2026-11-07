@@ -6,9 +6,9 @@ Mobile uses Qt 6 Positioning (`QGeoPositionInfoSource`) and Qt's foreground-only
 `QLocationPermission`. The backend may return GNSS, Wi-Fi or cellular location:
 **a valid phone position is not necessarily a satellite-only GPS fix.**
 
-Location acquisition **starts automatically whenever AOWIS is in the foreground**,
-including on first launch and after app restarts. There is no in-app enable/stop
-toggle. Android requests foreground location permission when needed; the user
+GPS defaults to on. The top-left map menu can stop or restart foreground
+acquisition. The app remembers the GPS switch and auto-pan preference across
+restarts. Turning GPS off drops the last fix and hides the marker. Android requests foreground location permission when needed; the user
 can grant precise/approximate access or deny it. The operating system remains
 in charge of access. The app declares `ACCESS_FINE_LOCATION` and
 `ACCESS_COARSE_LOCATION` but **not** background location. If access is denied,
@@ -26,10 +26,11 @@ speed and heading. Unknown metrics are shown as **unavailable**, never as
 fabricated zero. Heights are shown as reported by the active provider; no
 vertical-datum conversion or guarantee of survey-grade accuracy is made.
 
-A small status pill is visible at the bottom-left of the map while the map
-is open, showing acquisition, accuracy or permission/provider errors. Tapping
-it opens Settings. The map has a centre-on-location button that moves the
-camera to the current fix; a rendered position marker is not drawn yet.
+The map menu shows acquisition status and horizontal accuracy beside the GPS
+switch. A blue marker shows the current fix in 2D and on the globe. A gray
+marker indicates the last known position. With GPS on, **Keep GPS marker
+centered** follows fresh fixes at the current zoom. The location button
+re-centres the camera on demand.
 
 Location coordinates are kept **in memory only**. They are neither saved to
 QSettings nor uploaded to the map server, included in lifecycle diagnostics, or
@@ -59,7 +60,7 @@ foreground access at launch (without a separate Enable action). Grant precise
 or approximate access; wait outdoors for a fix, check coordinate changes and
 reported accuracy. Background/resume the app and verify that it requests fresh
 updates rather than representing an old fix as current. Restart AOWIS: location
-must acquire automatically again. Revoke permission in Android Settings and
+uses the saved GPS setting. Switch GPS off, restart and confirm that acquisition stays off. Revoke permission in Android Settings and
 verify a clear status without a crash; returning from Settings should recheck
 permissions. If a receiver is unavailable, the app should show a provider
 status rather than fake coordinates.
@@ -70,9 +71,6 @@ verification.
 
 ## Future integration
 
-- After shared geographic map rendering exists, transform valid WGS84
-  latitude/longitude into the actual map camera and draw a position/accuracy
-  indication, with source timestamp and accuracy.
 - Survey points and traces will require explicit user saving into a durable
   observation store; never silently persist continuously collected location.
 - Future external GNSS/RTK support will need a documented provenance and

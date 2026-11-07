@@ -14,9 +14,41 @@ constexpr int kRequestedUpdateIntervalMilliseconds = 2000;
 LocationService::LocationService(QObject *parent)
     : QObject(parent)
 {
+    this->m_enabled = this->m_settings.value(QStringLiteral("gps/enabled"), true).toBool();
+    this->m_follow = this->m_settings.value(QStringLiteral("gps/follow"), false).toBool();
     this->m_clock.start();
     this->m_ageTimer.setInterval(1000);
     connect(&this->m_ageTimer, &QTimer::timeout, this, &LocationService::updateFixAge);
+}
+
+bool LocationService::enabled() const { return this->m_enabled; }
+bool LocationService::follow() const { return this->m_follow; }
+
+void LocationService::setEnabled(bool enabled)
+{
+    if (this->m_enabled == enabled)
+        return;
+    this->m_enabled = enabled;
+    this->m_settings.setValue(QStringLiteral("gps/enabled"), enabled);
+    if (enabled)
+        startIfAllowed();
+    else
+    {
+        stopSource();
+        this->m_fix = LocationSnapshot();
+        this->m_fixClockMs = -1;
+        this->m_state = State::Paused;
+    }
+    emit changed();
+}
+
+void LocationService::setFollow(bool follow)
+{
+    if (this->m_follow == follow)
+        return;
+    this->m_follow = follow;
+    this->m_settings.setValue(QStringLiteral("gps/follow"), follow);
+    emit changed();
 }
 
 bool LocationService::hasFix() const { return this->m_fix.valid; }
@@ -36,6 +68,8 @@ bool LocationService::providerUnavailable() const
 
 QString LocationService::status() const
 {
+    if (!this->m_enabled)
+        return tr("GPS off");
     switch (this->m_state)
     {
     case State::Paused: return tr("Paused while app is in background");
@@ -96,7 +130,7 @@ void LocationService::setApplicationActive(bool active)
 
 void LocationService::startIfAllowed()
 {
-    if (!this->m_applicationActive)
+    if (!this->m_enabled || !this->m_applicationActive)
         return;
     if (this->m_permissionPending)
     {
@@ -129,7 +163,7 @@ void LocationService::startIfAllowed()
 void LocationService::handlePermissionResult(const QPermission &permission)
 {
     this->m_permissionPending = false;
-    if (!this->m_applicationActive)
+    if (!this->m_enabled || !this->m_applicationActive)
         return;
     if (permission.status() != Qt::PermissionStatus::Granted)
     {
@@ -154,7 +188,7 @@ void LocationService::startSource()
                 this, &LocationService::applyPosition);
         connect(this->m_source, &QGeoPositionInfoSource::errorOccurred, this,
             [this](QGeoPositionInfoSource::Error error) {
-                if (!this->m_applicationActive ||
+                if (!this->m_enabled || !this->m_applicationActive ||
                     error == QGeoPositionInfoSource::NoError)
                     return;
                 if (error == QGeoPositionInfoSource::AccessError)
@@ -179,7 +213,7 @@ void LocationService::startSource()
 
 void LocationService::applyPosition(const QGeoPositionInfo &position)
 {
-    if (!this->m_applicationActive)
+    if (!this->m_enabled || !this->m_applicationActive)
         return;
     const LocationSnapshot snapshot = LocationSnapshot::fromPosition(position);
     if (!snapshot.valid)
@@ -194,7 +228,7 @@ void LocationService::applyPosition(const QGeoPositionInfo &position)
 
 void LocationService::updateFixAge()
 {
-    if (!this->m_applicationActive)
+    if (!this->m_enabled || !this->m_applicationActive)
         return;
     if (this->m_fix.valid && this->m_state == State::Tracking &&
         this->m_clock.elapsed() - this->m_fixClockMs > kStaleAfterMilliseconds)

@@ -53,15 +53,16 @@ Settings. Diagnostics → **Reload map server** reconnects.
 | Two fingers up / down | Pan | Tilt |
 | Right mouse drag | — | Orbit |
 
-Tap the folded-map icon beside the navigation menu to select an enabled imagery
+Tap the folded-map icon at the top left to select an enabled imagery
 provider, switch between 2D and 3D, or zoom. In 3D the same menu offers
 wireframe and hillshade. Drags and
 pinches elsewhere go directly to map navigation. Mobile disables the
 renderer HUD, including its crosshair, scale bar and device-position marker.
 
 The camera is saved when the app goes to the background and restored on the
-next start. Without a saved camera the map shows Central Europe and moves to
-the first location fix once; the location button re-centres it.
+next start. Without a saved camera the map opens on Central Europe. Enable
+**Keep GPS marker centered** in the map menu to follow fresh fixes at the
+current zoom. The location button also re-centres the map on demand.
 
 ## Lifecycle diagnostics
 

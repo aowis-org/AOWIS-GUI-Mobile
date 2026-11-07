@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPermissions>
 #include <QTimer>
+#include <QSettings>
 
 class QGeoPositionInfoSource;
 
@@ -14,6 +15,8 @@ class QGeoPositionInfoSource;
 class LocationService final : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY changed)
+    Q_PROPERTY(bool follow READ follow WRITE setFollow NOTIFY changed)
     Q_PROPERTY(bool hasFix READ hasFix NOTIFY changed)
     Q_PROPERTY(bool fresh READ fresh NOTIFY changed)
     Q_PROPERTY(bool permissionDenied READ permissionDenied NOTIFY changed)
@@ -33,6 +36,10 @@ class LocationService final : public QObject
 public:
     explicit LocationService(QObject *parent = nullptr);
 
+    bool enabled() const;
+    void setEnabled(bool enabled);
+    bool follow() const;
+    void setFollow(bool follow);
     bool hasFix() const;
     bool fresh() const;
     bool permissionDenied() const;
@@ -72,6 +79,10 @@ private:
     LocationSnapshot m_fix;
     qint64 m_fixClockMs = -1;
     State m_state = State::Paused;
+    QSettings m_settings{QSettings::NativeFormat, QSettings::UserScope,
+                         QStringLiteral("AOWIS"), QStringLiteral("AOWIS-GUI-Mobile")};
+    bool m_enabled = true;
+    bool m_follow = false;
     bool m_applicationActive = false;
     bool m_permissionPending = false;
 };

@@ -19,9 +19,8 @@ orbits the globe on desktop.
 
 Imagery tiles, terrain and the imagery provider catalog come from the
 **aowis-server-map** configured under **Settings → Map server** (HTTP/HTTPS
-URL and port); changing it reconnects at once. The map follows the first
-location fix once (unless the last session's camera was restored); the
-location button re-centres it. See [the map](docs/map.md).
+URL and port); changing it reconnects at once. The top-left map menu controls GPS acquisition and optional auto-pan.
+The location button re-centres the map on demand. See [the map](docs/map.md).
 
 The hamburger menu opens **Settings → Appearance** (system/dark/light theme),
 **Settings → Language** (English, Français, العربية, Deutsch, Español; live

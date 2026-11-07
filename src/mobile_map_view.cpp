@@ -8,6 +8,7 @@
 #include "lifecycle_watchdog.h"
 #include "mobile_map_math.h"
 
+#include "map/bgfx/map_bgfx_2d_projection.h"
 #include "map/bgfx/map_bgfx_map_view.h"
 #include "map/core/map_model.h"
 #include "map/core/map_provider_catalog.h"
@@ -127,6 +128,18 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QString render_problem;
     QString server_status;
     bool saved_camera = false;
+
+    bool has_marker = false;
+    bool marker_fresh = false;
+    QPointF marker_coordinate;
+
+    void drawMarker(MapBgfxHudCanvas *canvas, MapBgfxHudTextCache *cache, double x, double y) const
+    {
+        canvas->setWhiteTexel(cache->whiteU(), cache->whiteV());
+        canvas->fillCircle(x, y, 8.0, 0xff263544u);
+        canvas->fillCircle(x, y, 7.0, 0xffffffffu);
+        canvas->fillCircle(x, y, 5.0, this->marker_fresh ? 0xff007bc2u : 0xff77838bu);
+    }
 
     // Gestures.
     enum class Pointer { None, Pan, Orbit };
@@ -788,6 +801,47 @@ void MobileMapView::centerOn(double longitude_deg, double latitude_deg, double z
     this->impl->model.setCenter(longitude_deg, latitude_deg, size);
 }
 
+void MobileMapView::setLocationMarker(bool valid, double longitude, double latitude, bool fresh)
+{
+    const QPointF coordinate(longitude, latitude);
+    if (this->impl->has_marker == valid &&
+        (!valid || (this->impl->marker_coordinate == coordinate && this->impl->marker_fresh == fresh)))
+        return;
+    const bool had_marker = this->impl->has_marker;
+    this->impl->has_marker = valid;
+    this->impl->marker_coordinate = coordinate;
+    this->impl->marker_fresh = fresh;
+    if (!valid)
+    {
+        this->impl->view->setOverlayBuilder({});
+        this->impl->view->setGlobeOverlayBuilder({});
+    }
+    else if (!had_marker)
+    {
+        this->impl->view->setOverlayBuilder([this](MapBgfxHudCanvas *canvas, MapBgfxHudTextCache *cache,
+            const MapBgfx2d::Camera &camera, const QSizeF &)
+        {
+            canvas->clear();
+            const QPointF coord = this->impl->marker_coordinate;
+            const MapBgfx2d::ScreenPoint point = MapBgfx2d::screenFromWorld(camera,
+                MapBgfx2d::worldFromWgs84(coord.x(), coord.y()));
+            this->impl->drawMarker(canvas, cache, point.x, point.y);
+            return QPointF();
+        });
+        this->impl->view->setGlobeOverlayBuilder([this](MapBgfxHudCanvas *canvas, MapBgfxHudTextCache *cache,
+            const MapBgfxMapView::GlobeProjector &project, const MapBgfxMapView::GlobeElevatedProjector &,
+            const QSizeF &, const MapBgfxGlobeIconIndex::Frustum &)
+        {
+            canvas->clear();
+            const QPointF coord = this->impl->marker_coordinate;
+            QPointF point;
+            if (project(coord.x(), coord.y(), &point, nullptr))
+                this->impl->drawMarker(canvas, cache, point.x(), point.y());
+        });
+    }
+    this->impl->view->requestRedraw();
+}
+
 bool MobileMapView::globeAvailable() const
 {
     return this->impl->view->globeAvailable();
@@ -1007,6 +1061,7 @@ bool MobileMapView::wireframe() const { return false; }
 void MobileMapView::setWireframe(bool) {}
 bool MobileMapView::hillshade() const { return false; }
 void MobileMapView::setHillshade(bool) {}
+void MobileMapView::setLocationMarker(bool, double, double, bool) {}
 void MobileMapView::setGlobe(bool) {}
 void MobileMapView::zoomBy(double) {}
 void MobileMapView::reloadServer() {}

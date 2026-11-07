@@ -31,9 +31,6 @@ Window {
     readonly property color uiError: darkTheme ? "#ffb7ad" : "#ab2730"
 
     property string activePage: "map"
-    // The map follows the first location fix once, unless the last
-    // session's camera was restored.
-    property bool mapCenteredOnLocation: false
     onActivePageChanged: {
         compassService.setPageVisible(activePage === "compass")
         gradienterService.setPageVisible(activePage === "gradienter")
@@ -86,15 +83,18 @@ Window {
         onActivated: root.navigateBack()
     }
     function followLocation() {
-        if (!root.mapCenteredOnLocation && locationService.fresh) {
-            root.mapCenteredOnLocation = true
-            if (!mapView.savedCamera)
-                mapView.centerOn(locationService.longitude, locationService.latitude, 16)
-        }
+        if (root.activePage === "map" && locationService.enabled &&
+            locationService.follow && locationService.fresh)
+            mapView.centerOn(locationService.longitude, locationService.latitude, NaN)
+    }
+    function updateLocation() {
+        mapView.setLocationMarker(locationService.enabled && locationService.hasFix,
+            locationService.longitude, locationService.latitude, locationService.fresh)
+        root.followLocation()
     }
     Connections {
         target: locationService
-        function onChanged() { root.followLocation() }
+        function onChanged() { root.updateLocation() }
     }
 
     // The AOWIS map (imagery and terrain from the configured aowis-server-map)
@@ -102,6 +102,9 @@ Window {
     // mouse input. Hidden pages are opaque, so it is only drawn on Map.
     MapView {
         id: mapView
+        Component.onCompleted: root.updateLocation()
+        onCameraChanged: if (locationService.follow && locationService.fresh) Qt.callLater(root.followLocation)
+        onVisibleChanged: if (visible) Qt.callLater(root.followLocation)
         anchors.fill: parent
         visible: root.activePage === "map"
         enabled: root.activePage === "map" && !navigationDrawer.opened
@@ -113,8 +116,8 @@ Window {
     Button {
         visible: root.activePage === "map" && !mapServerSettings.configured
         anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: mapMenuButton.visible ? mapMenuButton.left : hamburgerButton.left
+        anchors.left: mapMenuButton.visible ? mapMenuButton.right : parent.left
+        anchors.right: hamburgerButton.left
         anchors.margins: 14
         height: 52
         z: 2
@@ -138,8 +141,8 @@ Window {
     Button {
         id: mapMenuButton
         visible: root.activePage === "map" && mapView.rendererAvailable
-        anchors.right: hamburgerButton.left
-        anchors.rightMargin: 8
+        anchors.left: parent.left
+        anchors.leftMargin: 14
         anchors.top: hamburgerButton.top
         width: hamburgerButton.width
         height: hamburgerButton.height
@@ -169,7 +172,7 @@ Window {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: Math.min(292, root.width - 28)
-        x: Math.max(14, mapMenuButton.x + mapMenuButton.width - width)
+        x: mapMenuButton.x
         y: mapMenuButton.y + mapMenuButton.height + 6
         padding: 10
         height: Math.min(mapOptions.implicitHeight + 2 * padding, root.height - y - 8)
@@ -193,6 +196,27 @@ Window {
                 id: mapOptions
                 width: mapMenuScroll.availableWidth
                 spacing: 6
+                Switch {
+                    text: qsTr("GPS")
+                    checked: locationService.enabled
+                    onToggled: locationService.enabled = checked
+                }
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: root.uiMuted
+                    text: locationService.fresh
+                        ? (locationService.horizontalAccuracyMeters >= 0
+                           ? qsTr("Location ±%1 m").arg(Math.round(locationService.horizontalAccuracyMeters))
+                           : qsTr("Location (accuracy unavailable)"))
+                        : locationService.status
+                }
+                CheckBox {
+                    visible: locationService.enabled
+                    text: qsTr("Keep GPS marker centered")
+                    checked: locationService.follow
+                    onToggled: locationService.follow = checked
+                }
                 Label { text: qsTr("Map provider"); color: root.uiText }
                 ComboBox {
                     model: mapView.providers
@@ -292,43 +316,6 @@ Window {
         }
         onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)
         Accessible.name: qsTr("Center the map on my location")
-    }
-
-    // Location tracking starts automatically in the foreground.
-    Button {
-        id: locationChip
-        visible: root.activePage === "map"
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.margins: 14
-        width: Math.min(root.width - 94, Math.max(168, locationChipText.implicitWidth + 28))
-        height: 44
-        z: 1
-        onClicked: root.openPage("settings")
-        contentItem: Text {
-            id: locationChipText
-            color: root.uiText
-            text: locationService.fresh
-                  ? (locationService.horizontalAccuracyMeters >= 0
-                     ? qsTr("Location ±%1 m").arg(Math.round(locationService.horizontalAccuracyMeters))
-                     : qsTr("Location (accuracy unavailable)"))
-                  : locationService.permissionDenied
-                    ? qsTr("Location: permission required")
-                    : locationService.providerUnavailable
-                      ? qsTr("Location: unavailable")
-                      : locationService.hasFix ? qsTr("Location: last fix") : qsTr("Location: searching")
-            font.pixelSize: 13
-            font.bold: true
-            elide: Text.ElideRight
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: 11
-            color: root.uiRaised
-            border.color: locationService.fresh ? root.uiAccent : root.uiBorder
-        }
-        Accessible.name: qsTr("Location status; open Settings")
     }
 
     // Settings is a full page instead of a permanent panel over the map.

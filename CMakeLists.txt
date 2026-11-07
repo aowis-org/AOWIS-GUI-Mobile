@@ -284,6 +284,12 @@ if(BUILD_TESTING)
     target_include_directories(aowis-mobile-location-snapshot-tests PRIVATE src)
     target_link_libraries(aowis-mobile-location-snapshot-tests PRIVATE Qt6::Core Qt6::Positioning)
     add_test(NAME aowis-mobile-location-snapshot COMMAND aowis-mobile-location-snapshot-tests)
+    add_executable(aowis-mobile-gps-switch-tests
+        tests/gps_switch_tests.cpp src/location_service.cpp src/location_service.h
+        src/location_snapshot.cpp src/location_snapshot.h)
+    target_include_directories(aowis-mobile-gps-switch-tests PRIVATE src)
+    target_link_libraries(aowis-mobile-gps-switch-tests PRIVATE Qt6::Core Qt6::Positioning)
+    add_test(NAME aowis-mobile-gps-switch COMMAND aowis-mobile-gps-switch-tests)
     add_executable(aowis-mobile-map-server-settings-tests
         tests/map_server_settings_tests.cpp src/map_server_settings.cpp src/map_server_settings.h)
     target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)

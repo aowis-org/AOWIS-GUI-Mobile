@@ -18,7 +18,7 @@ checks = {
         'setApplicationActive(active)' in main and 'startIfAllowed();' in source and
         'QLocationPermission::WhenInUse' in source and
         'requestPermission(permission, this,' in source and
-        'setEnabled(bool enabled)' not in source,
+        'if (!this->m_enabled || !this->m_applicationActive)' in source,
     'background pauses provider and foreground resumes':
         'this->m_source->stopUpdates();' in source and 'State::Paused' in source and
         'setApplicationActive' in main,
@@ -26,10 +26,14 @@ checks = {
         'kStaleAfterMilliseconds' in source and 'LocationSnapshot::fromPosition' in source and
         (root/'src/location_snapshot.cpp').is_file(),
     'no persistence / network transfer of coordinates':
-        'QSettings' not in source and 'QSaveFile' not in source and
+        set(line.strip() for line in source.splitlines() if '.setValue(' in line) == {
+            'this->m_settings.setValue(QStringLiteral("gps/enabled"), enabled);',
+            'this->m_settings.setValue(QStringLiteral("gps/follow"), follow);'} and 'QSaveFile' not in source and
         'QNetworkAccessManager' not in source,
-    'map compact chip and settings display':
-        'id: locationChip' in qml and 'locationService.setEnabled' not in qml and
+    'map menu GPS control, follow, marker and settings display':
+        'id: locationChip' not in qml and 'locationService.enabled = checked' in qml and
+        'locationService.follow = checked' in qml and 'mapView.setLocationMarker(' in qml and
+        'locationService.follow && locationService.fresh' in qml and
         'locationService.latitude.toFixed(6)' in qml and 'locationService.altitudeAvailable' in qml and
         'visible: root.activePage === "map"' in qml,
     'pinned Android module addon':
