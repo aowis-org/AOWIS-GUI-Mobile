@@ -7,6 +7,7 @@
 
 #include "lifecycle_watchdog.h"
 #include "mobile_map_math.h"
+#include "compass_heading.h"
 
 #include "map/bgfx/map_bgfx_2d_projection.h"
 #include "map/bgfx/map_bgfx_map_view.h"
@@ -1117,14 +1118,18 @@ void MobileMapView::setLookAround(bool enabled)
     emit lookAroundChanged();
 }
 
-void MobileMapView::setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg)
+void MobileMapView::setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg, double declination_deg)
 {
     if (!lookAround() || pose.isNull())
         return;
     MapGlobeEyePose camera = *this->impl->model.globeEyePose();
     // Screen-top in native device coordinates is (sin(rotation), cos(rotation), 0).
     const QQuaternion screen_to_device = QQuaternion::fromAxisAndAngle(0, 0, 1, -screen_rotation_deg);
-    camera.orientation = (this->impl->eye_enu_to_ecef * pose * screen_to_device).normalized();
+    // East-positive declination turns magnetic north toward east. ENU's
+    // positive rotation about Up turns north toward west.
+    const QQuaternion magnetic_to_true = std::isfinite(declination_deg)
+        ? QQuaternion::fromAxisAndAngle(0, 0, 1, -declination_deg) : QQuaternion();
+    camera.orientation = (this->impl->eye_enu_to_ecef * magnetic_to_true * pose * screen_to_device).normalized();
     this->impl->model.setGlobeEyePose(camera);
 }
 
@@ -1134,6 +1139,10 @@ double MobileMapView::northAngle() const
     {
         const QQuaternion screen_to_enu = this->impl->eye_enu_to_ecef.conjugated()
             * this->impl->model.globeEyePose()->orientation;
+        const double bearing_deg = AowisCompass::headingFromRotationVector(
+            screen_to_enu.x(), screen_to_enu.y(), screen_to_enu.z(), screen_to_enu.scalar(), 0);
+        if (bearing_deg >= 0.0)
+            return -bearing_deg;
         QVector3D bearing = screen_to_enu.rotatedVector(QVector3D(0, 0, -1));
         if (std::hypot(bearing.x(), bearing.y()) < 0.001)
             bearing = screen_to_enu.rotatedVector(QVector3D(0, 1, 0));
@@ -1339,7 +1348,7 @@ void MobileMapView::setLocationMarker(bool, double, double, bool, bool) {}
 void MobileMapView::setGlobe(bool) {}
 bool MobileMapView::lookAround() const { return false; }
 void MobileMapView::setLookAround(bool) {}
-void MobileMapView::setDeviceOrientation(const QQuaternion &, int) {}
+void MobileMapView::setDeviceOrientation(const QQuaternion &, int, double) {}
 double MobileMapView::northAngle() const { return 0.0; }
 void MobileMapView::faceNorth() {}
 void MobileMapView::zoomBy(double) {}

@@ -33,6 +33,11 @@ int main(int argc, char **argv)
     sample.setAttribute(QGeoPositionInfo::VerticalAccuracy, 14.5);
     sample.setAttribute(QGeoPositionInfo::GroundSpeed, 2.5);
     sample.setAttribute(QGeoPositionInfo::Direction, 275.0);
+    for (double variation : {-13.5, 0.0, 8.0})
+    {
+        sample.setAttribute(QGeoPositionInfo::MagneticVariation, variation);
+        CHECK(LocationSnapshot::fromPosition(sample).declinationDegrees == variation);
+    }
     const LocationSnapshot fix = LocationSnapshot::fromPosition(sample);
     CHECK(fix.valid);
     CHECK(std::abs(fix.latitude - 50.822345) < 0.00000001);
@@ -48,6 +53,9 @@ int main(int argc, char **argv)
     const QGeoPositionInfo bare(QGeoCoordinate(-33.0, 151.0), timestamp);
     const LocationSnapshot noOptional = LocationSnapshot::fromPosition(bare);
     CHECK(noOptional.valid);
+#ifndef Q_OS_ANDROID
+    CHECK(std::isnan(noOptional.declinationDegrees));
+#endif
     CHECK(!noOptional.altitudeAvailable);
     CHECK(noOptional.horizontalAccuracyMeters == -1.0);
     CHECK(noOptional.verticalAccuracyMeters == -1.0);

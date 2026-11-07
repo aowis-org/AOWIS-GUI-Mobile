@@ -3,6 +3,9 @@
 #include <QDateTime>
 #include <QGeoCoordinate>
 #include <QtNumeric>
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#endif
 
 namespace
 {
@@ -39,6 +42,23 @@ LocationSnapshot LocationSnapshot::fromPosition(const QGeoPositionInfo &position
     snapshot.verticalAccuracyMeters = availableMeasurement(position, QGeoPositionInfo::VerticalAccuracy);
     snapshot.speedMetersPerSecond = availableMeasurement(position, QGeoPositionInfo::GroundSpeed);
     snapshot.headingDegrees = availableMeasurement(position, QGeoPositionInfo::Direction);
+    if (position.hasAttribute(QGeoPositionInfo::MagneticVariation))
+    {
+        const double variation = position.attribute(QGeoPositionInfo::MagneticVariation);
+        if (qIsFinite(variation) && qAbs(variation) <= 180.0)
+            snapshot.declinationDegrees = variation;
+    }
+#ifdef Q_OS_ANDROID
+    if (!qIsFinite(snapshot.declinationDegrees))
+    {
+        const QJniObject field("android/hardware/GeomagneticField", "(FFFJ)V",
+            static_cast<jfloat>(snapshot.latitude), static_cast<jfloat>(snapshot.longitude),
+            static_cast<jfloat>(snapshot.altitudeAvailable ? snapshot.altitudeMeters : 0.0),
+            static_cast<jlong>(position.timestamp().toMSecsSinceEpoch()));
+        if (field.isValid())
+            snapshot.declinationDegrees = field.callMethod<jfloat>("getDeclination", "()F");
+    }
+#endif
     snapshot.timestampUtc = position.timestamp().toUTC().toString(Qt::ISODateWithMs);
     return snapshot;
 }

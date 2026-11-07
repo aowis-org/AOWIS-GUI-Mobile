@@ -64,7 +64,7 @@ public:
     double northAngle() const;
     bool lookAround() const;
     void setLookAround(bool enabled);
-    Q_INVOKABLE void setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg);
+    Q_INVOKABLE void setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg, double declination_deg);
     Q_INVOKABLE void faceNorth();
     QVariantList providers() const;
     QString providerId() const;

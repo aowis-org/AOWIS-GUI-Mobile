@@ -45,7 +45,8 @@ Window {
         function onPoseChanged() {
             if (mapView.lookAround && compassService.hasOrientation)
                 mapView.setDeviceOrientation(compassService.orientationQuaternion,
-                                            compassService.screenRotationDegrees)
+                                            compassService.screenRotationDegrees,
+                                            locationService.declinationDegrees)
         }
     }
     property string saveFeedback: ""
@@ -299,6 +300,12 @@ Window {
                     text: qsTr("Look around")
                     checked: mapView.lookAround
                     onToggled: mapView.lookAround = checked
+                }
+                Label {
+                    visible: mapView.lookAround
+                    color: root.uiMuted
+                    text: Number.isFinite(locationService.declinationDegrees)
+                          ? qsTr("Geographic north") : qsTr("Magnetic north · no location correction")
                 }
                 RowLayout {
                     enabled: !mapView.lookAround

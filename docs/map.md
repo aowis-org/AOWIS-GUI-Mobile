@@ -64,6 +64,16 @@ next start. Without a saved camera the map opens on Central Europe. Enable
 **Keep GPS marker centered** in the map menu to follow fresh fixes at the
 current zoom. The location button also re-centres the map on demand.
 
+## Look around
+
+In the Android 3D map menu, **Look around** holds the camera at its current
+position and altitude while the phone controls its orientation. The map
+uses the Compass instrument’s orientation sensor. With a location fix,
+it adjusts for magnetic declination at the phone’s physical location,
+even while viewing a distant part of the globe. The menu shows the active
+north reference. Without a correction, the view follows magnetic north.
+The separate Compass instrument displays magnetic bearings.
+
 ## Lifecycle diagnostics
 
 The item writes `AppDataLocation/lifecycle/events.csv` (app active/inactive,

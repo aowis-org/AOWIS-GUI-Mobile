@@ -30,6 +30,7 @@ class LocationService final : public QObject
     Q_PROPERTY(double verticalAccuracyMeters READ verticalAccuracyMeters NOTIFY changed)
     Q_PROPERTY(double speedMetersPerSecond READ speedMetersPerSecond NOTIFY changed)
     Q_PROPERTY(double headingDegrees READ headingDegrees NOTIFY changed)
+    Q_PROPERTY(double declinationDegrees READ declinationDegrees NOTIFY changed)
     Q_PROPERTY(QString timestampUtc READ timestampUtc NOTIFY changed)
     Q_PROPERTY(int fixAgeSeconds READ fixAgeSeconds NOTIFY changed)
 
@@ -53,6 +54,7 @@ public:
     double verticalAccuracyMeters() const;
     double speedMetersPerSecond() const;
     double headingDegrees() const;
+    double declinationDegrees() const;
     QString timestampUtc() const;
     int fixAgeSeconds() const;
 
