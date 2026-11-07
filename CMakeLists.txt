@@ -265,7 +265,7 @@ if(BUILD_TESTING)
     add_executable(aowis-mobile-map-math-tests
         tests/mobile_map_math_tests.cpp src/mobile_map_math.h)
     target_include_directories(aowis-mobile-map-math-tests PRIVATE src)
-    target_link_libraries(aowis-mobile-map-math-tests PRIVATE Qt6::Core)
+    target_link_libraries(aowis-mobile-map-math-tests PRIVATE Qt6::Core Qt6::Gui)
     add_test(NAME aowis-mobile-map-math COMMAND aowis-mobile-map-math-tests)
     add_executable(aowis-mobile-compass-heading-tests
         tests/compass_heading_tests.cpp src/compass_heading.h src/compass_heading_filter.h src/compass_fusion.h)

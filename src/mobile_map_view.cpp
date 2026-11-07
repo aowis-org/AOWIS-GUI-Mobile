@@ -7,6 +7,7 @@
 
 #include "lifecycle_watchdog.h"
 #include "mobile_map_math.h"
+#include "look_around_stabilizer.h"
 #include "compass_heading.h"
 
 #include "map/bgfx/map_bgfx_2d_projection.h"
@@ -130,6 +131,8 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QString server_status;
     bool saved_camera = false;
     QQuaternion eye_enu_to_ecef;
+    QQuaternion stabilized_device_pose;
+    int64_t last_pose_us = 0;
 
     bool has_marker = false;
     bool marker_fresh = false;
@@ -763,6 +766,7 @@ void MobileMapView::Impl::setApplicationActive(bool active)
     if (this->application_active == active)
         return;
     this->application_active = active;
+    this->last_pose_us = 0;
     recordLifecycleEvent(active ? QStringLiteral("app_active") : QStringLiteral("app_inactive"));
     if (active)
     {
@@ -1103,6 +1107,7 @@ void MobileMapView::setLookAround(bool enabled)
     if (enabled == lookAround() || (enabled && !globe()))
         return;
     this->impl->resetGestures();
+    this->impl->last_pose_us = 0;
     MapModel &model = this->impl->model;
     if (enabled)
     {
@@ -1143,7 +1148,13 @@ void MobileMapView::setDeviceOrientation(const QQuaternion &pose, int screen_rot
     // positive rotation about Up turns north toward west.
     const QQuaternion magnetic_to_true = std::isfinite(declination_deg)
         ? QQuaternion::fromAxisAndAngle(0, 0, 1, -declination_deg) : QQuaternion();
-    camera.orientation = (this->impl->eye_enu_to_ecef * magnetic_to_true * pose * screen_to_device).normalized();
+    const int64_t now = steadyMicroseconds();
+    const double elapsed = this->impl->last_pose_us == 0 ? 0.0 : (now - this->impl->last_pose_us) * 1e-6;
+    this->impl->last_pose_us = now;
+    this->impl->stabilized_device_pose = AowisMobileMap::stabilizeLookAround(
+        this->impl->stabilized_device_pose, pose, camera.magnification, elapsed);
+    camera.orientation = (this->impl->eye_enu_to_ecef * magnetic_to_true *
+                          this->impl->stabilized_device_pose * screen_to_device).normalized();
     this->impl->model.setGlobeEyePose(camera);
 }
 

@@ -1,4 +1,5 @@
 #include "mobile_map_math.h"
+#include "look_around_stabilizer.h"
 
 #include <cmath>
 #include <cstdio>
@@ -48,6 +49,21 @@ int main()
     expectTrue(near(zoomStepsForScale(2.0), 1.0, 1e-12), "doubling is one zoom step");
     expectTrue(near(zoomStepsForScale(0.5), -1.0, 1e-12), "halving is minus one step");
     expectTrue(zoomStepsForScale(0.0) == 0.0, "degenerate pinch does nothing");
+
+    const QQuaternion still;
+    const QQuaternion tremor = QQuaternion::fromAxisAndAngle(0, 1, 0, 0.2f);
+    const double dt = 1.0 / 60.0;
+    const QQuaternion zoomed = stabilizeLookAround(still, tremor, 8.0, dt);
+    expectTrue(stabilizeLookAround(still, tremor, 1.0, dt) == tremor, "normal zoom tracks raw pose");
+    expectTrue(zoomed.vector().length() < 0.1f * tremor.vector().length(), "8x damps small movements");
+    const QQuaternion turn = QQuaternion::fromAxisAndAngle(0, 1, 0, 30);
+    QQuaternion estimate;
+    for (int frame = 0; frame < 12; ++frame)
+        estimate = stabilizeLookAround(estimate, turn, 8.0, dt);
+    expectTrue((estimate.conjugated() * turn).vector().length() < 0.018f, "deliberate turn follows within two degrees");
+    expectTrue(stabilizeLookAround(still, turn, 8.0, 0.5) == turn, "new sensor stream starts immediately");
+    expectTrue((zoomed.conjugated() * stabilizeLookAround(still, -tremor, 8.0, dt)).vector().length()
+               < 0.00001f, "equivalent quaternion signs take the same short path");
 
     std::printf("mobile_map_math: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
