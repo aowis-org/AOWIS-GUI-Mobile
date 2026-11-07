@@ -34,6 +34,20 @@ Item {
                     context.moveTo(width * 0.24, y)
                     context.lineTo(width * 0.76, y)
                 }
+            } else if (icon.kind === "map") {
+                context.moveTo(width * 0.10, height * 0.27)
+                context.lineTo(width * 0.36, height * 0.15)
+                context.lineTo(width * 0.64, height * 0.28)
+                context.lineTo(width * 0.90, height * 0.16)
+                context.lineTo(width * 0.90, height * 0.74)
+                context.lineTo(width * 0.64, height * 0.86)
+                context.lineTo(width * 0.36, height * 0.73)
+                context.lineTo(width * 0.10, height * 0.85)
+                context.closePath()
+                context.moveTo(width * 0.36, height * 0.15)
+                context.lineTo(width * 0.36, height * 0.73)
+                context.moveTo(width * 0.64, height * 0.28)
+                context.lineTo(width * 0.64, height * 0.86)
             } else if (icon.kind === "down") {
                 context.moveTo(width * 0.25, height * 0.40)
                 context.lineTo(width * 0.50, height * 0.63)

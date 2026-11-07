@@ -64,7 +64,9 @@ checks = [
     ("map gestures and Qt Quick HUD", "void touchEvent(QTouchEvent *event) override;" in header and
      "mapViewHudEnabled() const override { return false; }" in source and
      "handleHudMouseEvent" not in source and "handleHudWheelEvent" not in source and
-     "mapView.setGlobe(!mapView.globe)" in qml and "mapView.zoomBy(1)" in qml and "panByPixelsGlobe" in source and
+     all(action in qml for action in ("mapView.setGlobe(true)", "mapView.setGlobe(false)",
+         "mapView.providerId = currentValue", "mapView.hillshade = checked",
+         "mapView.wireframe = checked", "mapView.zoomBy(-1)")) and "mapView.zoomBy(1)" in qml and "panByPixelsGlobe" in source and
      "zoomByAt" in source and "orbitViewGlobe" in source),
     ("map QML type", 'qmlRegisterType<MobileMapView>("AOWIS.Map", 1, 0, "MapView")' in main and
      "import AOWIS.Map 1.0" in qml and "MapView {" in qml),

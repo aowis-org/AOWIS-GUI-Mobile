@@ -43,6 +43,7 @@ Window {
     property bool saveSucceeded: false
 
     function openPage(page) {
+        mapMenu.close()
         navigationDrawer.close()
         if (page === "settings" && activePage !== "units") {
             mapServerUrl.text = mapServerSettings.serverUrl
@@ -59,7 +60,9 @@ Window {
     // Back is in-app navigation while a drawer or secondary page is open.
     // At the map root, leave Android's native Back behavior intact.
     function navigateBack() {
-        if (navigationDrawer.opened) {
+        if (mapMenu.visible) {
+            mapMenu.close()
+        } else if (navigationDrawer.opened) {
             navigationDrawer.close()
         } else if (activePage === "units") {
             openPage("settings")
@@ -73,13 +76,13 @@ Window {
     Shortcut {
         sequences: ["Back"]
         enabled: Qt.platform.os === "android" &&
-                 (navigationDrawer.opened || root.activePage !== "map")
+                 (mapMenu.visible || navigationDrawer.opened || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
     Shortcut {
         sequence: "Escape"
         enabled: Qt.platform.os !== "android" &&
-                 (navigationDrawer.opened || root.activePage !== "map")
+                 (mapMenu.visible || navigationDrawer.opened || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
     function followLocation() {
@@ -111,7 +114,7 @@ Window {
         visible: root.activePage === "map" && !mapServerSettings.configured
         anchors.top: parent.top
         anchors.left: parent.left
-        anchors.right: hamburgerButton.left
+        anchors.right: mapMenuButton.visible ? mapMenuButton.left : hamburgerButton.left
         anchors.margins: 14
         height: 52
         z: 2
@@ -132,26 +135,132 @@ Window {
         Accessible.name: qsTr("No map server configured. Tap to open Settings.")
     }
 
-    Column {
+    Button {
+        id: mapMenuButton
         visible: root.activePage === "map" && mapView.rendererAvailable
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.rightMargin: 14
-        spacing: 4
+        anchors.right: hamburgerButton.left
+        anchors.rightMargin: 8
+        anchors.top: hamburgerButton.top
+        width: hamburgerButton.width
+        height: hamburgerButton.height
+        Accessible.name: qsTr("Map controls")
+        contentItem: Item {
+            UiIcon {
+                kind: "map"
+                strokeColor: root.uiText
+                width: 30
+                height: 30
+                anchors.centerIn: parent
+            }
+        }
+        background: Rectangle {
+            radius: 12
+            color: parent.down ? root.uiPressed : root.uiRaised
+            border.color: root.uiBorder
+        }
+        onClicked: mapMenu.open()
+    }
 
-        Button {
-            text: mapView.globe ? "2D" : "3D"
-            onClicked: mapView.setGlobe(!mapView.globe)
+    Popup {
+        id: mapMenu
+        parent: root.contentItem
+        modal: true
+        dim: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(292, root.width - 28)
+        x: Math.max(14, mapMenuButton.x + mapMenuButton.width - width)
+        y: mapMenuButton.y + mapMenuButton.height + 6
+        padding: 10
+        height: Math.min(mapOptions.implicitHeight + 2 * padding, root.height - y - 8)
+        palette.button: root.uiRaised
+        palette.buttonText: root.uiText
+        palette.window: root.uiSurface
+        palette.windowText: root.uiText
+        palette.text: root.uiText
+        palette.base: root.uiInput
+        palette.highlight: root.uiSelection
+        background: Rectangle {
+            color: root.uiSurface
+            border.color: root.uiBorder
+            radius: 12
         }
-        Button {
-            text: "+"
-            Accessible.name: qsTr("Zoom in")
-            onClicked: mapView.zoomBy(1)
-        }
-        Button {
-            text: "−"
-            Accessible.name: qsTr("Zoom out")
-            onClicked: mapView.zoomBy(-1)
+        contentItem: ScrollView {
+            id: mapMenuScroll
+            clip: true
+            contentWidth: availableWidth
+            ColumnLayout {
+                id: mapOptions
+                width: mapMenuScroll.availableWidth
+                spacing: 6
+                Label { text: qsTr("Map provider"); color: root.uiText }
+                ComboBox {
+                    model: mapView.providers
+                    textRole: "name"
+                    valueRole: "id"
+                    enabled: count > 0
+                    Layout.fillWidth: true
+                    Accessible.name: qsTr("Map provider")
+                    currentIndex: {
+                        const entries = mapView.providers
+                        const selected = mapView.providerId
+                        for (let index = 0; index < entries.length; ++index) {
+                            if (entries[index].id === selected)
+                                return index
+                        }
+                        return -1
+                    }
+                    displayText: currentIndex >= 0 ? currentText : qsTr("No provider available")
+                    onActivated: mapView.providerId = currentValue
+                }
+                RowLayout {
+                    Button {
+                        text: "2D"
+                        Layout.fillWidth: true
+                        highlighted: !mapView.globe
+                        onClicked: mapView.setGlobe(false)
+                    }
+                    Button {
+                        text: "3D"
+                        Layout.fillWidth: true
+                        enabled: mapView.globeAvailable
+                        highlighted: mapView.globe
+                        onClicked: mapView.setGlobe(true)
+                    }
+                }
+                RowLayout {
+                    Button {
+                        Layout.fillWidth: true
+                        Accessible.name: qsTr("Zoom out")
+                        contentItem: Item {
+                            implicitHeight: 28
+                            UiIcon { kind: "minus"; strokeColor: root.uiText; anchors.centerIn: parent }
+                        }
+                        onClicked: mapView.zoomBy(-1)
+                    }
+                    Button {
+                        Layout.fillWidth: true
+                        Accessible.name: qsTr("Zoom in")
+                        contentItem: Item {
+                            implicitHeight: 28
+                            UiIcon { kind: "plus"; strokeColor: root.uiText; anchors.centerIn: parent }
+                        }
+                        onClicked: mapView.zoomBy(1)
+                    }
+                }
+                CheckBox {
+                    visible: mapView.globe
+                    text: qsTr("Wireframe")
+                    checked: mapView.wireframe
+                    onToggled: mapView.wireframe = checked
+                }
+                CheckBox {
+                    visible: mapView.globe
+                    text: qsTr("Hillshade")
+                    checked: mapView.hillshade
+                    onToggled: mapView.hillshade = checked
+                }
+            }
         }
     }
 
@@ -1329,8 +1438,6 @@ Window {
         }
     }
 
-    // A single unobtrusive control on the map replaces the old diagnostic
-    // header and permanently expanded metrics overlays.
     Button {
         id: hamburgerButton
         anchors.right: parent.right

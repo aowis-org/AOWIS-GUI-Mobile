@@ -190,6 +190,7 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
     QObject::connect(&this->catalog, &MapProviderCatalog::catalogChanged, this->item, [this]()
     {
         this->model.providerCatalogChanged();
+        emit this->item->providersChanged();
         if (this->tiles)
             this->tiles->invalidateProviderCatalog();
         this->server_status = MobileMapView::tr("Map server: %1 imagery providers").arg(this->catalog.providers().size());
@@ -206,6 +207,8 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
                                   .arg(message);
         emit this->item->statusChanged();
     });
+    QObject::connect(&this->model, &MapModel::providerIdChanged, this->item,
+                     &MobileMapView::providerIdChanged);
     QObject::connect(&this->model, &MapModel::centerChangedWGS84, this->item,
                      [this](CoordinateWGS84) { emit this->item->cameraChanged(); });
     QObject::connect(&this->model, &MapModel::view2dContinuousZoomChanged, this->item,
@@ -385,6 +388,7 @@ void MobileMapView::Impl::rebuildServer()
     MapServerRestConfiguration server;
     server.base_url = this->server_url;
     this->catalog.setServer(server);
+    emit this->item->providersChanged();
     if (!server.configured())
     {
         this->server_status = MobileMapView::tr("No map server configured");
@@ -784,6 +788,61 @@ void MobileMapView::centerOn(double longitude_deg, double latitude_deg, double z
     this->impl->model.setCenter(longitude_deg, latitude_deg, size);
 }
 
+bool MobileMapView::globeAvailable() const
+{
+    return this->impl->view->globeAvailable();
+}
+
+QVariantList MobileMapView::providers() const
+{
+    QVariantList result;
+    if (!this->impl->catalog.server().configured())
+        return result;
+    for (const MapProviderEntry &entry : this->impl->catalog.providers())
+    {
+        if (entry.enabled)
+            result.append(QVariantMap{{QStringLiteral("id"), entry.id},
+                                     {QStringLiteral("name"), entry.name.isEmpty() ? entry.id : entry.name}});
+    }
+    return result;
+}
+
+QString MobileMapView::providerId() const
+{
+    return this->impl->model.providerId();
+}
+
+void MobileMapView::setProviderId(const QString &id)
+{
+    this->impl->model.setProviderId(id);
+}
+
+bool MobileMapView::wireframe() const
+{
+    return this->impl->view->terrainWireframeVisible();
+}
+
+void MobileMapView::setWireframe(bool enabled)
+{
+    if (wireframe() == enabled)
+        return;
+    this->impl->view->setTerrainWireframeVisible(enabled);
+    emit terrainOptionsChanged();
+}
+
+bool MobileMapView::hillshade() const
+{
+    return this->impl->view->terrainHillshadeVisible();
+}
+
+void MobileMapView::setHillshade(bool enabled)
+{
+    if (hillshade() == enabled)
+        return;
+    this->impl->view->setTerrainHillshadeVisible(enabled);
+    emit terrainOptionsChanged();
+}
+
 void MobileMapView::setGlobe(bool globe_mode)
 {
     if (globe_mode && !this->impl->view->globeAvailable())
@@ -940,6 +999,14 @@ QString MobileMapView::serverStatus() const { return QString(); }
 QString MobileMapView::diagnostics() const { return QString(); }
 QString MobileMapView::lifecycle() const { return QString(); }
 void MobileMapView::centerOn(double, double, double) {}
+bool MobileMapView::globeAvailable() const { return false; }
+QVariantList MobileMapView::providers() const { return {}; }
+QString MobileMapView::providerId() const { return {}; }
+void MobileMapView::setProviderId(const QString &) {}
+bool MobileMapView::wireframe() const { return false; }
+void MobileMapView::setWireframe(bool) {}
+bool MobileMapView::hillshade() const { return false; }
+void MobileMapView::setHillshade(bool) {}
 void MobileMapView::setGlobe(bool) {}
 void MobileMapView::zoomBy(double) {}
 void MobileMapView::reloadServer() {}

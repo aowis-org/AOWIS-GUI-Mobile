@@ -2,6 +2,7 @@
 
 #include <QQuickItem>
 #include <QString>
+#include <QVariantList>
 
 #include <memory>
 
@@ -33,6 +34,11 @@ class MobileMapView : public QQuickItem
     // The last session's camera was restored (no automatic centring then).
     Q_PROPERTY(bool savedCamera READ savedCamera CONSTANT)
     Q_PROPERTY(bool globe READ globe NOTIFY cameraChanged)
+    Q_PROPERTY(bool globeAvailable READ globeAvailable NOTIFY statusChanged)
+    Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
+    Q_PROPERTY(QString providerId READ providerId WRITE setProviderId NOTIFY providerIdChanged)
+    Q_PROPERTY(bool wireframe READ wireframe WRITE setWireframe NOTIFY terrainOptionsChanged)
+    Q_PROPERTY(bool hillshade READ hillshade WRITE setHillshade NOTIFY terrainOptionsChanged)
     Q_PROPERTY(double centerLongitude READ centerLongitude NOTIFY cameraChanged)
     Q_PROPERTY(double centerLatitude READ centerLatitude NOTIFY cameraChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -51,6 +57,14 @@ public:
     bool rendererAvailable() const;
     bool savedCamera() const;
     bool globe() const;
+    bool globeAvailable() const;
+    QVariantList providers() const;
+    QString providerId() const;
+    void setProviderId(const QString &id);
+    bool wireframe() const;
+    void setWireframe(bool enabled);
+    bool hillshade() const;
+    void setHillshade(bool enabled);
     double centerLongitude() const;
     double centerLatitude() const;
     QString status() const;
@@ -69,6 +83,9 @@ signals:
     void serverUrlChanged();
     void darkThemeChanged();
     void cameraChanged();
+    void providersChanged();
+    void providerIdChanged();
+    void terrainOptionsChanged();
     void statusChanged();
 
 protected:

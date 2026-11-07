@@ -53,7 +53,9 @@ Settings. Diagnostics → **Reload map server** reconnects.
 | Two fingers up / down | Pan | Tilt |
 | Right mouse drag | — | Orbit |
 
-Qt Quick draws the 2D/3D switch and zoom buttons above the map. Drags and
+Tap the folded-map icon beside the navigation menu to select an enabled imagery
+provider, switch between 2D and 3D, or zoom. In 3D the same menu offers
+wireframe and hillshade. Drags and
 pinches elsewhere go directly to map navigation. Mobile disables the
 renderer HUD, including its crosshair, scale bar and device-position marker.
 
