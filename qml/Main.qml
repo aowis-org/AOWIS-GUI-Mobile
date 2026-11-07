@@ -98,11 +98,36 @@ Window {
     MapView {
         id: mapView
         Component.onCompleted: root.updateLocation()
+        onRepeatedGpsReturn: gpsHintTimer.restart()
         anchors.fill: parent
         visible: root.activePage === "map"
         enabled: root.activePage === "map" && !navigationDrawer.opened
         serverUrl: mapServerSettings.endpointUrl
         darkTheme: root.darkTheme
+    }
+
+    Timer {
+        id: gpsHintTimer
+        interval: 5000
+    }
+    Label {
+        visible: gpsHintTimer.running && mapView.visible && locationService.follow &&
+                 locationService.enabled && !mapMenu.visible && !navigationDrawer.opened
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 24
+        width: Math.min(parent.width - 32, 380)
+        padding: 12
+        z: 3
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        color: root.uiText
+        text: qsTr("To pan freely, turn off “Keep GPS marker centered” in the map menu.")
+        background: Rectangle {
+            radius: 10
+            color: root.uiRaised
+            border.color: root.uiBorder
+        }
     }
 
     // No map server yet: say where to configure one, over the map.

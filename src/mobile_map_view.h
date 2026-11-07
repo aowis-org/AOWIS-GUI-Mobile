@@ -84,6 +84,7 @@ signals:
     void serverUrlChanged();
     void darkThemeChanged();
     void cameraChanged();
+    void repeatedGpsReturn();
     void providersChanged();
     void providerIdChanged();
     void terrainOptionsChanged();

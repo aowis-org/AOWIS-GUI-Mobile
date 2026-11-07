@@ -167,6 +167,10 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     bool follow_fix = false;
     int64_t return_start = 0;
     QPointF return_origin;
+    QPointF gesture_pan;
+    int64_t older_return_us = 0;
+    int64_t newer_return_us = 0;
+    int64_t hint_after_us = 0;
 
     void stopMotion();
     void sampleDrag(const QPointF &delta, double zoom_steps = 0.0);
@@ -491,10 +495,12 @@ void MobileMapView::Impl::stopMotion()
     this->zoom_remaining = 0.0;
     this->return_start = 0;
     this->last_drag = steadyMicroseconds();
+    this->gesture_pan = {};
 }
 
 void MobileMapView::Impl::sampleDrag(const QPointF &delta, double zoom_steps)
 {
+    this->gesture_pan += delta;
     const int64_t now = steadyMicroseconds();
     const double dt = std::clamp((now - this->last_drag) * 1e-6, 0.008, 0.12);
     this->last_drag = now;
@@ -532,6 +538,21 @@ void MobileMapView::Impl::releaseMotion()
     this->zoom_remaining += std::clamp(this->pinch_velocity * 0.12, -0.75, 0.75);
     this->pinch_velocity = 0.0;
     returnToFix();
+    const int64_t now = this->return_start;
+    // Count deliberate pan releases only. Fix updates also start a return.
+    if (now != 0 && now >= this->hint_after_us
+        && std::hypot(this->gesture_pan.x(), this->gesture_pan.y()) >= 12.0
+        && this->return_origin != this->marker_coordinate)
+    {
+        if (this->older_return_us != 0 && now - this->older_return_us <= 8000000)
+        {
+            emit this->item->repeatedGpsReturn();
+            this->hint_after_us = now + 60000000;
+        }
+        this->older_return_us = this->newer_return_us;
+        this->newer_return_us = now;
+    }
+    this->gesture_pan = {};
     startMotion();
 }
 
@@ -932,7 +953,11 @@ void MobileMapView::setLocationMarker(bool valid, double longitude, double latit
     const bool follow_changed = this->impl->follow_fix != follow;
     this->impl->follow_fix = follow;
     if (!follow)
+    {
         this->impl->return_start = 0;
+        this->impl->older_return_us = 0;
+        this->impl->newer_return_us = 0;
+    }
     if (!follow_changed && this->impl->has_marker == valid &&
         (!valid || (this->impl->marker_coordinate == coordinate && this->impl->marker_fresh == fresh)))
         return;
