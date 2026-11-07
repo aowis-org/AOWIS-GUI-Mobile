@@ -128,6 +128,7 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QString render_problem;
     QString server_status;
     bool saved_camera = false;
+    QQuaternion eye_enu_to_ecef;
 
     bool has_marker = false;
     bool marker_fresh = false;
@@ -525,7 +526,7 @@ void MobileMapView::Impl::startMotion()
 
 void MobileMapView::Impl::returnToFix()
 {
-    if (!this->follow_fix || this->touch_mode != Touch::None || this->mouse != Pointer::None)
+    if (this->model.globeEyePose() || !this->follow_fix || this->touch_mode != Touch::None || this->mouse != Pointer::None)
         return;
     this->pan_velocity = {};
     this->return_origin = QPointF(this->model.centerLon(), this->model.centerLat());
@@ -1069,13 +1070,75 @@ void MobileMapView::setGlobe(bool globe_mode)
     if (globe_mode && !this->impl->view->globeAvailable())
         return;
     if (!globe_mode)
+    {
+        setLookAround(false);
         this->impl->north_start = 0;
+    }
     this->impl->model.setViewMode(globe_mode ? MapViewMode::Globe : MapViewMode::TwoD,
                                   this->impl->viewport());
 }
 
+bool MobileMapView::lookAround() const
+{
+    return this->impl->model.globeEyePose().has_value();
+}
+
+void MobileMapView::setLookAround(bool enabled)
+{
+    if (enabled == lookAround() || (enabled && !globe()))
+        return;
+    this->impl->resetGestures();
+    MapModel &model = this->impl->model;
+    if (enabled)
+    {
+        MapGlobeEyePose pose;
+        pose.eye = GeoWgs84Ellipsoid::orbitCameraEyeEcefD(model.centerLon(), model.centerLat(),
+            model.viewGlobeYawDeg(), model.viewGlobePitchDeg(), model.viewGlobeDistanceM(),
+            model.viewGlobeVerticalOffsetM(), model.viewGlobeCameraCollisionLiftM());
+        double lon = 0.0;
+        double lat = 0.0;
+        if (!GeoWgs84Ellipsoid::ecefToGeodetic(pose.eye, &lon, &lat))
+            return;
+        const GeoWgs84Ellipsoid::LocalFrame frame = GeoWgs84Ellipsoid::localFrameAtGeodetic(lon, lat, 0.0);
+        this->impl->eye_enu_to_ecef = QQuaternion::fromAxes(frame.east, frame.north, frame.up);
+        // Keep the current view until a fresh sensor orientation arrives.
+        const GeoWgs84Ellipsoid::OrbitCameraBasisRelative orbit =
+            GeoWgs84Ellipsoid::orbitCameraBasisRelativeToOrigin(model.centerLon(), model.centerLat(),
+                model.viewGlobeYawDeg(), model.viewGlobePitchDeg(), model.viewGlobeDistanceM(),
+                model.viewGlobeVerticalOffsetM(), pose.eye, model.viewGlobeCameraCollisionLiftM());
+        pose.orientation = QQuaternion::fromAxes(orbit.right, orbit.up, -orbit.forward);
+        model.setGlobeEyePose(pose);
+    }
+    else
+    {
+        model.setGlobeEyePose(std::nullopt);
+        this->impl->returnToFix();
+    }
+    emit lookAroundChanged();
+}
+
+void MobileMapView::setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg)
+{
+    if (!lookAround() || pose.isNull())
+        return;
+    MapGlobeEyePose camera = *this->impl->model.globeEyePose();
+    // Screen-top in native device coordinates is (sin(rotation), cos(rotation), 0).
+    const QQuaternion screen_to_device = QQuaternion::fromAxisAndAngle(0, 0, 1, -screen_rotation_deg);
+    camera.orientation = (this->impl->eye_enu_to_ecef * pose * screen_to_device).normalized();
+    this->impl->model.setGlobeEyePose(camera);
+}
+
 double MobileMapView::northAngle() const
 {
+    if (lookAround())
+    {
+        const QQuaternion screen_to_enu = this->impl->eye_enu_to_ecef.conjugated()
+            * this->impl->model.globeEyePose()->orientation;
+        QVector3D bearing = screen_to_enu.rotatedVector(QVector3D(0, 0, -1));
+        if (std::hypot(bearing.x(), bearing.y()) < 0.001)
+            bearing = screen_to_enu.rotatedVector(QVector3D(0, 1, 0));
+        return -std::atan2(bearing.x(), bearing.y()) * 180.0 / std::acos(-1.0);
+    }
     // Render's positive yaw places local north clockwise from screen-up.
     return this->impl->model.viewGlobeYawDeg();
 }
@@ -1084,6 +1147,8 @@ void MobileMapView::faceNorth()
 {
     if (!globe())
         return;
+    if (lookAround())
+        setLookAround(false);
     this->impl->north_start_angle = std::remainder(northAngle(), 360.0);
     this->impl->pan_velocity = {};
     if (this->impl->north_start_angle == 0.0)
@@ -1272,6 +1337,9 @@ bool MobileMapView::hillshade() const { return false; }
 void MobileMapView::setHillshade(bool) {}
 void MobileMapView::setLocationMarker(bool, double, double, bool, bool) {}
 void MobileMapView::setGlobe(bool) {}
+bool MobileMapView::lookAround() const { return false; }
+void MobileMapView::setLookAround(bool) {}
+void MobileMapView::setDeviceOrientation(const QQuaternion &, int) {}
 double MobileMapView::northAngle() const { return 0.0; }
 void MobileMapView::faceNorth() {}
 void MobileMapView::zoomBy(double) {}

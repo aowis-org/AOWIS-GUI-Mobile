@@ -32,9 +32,21 @@ Window {
 
     property string activePage: "map"
     onActivePageChanged: {
-        compassService.setPageVisible(activePage === "compass")
+        if (activePage !== "map" && mapView.lookAround)
+            mapView.lookAround = false
         gradienterService.setPageVisible(activePage === "gradienter")
         plumbBobService.setPageVisible(activePage === "plumbbob")
+    }
+    readonly property bool compassNeeded: activePage === "compass" ||
+                                           (activePage === "map" && mapView.lookAround)
+    onCompassNeededChanged: compassService.setPageVisible(compassNeeded)
+    Connections {
+        target: compassService
+        function onPoseChanged() {
+            if (mapView.lookAround && compassService.hasOrientation)
+                mapView.setDeviceOrientation(compassService.orientationQuaternion,
+                                            compassService.screenRotationDegrees)
+        }
     }
     property string saveFeedback: ""
     property bool saveSucceeded: false
@@ -101,9 +113,21 @@ Window {
         onRepeatedGpsReturn: gpsHintTimer.restart()
         anchors.fill: parent
         visible: root.activePage === "map"
-        enabled: root.activePage === "map" && !navigationDrawer.opened
+        enabled: root.activePage === "map" && !navigationDrawer.opened && !lookAround
         serverUrl: mapServerSettings.endpointUrl
         darkTheme: root.darkTheme
+    }
+
+    Label {
+        visible: mapView.lookAround && !compassService.hasOrientation
+        anchors.centerIn: parent
+        padding: 12
+        width: Math.min(parent.width - 32, 380)
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        text: compassService.status
+        color: root.uiText
+        background: Rectangle { radius: 8; color: root.uiRaised }
     }
 
     Timer {
@@ -270,7 +294,14 @@ Window {
                         onClicked: mapView.setGlobe(true)
                     }
                 }
+                Switch {
+                    visible: mapView.globe && Qt.platform.os === "android"
+                    text: qsTr("Look around")
+                    checked: mapView.lookAround
+                    onToggled: mapView.lookAround = checked
+                }
                 RowLayout {
+                    enabled: !mapView.lookAround
                     Button {
                         Layout.fillWidth: true
                         Accessible.name: qsTr("Zoom out")
@@ -334,7 +365,7 @@ Window {
     // Back to the device position (the first fix centres the map once).
     Button {
         id: centerOnLocationButton
-        visible: root.activePage === "map" && locationService.hasFix
+        visible: root.activePage === "map" && locationService.hasFix && !mapView.lookAround
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 14

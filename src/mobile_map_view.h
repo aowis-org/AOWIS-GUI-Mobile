@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QQuickItem>
+#include <QQuaternion>
 #include <QString>
 #include <QVariantList>
 
@@ -34,6 +35,7 @@ class MobileMapView : public QQuickItem
     // The last session's camera was restored (no automatic centring then).
     Q_PROPERTY(bool savedCamera READ savedCamera CONSTANT)
     Q_PROPERTY(bool globe READ globe NOTIFY cameraChanged)
+    Q_PROPERTY(bool lookAround READ lookAround WRITE setLookAround NOTIFY lookAroundChanged)
     Q_PROPERTY(double northAngle READ northAngle NOTIFY northAngleChanged)
     Q_PROPERTY(bool globeAvailable READ globeAvailable NOTIFY statusChanged)
     Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
@@ -60,6 +62,9 @@ public:
     bool globe() const;
     bool globeAvailable() const;
     double northAngle() const;
+    bool lookAround() const;
+    void setLookAround(bool enabled);
+    Q_INVOKABLE void setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg);
     Q_INVOKABLE void faceNorth();
     QVariantList providers() const;
     QString providerId() const;
@@ -88,6 +93,7 @@ signals:
     void darkThemeChanged();
     void cameraChanged();
     void northAngleChanged();
+    void lookAroundChanged();
     void repeatedGpsReturn();
     void providersChanged();
     void providerIdChanged();

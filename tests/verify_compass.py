@@ -24,8 +24,9 @@ checks = {
         "QSensor" not in service and "CompassSensorSource m_source" in header and
         "QGeoPositionInfoSource" not in service and
         "RenderLab" not in service and "QSettings" not in service,
-    "start only on the foreground Compass page, stop on other pages":
-        'compassService.setPageVisible(activePage === "compass")' in qml and
+    "share foreground sensors between the Compass page and map Look around":
+        'compassService.setPageVisible(compassNeeded)' in qml and
+        '(activePage === "map" && mapView.lookAround)' in qml and
         'compassService.setPageVisible(true)' not in qml and
         "setApplicationActive" in main and "this->m_source.stop();" in service,
     "status for unavailable, stale and low calibration":
