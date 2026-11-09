@@ -43,13 +43,23 @@ Window {
     Connections {
         target: compassService
         function onPoseChanged() {
-            if (mapView.lookAround && compassService.hasOrientation)
+            if (mapView.lookAround && compassService.hasOrientation) {
                 mapView.setDevicePose(compassService.orientationQuaternion,
                                       compassService.orientationTimestampSeconds,
                                       compassService.relativeOrientationQuaternion,
                                       compassService.relativeTimestampSeconds,
                                       compassService.screenRotationDegrees,
                                       locationService.declinationDegrees)
+                if (mapView.lookAroundVision && compassService.fieldTimestampSeconds > 0)
+                    // Number(): a missing value becomes NaN ("no GPS
+                    // reference") instead of a call that throws.
+                    mapView.setFieldPose(compassService.fieldOrientationQuaternion,
+                                         Number(compassService.fieldTimestampSeconds),
+                                         Number(compassService.fieldStrength),
+                                         Number(compassService.fieldDipDegrees),
+                                         Number(locationService.fieldStrengthMicroTesla),
+                                         Number(locationService.inclinationDegrees))
+            }
         }
     }
     property string saveFeedback: ""
@@ -309,6 +319,42 @@ Window {
                     text: qsTr("Panorama test (no map)")
                     checked: mapView.lookAroundPanorama
                     onToggled: mapView.lookAroundPanorama = checked
+                }
+                Switch {
+                    visible: mapView.lookAround
+                    text: qsTr("Camera stabilization")
+                    checked: mapView.lookAroundVision
+                    onToggled: mapView.lookAroundVision = checked
+                }
+                Label {
+                    // Diagnostics line (English, like the other diagnostics).
+                    visible: mapView.lookAround && mapView.lookAroundVision &&
+                             mapView.lookAroundVisionStatus.length > 0
+                    color: root.uiMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    text: mapView.lookAroundVisionStatus
+                }
+                Label {
+                    // Diagnostics line (English, like the other diagnostics).
+                    visible: mapView.lookAround && mapView.lookAroundVision &&
+                             mapView.lookAroundFieldStatus.length > 0
+                    color: root.uiMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    text: mapView.lookAroundFieldStatus
+                }
+                Label {
+                    // Sensor stages of the own field orientation (diagnostics).
+                    visible: mapView.lookAround && mapView.lookAroundVision &&
+                             compassService.fieldDiagnostics.length > 0
+                    color: root.uiMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    text: compassService.fieldDiagnostics
                 }
                 Label {
                     visible: mapView.lookAround

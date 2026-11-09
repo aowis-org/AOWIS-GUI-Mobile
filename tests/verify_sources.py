@@ -154,6 +154,10 @@ checks = [
         "src/compass_sensor_source.cpp", "src/compass_sensor_source.h",
         "src/compass_fusion.h", "tests/compass_heading_tests.cpp",
         "src/look_around_engine.h", "tests/look_around_engine_tests.cpp",
+        "src/look_around_field.h", "tests/look_around_field_tests.cpp",
+        "src/look_around_vision.h", "tests/look_around_vision_tests.cpp",
+        "src/look_around_camera.h", "src/look_around_camera.cpp",
+        "src/look_around_recorder.h", "tools/look_around_replay.cpp",
         "src/look_around_direct.h", "tests/look_around_direct_tests.cpp",
     ])),
 ]

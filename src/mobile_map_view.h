@@ -42,6 +42,17 @@ class MobileMapView : public QQuickItem
     // panorama but not over the map: the map's rendering is too slow.
     Q_PROPERTY(bool lookAroundPanorama READ lookAroundPanorama WRITE setLookAroundPanorama
                NOTIFY lookAroundPanoramaChanged)
+    // Diagnostics of the own field orientation used by camera stabilization
+    // (sample rate, field, trust; English).
+    Q_PROPERTY(QString lookAroundFieldStatus READ lookAroundFieldStatus NOTIFY lookAroundFieldStatusChanged)
+    // Camera stabilization: the back camera turns the view's heading while it
+    // tracks reliably; up/down follows gravity, and without a reliable camera
+    // AOWIS' own accelerometer + magnetometer orientation (setFieldPose(),
+    // look_around_field.h) moves the view. The compass only corrects north
+    // slowly. Asks for the camera permission when switched on.
+    Q_PROPERTY(bool lookAroundVision READ lookAroundVision WRITE setLookAroundVision
+               NOTIFY lookAroundVisionChanged)
+    Q_PROPERTY(QString lookAroundVisionStatus READ lookAroundVisionStatus NOTIFY lookAroundVisionStatusChanged)
     Q_PROPERTY(double northAngle READ northAngle NOTIFY northAngleChanged)
     Q_PROPERTY(bool globeAvailable READ globeAvailable NOTIFY statusChanged)
     Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
@@ -79,6 +90,16 @@ public:
     Q_INVOKABLE void setDevicePose(const QQuaternion &pose, double pose_seconds,
                                    const QQuaternion &relative_pose, double relative_seconds,
                                    int screen_rotation_deg, double declination_deg);
+    QString lookAroundFieldStatus() const;
+    bool lookAroundVision() const;
+    void setLookAroundVision(bool enabled);
+    QString lookAroundVisionStatus() const;
+    // AOWIS' own orientation (device to ENU, magnetic) at the magnetometer
+    // time 'seconds', with the measured field strength (uT) and dip
+    // (degrees), and the field expected at the GPS fix (NaN: none). Used while
+    // camera stabilization is on; call after setDevicePose().
+    Q_INVOKABLE void setFieldPose(const QQuaternion &pose, double seconds, double strength,
+                                  double dip_deg, double expected_strength, double expected_dip_deg);
     Q_INVOKABLE void faceNorth();
     QVariantList providers() const;
     QString providerId() const;
@@ -109,6 +130,9 @@ signals:
     void northAngleChanged();
     void lookAroundChanged();
     void lookAroundPanoramaChanged();
+    void lookAroundFieldStatusChanged();
+    void lookAroundVisionChanged();
+    void lookAroundVisionStatusChanged();
     void repeatedGpsReturn();
     void providersChanged();
     void providerIdChanged();

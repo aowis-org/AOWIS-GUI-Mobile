@@ -1,6 +1,8 @@
 #include "compass_sensor_source.h"
 #include "compass_fusion.h"
 #include "compass_heading.h"
+#include "look_around_field.h"
+#include "look_around_recorder.h"
 
 #include <QDebug>
 #include <QMetaObject>
@@ -21,12 +23,13 @@ constexpr int kLooperIdent = 7;
 constexpr int kGyroscopeType = 4;       // ASENSOR_TYPE_GYROSCOPE
 constexpr int kRotationVectorType = 11; // ASENSOR_TYPE_ROTATION_VECTOR
 constexpr int kGameRotationVectorType = 15; // ASENSOR_TYPE_GAME_ROTATION_VECTOR
+// Raw readings and the OS's hard-iron estimate; only recorded, to tell a
+// slow OS calibration from the sensor itself (benchmarks/lookaround/).
+constexpr int kUncalibratedMagnetometerType = 14; // ASENSOR_TYPE_MAGNETIC_FIELD_UNCALIBRATED
 // A game rotation vector older than this is not paired with a pose.
 constexpr double kRelativeMaxAgeSeconds = 0.05;
 // 100 Hz; each sensor clamps this to its own minimum delay.
 constexpr int kFastPeriodUs = 10000;
-// Status-only magnetometer while the OS rotation vector drives the heading.
-constexpr int kStatusPeriodUs = 200000;
 constexpr char kPackageName[] = "org.aowis.mobile";
 
 ASensorManager *sensorManager()
@@ -109,6 +112,17 @@ CompassSensorSource::Mode CompassSensorSource::mode() const
     return this->m_mode;
 }
 
+CompassSensorSource::Counters CompassSensorSource::counters() const
+{
+    Counters counters;
+    counters.accelerometer = this->m_accelerometerEvents.load();
+    counters.magnetometer = this->m_magnetometerEvents.load();
+    counters.rotationVector = this->m_rotationVectorEvents.load();
+    counters.fieldOutputs = this->m_fieldOutputs.load();
+    counters.fieldSamples = this->m_fieldSamples.load();
+    return counters;
+}
+
 bool CompassSensorSource::start(Mode best)
 {
     if (this->m_thread.joinable())
@@ -164,26 +178,35 @@ void CompassSensorSource::run(Mode mode)
     // Optional companion of the OS rotation vector for Look around.
     const ASensor *game = mode == Mode::RotationVector ? defaultSensor(kGameRotationVectorType) : nullptr;
     const ASensor *gyroscope = mode == Mode::FusionWithGyroscope ? defaultSensor(kGyroscopeType) : nullptr;
-    const ASensor *accelerometer = mode != Mode::RotationVector
-        ? defaultSensor(ASENSOR_TYPE_ACCELEROMETER) : nullptr;
+    // Accelerometer in every mode: with the OS rotation vector it feeds the
+    // own field orientation for Look around (look_around_field.h).
+    const ASensor *accelerometer = defaultSensor(ASENSOR_TYPE_ACCELEROMETER);
     const ASensor *magnetometer = defaultSensor(ASENSOR_TYPE_MAGNETIC_FIELD);
+    const ASensor *uncalibrated = defaultSensor(kUncalibratedMagnetometerType);
     bool registered = true;
     if (rotation != nullptr)
         registered = registered && ASensorEventQueue_registerSensor(queue, rotation, kFastPeriodUs, 0) >= 0;
     if (gyroscope != nullptr)
         registered = registered && ASensorEventQueue_registerSensor(queue, gyroscope, kFastPeriodUs, 0) >= 0;
     if (accelerometer != nullptr)
-        registered = registered && ASensorEventQueue_registerSensor(queue, accelerometer, kFastPeriodUs, 0) >= 0;
+    {
+        const bool ok = ASensorEventQueue_registerSensor(queue, accelerometer, kFastPeriodUs, 0) >= 0;
+        if (mode != Mode::RotationVector)
+            registered = registered && ok;
+    }
     if (magnetometer != nullptr)
     {
-        const int period = mode == Mode::RotationVector ? kStatusPeriodUs : kFastPeriodUs;
-        const bool ok = ASensorEventQueue_registerSensor(queue, magnetometer, period, 0) >= 0;
+        // Full rate in every mode: the own field orientation needs it.
+        const bool ok = ASensorEventQueue_registerSensor(queue, magnetometer, kFastPeriodUs, 0) >= 0;
         if (mode != Mode::RotationVector)
             registered = registered && ok;
     }
     if (registered && game != nullptr &&
         ASensorEventQueue_registerSensor(queue, game, kFastPeriodUs, 0) < 0)
         game = nullptr;
+    if (registered && uncalibrated != nullptr &&
+        ASensorEventQueue_registerSensor(queue, uncalibrated, kFastPeriodUs, 0) < 0)
+        uncalibrated = nullptr;
     if (!registered)
     {
         ASensorManager_destroyEventQueue(manager, queue);
@@ -195,9 +218,19 @@ void CompassSensorSource::run(Mode mode)
     logSensor("game rotation vector", game);
     logSensor("gyroscope", defaultSensor(kGyroscopeType));
     logSensor("magnetometer", magnetometer);
+    logSensor("magnetometer uncalibrated", uncalibrated);
 
     AowisCompass::AttitudeFusion fusion;
     fusion.setGyroscopeAvailable(gyroscope != nullptr);
+    // Own orientation from accelerometer + magnetometer, in every mode (some
+    // phones deliver no OS rotation vector at all and run on the own
+    // fusion); its outputs are collected per event batch.
+    AowisMobileMap::FieldOrientation fieldOrientation;
+    std::vector<AowisMobileMap::FieldOrientation::Output> fieldOutputs;
+    fieldOrientation.setOutputHandler([this, &fieldOutputs](const AowisMobileMap::FieldOrientation::Output &out) {
+        fieldOutputs.push_back(out);
+        this->m_fieldOutputs.fetch_add(1);
+    });
     int magneticStatus = -1;
     bool hasGame = false;
     AowisCompass::Quaternion gamePose;
@@ -234,13 +267,43 @@ void CompassSensorSource::run(Mode mode)
                 const double seconds = static_cast<double>(event.timestamp) / 1e9;
                 Sample sample;
                 if (event.type == ASENSOR_TYPE_MAGNETIC_FIELD)
+                    this->m_magnetometerEvents.fetch_add(1);
+                else if (event.type == ASENSOR_TYPE_ACCELEROMETER)
+                    this->m_accelerometerEvents.fetch_add(1);
+                else if (event.type == kRotationVectorType)
+                    this->m_rotationVectorEvents.fetch_add(1);
+                // Raw recording for offline replay (Look around only).
+                AowisMobileMap::LookAroundRecorder &recorder = AowisMobileMap::LookAroundRecorder::instance();
+                if (recorder.enabled())
+                {
+                    if (event.type == ASENSOR_TYPE_MAGNETIC_FIELD)
+                        recorder.add('M', seconds, {event.magnetic.x, event.magnetic.y, event.magnetic.z});
+                    else if (event.type == ASENSOR_TYPE_ACCELEROMETER)
+                        recorder.add('A', seconds, {event.acceleration.x, event.acceleration.y, event.acceleration.z});
+                    else if (event.type == kGyroscopeType)
+                        recorder.add('Y', seconds, {event.data[0], event.data[1], event.data[2]});
+                    else if (event.type == kUncalibratedMagnetometerType)
+                        recorder.add('U', seconds, {event.data[0], event.data[1], event.data[2],
+                                                    event.data[3], event.data[4], event.data[5]});
+                    else if (event.type == kRotationVectorType || event.type == kGameRotationVectorType)
+                    {
+                        const AowisCompass::Quaternion q = quaternionFromRotationEvent(event);
+                        recorder.add(event.type == kRotationVectorType ? 'R' : 'G', seconds, {q.x, q.y, q.z, q.w});
+                    }
+                }
+                if (event.type == ASENSOR_TYPE_MAGNETIC_FIELD)
                 {
                     magneticStatus = event.magnetic.status;
                     fusion.addMagneticField(event.magnetic.x, event.magnetic.y, event.magnetic.z, seconds);
+                    fieldOrientation.addMagneticField(event.magnetic.x, event.magnetic.y, event.magnetic.z, seconds);
                 }
                 else if (event.type == ASENSOR_TYPE_ACCELEROMETER)
+                {
                     fusion.addAccelerometer(event.acceleration.x, event.acceleration.y,
                                             event.acceleration.z, seconds);
+                    fieldOrientation.addAccelerometer(event.acceleration.x, event.acceleration.y,
+                                                      event.acceleration.z, seconds);
+                }
                 else if (event.type == kGyroscopeType)
                     fusion.addGyroscope(event.data[0], event.data[1], event.data[2], seconds);
                 else if (event.type == kGameRotationVectorType)
@@ -249,6 +312,47 @@ void CompassSensorSource::run(Mode mode)
                     gameSeconds = seconds;
                     hasGame = true;
                 }
+
+                // Own field orientation: one sample per output. x..w repeat
+                // the latest compass reading: the OS rotation vector, else the
+                // own fusion, else (nothing yet) the field orientation itself.
+                {
+                    for (const AowisMobileMap::FieldOrientation::Output &out : fieldOutputs)
+                    {
+                        AowisCompass::Quaternion compass = out.pose;
+                        double compassSeconds = out.seconds;
+                        if (hasAbsolute)
+                        {
+                            compass = absolutePose;
+                            compassSeconds = absoluteSeconds;
+                        }
+                        else if (fusion.hasOrientation())
+                        {
+                            compass = fusion.orientation();
+                            compassSeconds = seconds;
+                        }
+                        Sample fieldSample;
+                        fieldSample.absoluteFresh = false;
+                        fieldSample.x = compass.x;
+                        fieldSample.y = compass.y;
+                        fieldSample.z = compass.z;
+                        fieldSample.w = compass.w;
+                        fieldSample.seconds = compassSeconds;
+                        fieldSample.headingAccuracyDegrees = absoluteAccuracyDegrees;
+                        fieldSample.magneticStatus = magneticStatus;
+                        fieldSample.hasField = true;
+                        fieldSample.fieldSeconds = out.seconds;
+                        fieldSample.fieldX = out.pose.x;
+                        fieldSample.fieldY = out.pose.y;
+                        fieldSample.fieldZ = out.pose.z;
+                        fieldSample.fieldW = out.pose.w;
+                        fieldSample.fieldStrength = out.strength;
+                        fieldSample.fieldDipDegrees = out.dipDegrees;
+                        samples.push_back(fieldSample);
+                        this->m_fieldSamples.fetch_add(1);
+                    }
+                }
+                fieldOutputs.clear();
 
                 // Motion first: each game rotation vector event is a sample of
                 // its own, so the compass never sets the pace of Look around.
@@ -316,7 +420,7 @@ void CompassSensorSource::run(Mode mode)
     }
 
     this->m_looper.store(nullptr);
-    for (const ASensor *sensor : {rotation, game, gyroscope, accelerometer, magnetometer})
+    for (const ASensor *sensor : {rotation, game, gyroscope, accelerometer, magnetometer, uncalibrated})
     {
         if (sensor != nullptr)
             ASensorEventQueue_disableSensor(queue, sensor);

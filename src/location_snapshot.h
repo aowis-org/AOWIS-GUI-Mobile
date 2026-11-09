@@ -19,6 +19,10 @@ struct LocationSnapshot
     double headingDegrees = -1.0;
     // Signed degrees east of geographic north. Zero is a valid measurement.
     double declinationDegrees = std::numeric_limits<double>::quiet_NaN();
+    // Expected geomagnetic field at the fix (Android GeomagneticField):
+    // degrees below the horizontal, and strength in microtesla. NaN if unknown.
+    double inclinationDegrees = std::numeric_limits<double>::quiet_NaN();
+    double fieldStrengthMicroTesla = std::numeric_limits<double>::quiet_NaN();
     QString timestampUtc;
 
     static LocationSnapshot fromPosition(const QGeoPositionInfo &position);

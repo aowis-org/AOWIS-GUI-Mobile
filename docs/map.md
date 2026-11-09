@@ -75,6 +75,137 @@ even while viewing a distant part of the globe. The menu shows the active
 north reference. Without a correction, the view follows magnetic north.
 The separate Compass instrument displays magnetic bearings.
 
+### Camera stabilization
+
+**Camera stabilization** in the map menu (Look around on) uses the back camera
+as the gyroscope a cheap phone lacks: `src/look_around_vision.h` (tested in
+`tests/look_around_vision_tests.cpp` on synthetic camera images),
+`src/look_around_camera.{h,cpp}` (Android NDK Camera2 + AImageReader, no Qt
+Multimedia; CAMERA permission asked when switched on).
+
+- **Tracking** (`VisionTracker`, on the camera's callback thread): luma only,
+  box-downscaled to about 320 px wide, 3-level pyramid. About 48 Shi-Tomasi
+  corners (best per cell of an 8x6 grid) are followed by Lucas-Kanade with a
+  forward-backward check (0.7 px). The rotation comes from the points'
+  directions: RANSAC over point pairs (1.5 px), refined on all inliers
+  (Horn's quaternion method). Moving people or cars and near-object parallax
+  are outliers. A frame counts as reliable with at least 12 inliers and at
+  least half the tracked points. Dark, blank, blurred or sky-only views are
+  not reliable.
+- **Fusion** (`VisionFusion`): while the camera tracks, it turns the
+  heading (about Up), the axis the magnetometer gets wrong; up/down and roll
+  always follow gravity through the field orientation, which is fresher than
+  the camera. The first unreliable frame hands the heading back to the field
+  orientation's own motion (the compass fallback). The engine runs the slow-north mode (the compass
+  corrects north, it does not move the view) and never hands the view to the
+  raw compass.
+- **Time**: camera frames are applied as rotations between frames when they
+  arrive; output to the engine runs on the motion sensors' time line, and
+  "camera active" is judged by arrival. Camera timestamps are never compared
+  with sensor timestamps (a shared time line let a differing camera clock
+  block all turning on the test phone). Field readings are dated back by
+  their 60 ms filter delay.
+- **Plausibility**: seen from close up (a table, a wall at arm's length) the
+  phone's own small movements look like large camera rotations. A frame
+  whose tilt rate exceeds twice gravity's plus 4 °/s (low-passed over
+  0.15 s) is ignored; the compass fallback holds the view.
+- **Image orientation**: how the raw camera image is turned against the
+  phone (0/90/180/270°) is found by comparing camera rotations with the field
+  orientation's over the same arrival intervals. The camera is used only
+  after that decision ("learning image orientation - move the phone").
+
+Simulated (65° dip, hand acceleration, magnetometer noise; 30 fps camera,
+frames 60 ms late):
+
+| | Compass fallback | With camera |
+|---|---|---|
+| Up/down sweeps, sideways shake facing N/S | 0.24° | 0.1° |
+| Up/down sweeps, sideways shake facing E/W | 1.0° | 0.3° |
+| Sideways sweeps, turn followed within | 0.7° | 0.8° |
+| Phone on a shaken table, worst frame step | 0.025° | 0.020° (camera ignored) |
+| Camera clock off by +0.4 s or -7 s | – | identical results |
+| Camera blind for 1 s mid-sweep | – | no jump |
+
+Rotation per frame is measured to about 0.01°. The status line shows frame
+rate, the share of reliable frames and the state. While the camera runs, the
+flashlight cannot (the camera owns the flash).
+
+### Without a gyroscope: own field orientation
+
+Phones without a real gyroscope (the Armor X13 test phone) get every heading
+from the magnetometer, also inside an emulated game rotation vector. The
+Earth's field dips about 65° here; if the "down" used for the heading is off
+by e about the north-south axis, the heading is off by about e·tan(dip), twice
+e. A fusion that filters gravity slower than the field is off exactly while
+the phone tilts: up/down then shakes sideways facing east or west, not facing
+north or south (seen in AOWIS and in Stellarium on that phone).
+
+Camera stabilization uses `src/look_around_field.h` as its fallback (no
+reliable camera) and for up/down (there is no separate menu switch):
+
+- `FieldOrientation` (sensor thread) builds the orientation from the raw
+  accelerometer and magnetometer, the accelerometer interpolated to each
+  magnetometer time and both vectors through the **same** low-pass (60 ms).
+  They lag equally, so there is no tilt-to-heading error from a mismatch.
+- `LookAroundFieldSource` (GUI thread) passes heading changes only while the
+  phone turns rather than tilts, and gives the orientation to the engine as
+  the compass (turn-gated heading: followed while turning, held while
+  tilting, settled at rest). The magnetometer corrects what motion shows; it
+  does not move the view while tilting.
+- The field is checked against the one expected at the GPS fix (strength and
+  dip from Android `GeomagneticField`, `LocationService.inclinationDegrees` /
+  `fieldStrengthMicroTesla`), else against its own 3 s average (re-learned
+  after 5 s at a new place). While disturbed (steel, cars) the heading is held.
+
+Simulated (tests/look_around_field_tests.cpp: 65° dip, hand turning about the
+wrist, 0.3 µT noise), worst sideways shake during ±40° up/down sweeps:
+
+| Facing | Phone-style fusion | Own field orientation |
+|---|---|---|
+| North / South | 0.8° / 1.0° | 1.1° / 1.1° |
+| East / West | 18.1° / 18.3° | 1.7° / 1.8° |
+
+What remains is the hand's own acceleration and sensor noise, which no
+accelerometer + magnetometer orientation can separate from real motion.
+Sideways sweeps are followed about as well as by the phone's fusion. The
+recording's `field_motion` / `field_trusted` columns show the mode and when
+the field was judged disturbed.
+
+**Heading guard (camera stabilization off).** Recorded on the Armor X13
+(`benchmarks/lookaround/Armor_X13-20261109-175728/`, facing north, tilting
+slowly up and down): the phone's magnetometer lags the tilt and then catches
+up in jumps of 10–25°. Its dip, true 66°, swings between about 20° and 89°;
+near 90° the horizontal field vanishes and the heading flipped by up to 180°
+although the phone only tilted. No filter can repair such readings, so the
+own fusion without gyroscope (`compass_fusion.h`, `MagneticHeadingGuard`,
+used by the phone path) splits each update:
+
+- tilt always as measured (accelerometer);
+- heading follows the measurement's own changes only while its dip is
+  within 8° of the reference (none beyond 16°), and at most 360°/s;
+- the offset built up while held (or by a jump) is caught up smoothly: at
+  rest (gravity and field steady 0.3 s) in 0.4 s, while moving after the dip
+  looked right for 0.3 s in 0.4 s, but never an offset near 180° while
+  moving (the signature of the vanished horizontal field);
+- the reference dip is learned at rest. Gravity and field also share one
+  low-pass (0.2 s); the field used to be filtered faster.
+
+Replay of the six recordings (`tools/replay_look_around.sh`, phone path):
+
+| Recording | jitter moving before / after | worst frame step before / after |
+|---|---|---|
+| 175717 (up/down facing north) | 8.75° / 0.61° | 129.6° / 4.0° |
+| 174951 (turns, laid down) | 3.17° / 1.21° | 47.1° / 13.4° |
+| 174813, 174857, 175005, 175638 | 0.45–4.68° / 0.42–4.23° | 4.2–7.8° / 2.9–5.7° |
+
+In 175717 the shown heading stays within 8° rms of north (before: 44°,
+flips to 178°). Turns are followed as before, at most about 10° behind
+while the field looks odd. `tests/compass_heading_tests.cpp` simulates the
+lagging field (±55° tilt, field 0.4 s late): the old fusion flipped by 180°,
+the guarded one stays within 1.5°. Recordings also hold the uncalibrated
+magnetometer (`U`: raw reading and the OS hard-iron estimate) if the phone
+has one, to tell the OS calibration from the sensor.
+
 ### Motion engine
 
 `src/look_around_engine.h` (tested in `tests/look_around_engine_tests.cpp`) is
@@ -124,6 +255,24 @@ are too slow; if it stutters over both, the motion or frame timing is at
 fault. The frame recording marks panorama frames (`panorama` column), so
 both modes can be compared from one session. The photo has about 7 pixels
 per degree: soft at 8×, which does not matter for judging motion.
+
+**Raw sensor recording and replay.** Every Look-around session also records
+every raw sensor event (accelerometer, magnetometer, uncalibrated
+magnetometer, gyroscope, rotation vectors) and every camera tracking result with sensor and arrival time
+(`src/look_around_recorder.h`, `sensors-<utc>.csv` next to the frame
+recording). With the phone connected:
+
+    tools/pull_look_around.sh
+
+fetches all recordings and the AOWIS sensor/camera logcat lines into
+`benchmarks/lookaround/<model>-<utc>/`, clears them on the phone and replays
+them. `tools/replay_look_around.sh [dir|file]` (no phone, no Qt) replays
+recordings through the current code (`tools/look_around_replay.cpp`): phone
+sensors, compass fallback and camera stabilization, frames at 60 Hz on the
+arrival clock, and prints per path the frame-to-frame jitter while still and
+while moving, the worst single frame step and the up/down lag behind the
+phone path
+(`<recording>-replay.csv` per frame, `summary.txt` per directory).
 
 **Recording.** Each Look-around session records its first two minutes of
 frames (frame and paced times, core lag, display delay, shown bearing and

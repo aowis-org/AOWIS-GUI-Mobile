@@ -177,6 +177,34 @@ public:
         this->m_headingFromCompass = enabled;
     }
 
+    // How far the gyroscope may fall behind the compass before the compass
+    // drives the view (default kGyroTimeoutSeconds). A caller that always
+    // supplies motion itself (VisionFusion: camera, else compass-only
+    // motion) raises it, so the raw compass never takes over.
+    // The gyroscope pose is already device -> ENU (magnetic), as from the
+    // own field orientation or VisionFusion: the view is shown at once, with
+    // a zero heading offset until the compass refines it. Without this (a
+    // game rotation vector, arbitrary heading) nothing is shown before the
+    // first compass reading. Never wait for the compass when its readings
+    // may be withheld (a field judged disturbed): that froze the view.
+    void setMotionIsGeographic(bool geographic)
+    {
+        this->m_motionIsGeographic = geographic;
+    }
+
+    // Slow-north correction rate while turning, as a fraction of the turn
+    // rate (default kMotionCorrectionFraction). Lower when the motion source
+    // is far better than the compass (VisionFusion: the camera).
+    void setMotionCorrectionFraction(double fraction)
+    {
+        this->m_motionCorrection = std::isfinite(fraction) && fraction >= 0.0 ? fraction : kMotionCorrectionFraction;
+    }
+
+    void setGyroTimeoutSeconds(double seconds)
+    {
+        this->m_gyroTimeout = std::isfinite(seconds) && seconds > 0.0 ? seconds : kGyroTimeoutSeconds;
+    }
+
     void reset()
     {
         this->m_gyro.clear();
@@ -219,6 +247,10 @@ public:
     {
         if (!std::isfinite(seconds) || !std::isfinite(arrival))
             return;
+        // A sensor clock that jumps back (driver resync) restarts the engine;
+        // otherwise every later sample would count as old.
+        if (this->m_gyro.count > 0 && seconds < this->m_gyro.newest().seconds - kMaxGapSeconds)
+            restartTimeline();
         const Quaternion q = AowisCompass::normalized(pose);
         if (this->m_gyro.count > 0)
         {
@@ -298,11 +330,13 @@ public:
     {
         if (!std::isfinite(seconds) || !std::isfinite(arrival))
             return;
+        if (this->m_compass.count > 0 && seconds < this->m_compass.newest().seconds - kMaxGapSeconds)
+            restartTimeline();
         if (this->m_compass.count > 0 && seconds <= this->m_compass.newest().seconds)
             return;
         const Quaternion q = AowisCompass::normalized(pose);
         const bool gyroCurrent = this->m_gyro.count > 0 &&
-                                 seconds - this->m_gyro.newest().seconds <= kGyroTimeoutSeconds;
+                                 seconds - this->m_gyro.newest().seconds <= this->m_gyroTimeout;
         if (this->m_compass.count > 0 && seconds - this->m_compass.newest().seconds > kMaxGapSeconds)
         {
             this->m_compass.clear();
@@ -338,6 +372,24 @@ public:
     }
 
     bool hasPose() const { return this->m_hasCore; }
+
+    // Starts over on a new time line, keeping the settings.
+    void restartTimeline()
+    {
+        const bool headingFromCompass = this->m_headingFromCompass;
+        const bool geographic = this->m_motionIsGeographic;
+        const double motionCorrection = this->m_motionCorrection;
+        const double gyroTimeout = this->m_gyroTimeout;
+        const double magnification = this->m_magnification;
+        const double lead = this->m_leadFraction;
+        reset();
+        this->m_headingFromCompass = headingFromCompass;
+        this->m_motionIsGeographic = geographic;
+        this->m_motionCorrection = motionCorrection;
+        this->m_gyroTimeout = gyroTimeout;
+        this->m_magnification = magnification;
+        this->m_leadFraction = lead;
+    }
 
     // Pose to show for a frame drawn at 'now' (the clock of 'arrival').
     // Only the display delay adapts; the core is never changed by frames.
@@ -784,12 +836,14 @@ private:
             if (this->m_headingFromCompass)
             {
                 double offset = 0.0;
-                if (!offsetAt(t, &offset) || !this->m_gyro.interpolate(t, kMaxGapSeconds, &gyro, &heading))
+                if ((!offsetAt(t, &offset) && !this->m_motionIsGeographic) ||
+                    !this->m_gyro.interpolate(t, kMaxGapSeconds, &gyro, &heading))
                     return false;
                 *pose = AowisCompass::normalized(AowisCompass::multiply(aboutUp(offset + heading), gyro));
                 return true;
             }
-            if (!this->m_hasOffset || !this->m_gyro.interpolate(t, kMaxGapSeconds, &gyro, &heading))
+            if ((!this->m_hasOffset && !this->m_motionIsGeographic) ||
+                !this->m_gyro.interpolate(t, kMaxGapSeconds, &gyro, &heading))
                 return false;
             *pose = AowisCompass::normalized(AowisCompass::multiply(aboutUp(this->m_appliedOffset + heading), gyro));
             return true;
@@ -841,7 +895,7 @@ private:
         {
             const double turn = AowisCompass::length(this->m_rate);
             const double limit = (kRestCorrectionDegreesPerSecond * AowisCompass::kPi / 180.0 / this->m_magnification
-                                  + kMotionCorrectionFraction * turn) * kStepSeconds;
+                                  + this->m_motionCorrection * turn) * kStepSeconds;
             const double remaining = wrap(this->m_targetOffset - this->m_appliedOffset);
             this->m_appliedOffset = wrap(this->m_appliedOffset + std::clamp(remaining, -limit, limit));
         }
@@ -1008,6 +1062,9 @@ private:
     HeadingTracker m_headingTracker;
     HeadingTracker m_compassTracker;
     bool m_headingFromCompass = true;
+    double m_gyroTimeout = kGyroTimeoutSeconds;
+    bool m_motionIsGeographic = false;
+    double m_motionCorrection = kMotionCorrectionFraction;
     // Heading offset (compass - gyroscope about Up, unwrapped, in 'heading')
     // at each compass reading's sensor time.
     History<kInputHistorySize> m_offsets;

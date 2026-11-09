@@ -84,7 +84,9 @@ main() {
                 benchmarks/android/*/network-*.csv|\
                 benchmarks/android/*/device.txt|\
                 benchmarks/lifecycle/*/*.csv|\
-                benchmarks/lifecycle/*/*.txt) ;;
+                benchmarks/lifecycle/*/*.txt|\
+                benchmarks/lookaround/*/*.csv|\
+                benchmarks/lookaround/*/*.txt) ;;
                 *) continue ;;
             esac
             [[ -f "$project_root/$relative_path" && ! -L "$project_root/$relative_path" ]] || continue

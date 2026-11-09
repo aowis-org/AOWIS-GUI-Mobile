@@ -50,6 +50,18 @@ public:
         double relativeY = 0.0;
         double relativeZ = 0.0;
         double relativeW = 1.0;
+        // AOWIS' own orientation from the raw accelerometer and magnetometer,
+        // time-matched and identically filtered (look_around_field.h), for
+        // Look around on phones without a real gyroscope. Set on samples
+        // emitted for it (absoluteFresh false); x..w repeat the compass.
+        bool hasField = false;
+        double fieldSeconds = 0.0;            // magnetometer event time
+        double fieldX = 0.0;
+        double fieldY = 0.0;
+        double fieldZ = 0.0;
+        double fieldW = 1.0;
+        double fieldStrength = 0.0;           // |B|, microtesla
+        double fieldDipDegrees = 0.0;         // field below the horizontal
         double headingAccuracyDegrees = -1.0; // -1: not reported
         int magneticStatus = -1;              // Android SENSOR_STATUS_*, -1 unknown
         double seconds = 0.0;                 // sensor timestamp (monotonic)
@@ -68,6 +80,17 @@ public:
     bool active() const;
     Mode mode() const;
 
+    // Diagnostics: events since start (any thread may read).
+    struct Counters
+    {
+        unsigned long long accelerometer = 0;
+        unsigned long long magnetometer = 0;
+        unsigned long long rotationVector = 0;
+        unsigned long long fieldOutputs = 0;
+        unsigned long long fieldSamples = 0;
+    };
+    Counters counters() const;
+
 private:
     void run(Mode mode);
 
@@ -77,5 +100,10 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<void *> m_looper{nullptr};
     std::atomic<unsigned int> m_generation{0};
+    std::atomic<unsigned long long> m_accelerometerEvents{0};
+    std::atomic<unsigned long long> m_magnetometerEvents{0};
+    std::atomic<unsigned long long> m_rotationVectorEvents{0};
+    std::atomic<unsigned long long> m_fieldOutputs{0};
+    std::atomic<unsigned long long> m_fieldSamples{0};
     Mode m_mode = Mode::None;
 };

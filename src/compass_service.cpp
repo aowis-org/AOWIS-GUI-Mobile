@@ -96,6 +96,72 @@ double CompassService::relativeTimestampSeconds() const
     return this->m_relativeSeconds;
 }
 
+QQuaternion CompassService::fieldOrientationQuaternion() const
+{
+    return this->m_fieldOrientation;
+}
+
+double CompassService::fieldTimestampSeconds() const
+{
+    return this->m_fieldSeconds;
+}
+
+double CompassService::fieldStrength() const
+{
+    return this->m_fieldStrength;
+}
+
+double CompassService::fieldDipDegrees() const
+{
+    return this->m_fieldDip;
+}
+
+bool CompassService::hasGyroscope() const
+{
+    return this->m_hardware.gyroscope;
+}
+
+QString CompassService::fieldDiagnostics() const
+{
+    return this->m_fieldDiagnostics;
+}
+
+void CompassService::updateFieldDiagnostics()
+{
+    const qint64 now = this->m_clock.elapsed();
+    const CompassSensorSource::Counters counters = this->m_source.counters();
+    if (this->m_lastDiagnosticsMs >= 0 && now > this->m_lastDiagnosticsMs)
+    {
+        const double seconds = (now - this->m_lastDiagnosticsMs) / 1000.0;
+        const std::function<QString(unsigned long long, unsigned long long)> rate = [seconds](unsigned long long now_count, unsigned long long then_count) {
+            return now_count >= then_count ? QString::number(double(now_count - then_count) / seconds, 'f', 0)
+                                           : QStringLiteral("?");
+        };
+        const QString mode = this->m_source.mode() == CompassSensorSource::Mode::RotationVector
+            ? QStringLiteral("rotation vector")
+            : this->m_source.mode() == CompassSensorSource::Mode::FusionWithGyroscope
+            ? QStringLiteral("own fusion + gyroscope")
+            : this->m_source.mode() == CompassSensorSource::Mode::FusionWithoutGyroscope
+            ? QStringLiteral("own fusion") : QStringLiteral("off");
+        const QString text = QStringLiteral("Sensors/s (%1):\naccel %2, mag %3, rotvec %4\nfield %5, sent %6, received %7")
+            .arg(mode)
+            .arg(rate(counters.accelerometer, this->m_lastCounters.accelerometer))
+            .arg(rate(counters.magnetometer, this->m_lastCounters.magnetometer))
+            .arg(rate(counters.rotationVector, this->m_lastCounters.rotationVector))
+            .arg(rate(counters.fieldOutputs, this->m_lastCounters.fieldOutputs))
+            .arg(rate(counters.fieldSamples, this->m_lastCounters.fieldSamples))
+            .arg(rate(this->m_fieldReceived, this->m_lastFieldReceived));
+        if (text != this->m_fieldDiagnostics)
+        {
+            this->m_fieldDiagnostics = text;
+            emit fieldDiagnosticsChanged();
+        }
+    }
+    this->m_lastCounters = counters;
+    this->m_lastFieldReceived = this->m_fieldReceived;
+    this->m_lastDiagnosticsMs = now;
+}
+
 int CompassService::screenRotationDegrees() const
 {
     return this->m_displayRotationDegrees;
@@ -342,6 +408,22 @@ void CompassService::handleSample(const CompassSensorSource::Sample &sample)
                                                   static_cast<float>(sample.relativeZ / relativeNorm));
     this->m_orientationSeconds = sample.seconds;
     this->m_relativeSeconds = this->m_relativeOrientation.isNull() ? 0.0 : sample.relativeSeconds;
+    if (sample.hasField)
+    {
+        ++this->m_fieldReceived;
+        const double fieldNorm = std::hypot(std::hypot(sample.fieldX, sample.fieldY),
+                                            std::hypot(sample.fieldZ, sample.fieldW));
+        if (std::isfinite(fieldNorm) && fieldNorm >= 0.5)
+        {
+            this->m_fieldOrientation = QQuaternion(static_cast<float>(sample.fieldW / fieldNorm),
+                                                   static_cast<float>(sample.fieldX / fieldNorm),
+                                                   static_cast<float>(sample.fieldY / fieldNorm),
+                                                   static_cast<float>(sample.fieldZ / fieldNorm));
+            this->m_fieldSeconds = sample.fieldSeconds;
+            this->m_fieldStrength = sample.fieldStrength;
+            this->m_fieldDip = sample.fieldDipDegrees;
+        }
+    }
     this->m_lastPoseMs = this->m_clock.elapsed();
     emit poseChanged();
     // A game rotation vector sample repeats the latest compass reading:
@@ -385,6 +467,7 @@ void CompassService::handleSample(const CompassSensorSource::Sample &sample)
 
 void CompassService::handleTimeout()
 {
+    updateFieldDiagnostics();
     // A sensor backend can report a successful start yet deliver no samples.
     // Do not leave the UI in "Waiting" forever: identify this failure separately
     // from frame animation, which is never involved in reading the sensor.

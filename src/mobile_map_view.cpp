@@ -8,6 +8,10 @@
 #include "lifecycle_watchdog.h"
 #include "mobile_map_math.h"
 #include "look_around_engine.h"
+#include "look_around_camera.h"
+#include "look_around_field.h"
+#include "look_around_recorder.h"
+#include "look_around_vision.h"
 #include "compass_heading.h"
 
 #include "map/bgfx/map_bgfx_2d_projection.h"
@@ -32,6 +36,7 @@
 #include <QMouseEvent>
 #include <QOpenGLContext>
 #include <QPalette>
+#include <QPermissions>
 #include <QPointer>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
@@ -152,6 +157,41 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QQuaternion screen_to_device;
     AowisMobileMap::LookAroundEngine look_around_engine;
     AowisMobileMap::LookAroundFrameClock look_around_clock;
+    AowisMobileMap::LookAroundFieldSource look_around_field;
+    // Field mode bookkeeping (arrival clock): last field sample, when the
+    // mode (re)started, samples since the last status, and the status line.
+    double look_around_field_last = -1.0;
+    double look_around_field_started = -1.0;
+    double look_around_field_status_time = -1.0;
+    int look_around_field_count = 0;
+    double look_around_field_strength = 0.0;
+    double look_around_field_dip = 0.0;
+    QString look_around_field_status;
+    // Why field readings are missing: calls from QML, of which rejected as
+    // not newer, and the newest offered / last accepted sensor times.
+    int look_around_field_calls = 0;
+    int look_around_field_rejected = 0;
+    int look_around_field_entries = 0;  // setFieldPose() calls, before any check
+    QString look_around_field_guard;    // the entry check that refused the last one
+    double look_around_field_offered = 0.0;
+    double look_around_field_accepted = 0.0;
+    void updateFieldStatus(double now, bool fallback);
+    // Camera stabilization.
+    bool look_around_vision = false;
+    bool look_around_vision_permission_pending = false;
+    std::unique_ptr<LookAroundCamera> look_around_camera;
+    AowisMobileMap::VisionFusion look_around_fusion;
+    int look_around_vision_frames = 0;
+    int look_around_vision_valid = 0;
+    int look_around_vision_points = 0;
+    double look_around_vision_status_time = -1.0;
+    QString look_around_vision_status;
+    // Own field data drives the engine (camera stabilization).
+    bool fieldDriven() const { return this->look_around_vision; }
+    void configureEngine();
+    void updateCamera();
+    void handleVision(const AowisMobileMap::VisionTracker::Result &result);
+    void setVisionStatus(const QString &status);
     // Look-around frame recording (diagnostics): the first two minutes of a
     // session, written to AppDataLocation/lookaround/ when it ends.
     struct LookAroundFrame
@@ -167,6 +207,8 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
         int gyro_samples = 0;
         bool uses_gyro = false;
         int mode_switches = 0;
+        bool field_motion = false;
+        bool field_trusted = true;
         bool panorama = false;
     };
     static constexpr std::size_t kLookAroundRecordFrames = 7200;
@@ -324,6 +366,8 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
 
 MobileMapView::Impl::~Impl()
 {
+    if (this->look_around_camera)
+        this->look_around_camera->stop();
     saveCamera();
     for (const QMetaObject::Connection &connection : this->window_connections)
         QObject::disconnect(connection);
@@ -813,6 +857,7 @@ void MobileMapView::Impl::setApplicationActive(bool active)
         return;
     this->application_active = active;
     resetLookAround();
+    updateCamera();
     recordLifecycleEvent(active ? QStringLiteral("app_active") : QStringLiteral("app_inactive"));
     if (active)
     {
@@ -1181,6 +1226,13 @@ void MobileMapView::setLookAround(bool enabled)
         model.setGlobeEyePose(std::nullopt);
         this->impl->returnToFix();
     }
+    // Camera stabilization runs only during Look around.
+    this->impl->updateCamera();
+    // Raw sensor recording (tools/pull_look_around.sh) during Look around.
+    if (lookAround())
+        AowisMobileMap::LookAroundRecorder::instance().start();
+    else
+        AowisMobileMap::LookAroundRecorder::instance().stop();
     emit lookAroundChanged();
 }
 
@@ -1227,6 +1279,21 @@ void MobileMapView::setDevicePose(const QQuaternion &pose, double pose_seconds,
     AowisMobileMap::LookAroundEngine &engine = this->impl->look_around_engine;
     const double arrival = sensorClockSeconds();
     engine.setMagnification(this->impl->model.globeEyePose()->magnification);
+    // Own field orientation drives the view (setFieldPose()): the phone's
+    // rotation vectors only set screen rotation and declination above.
+    // Without field samples for 0.5 s the phone's sensors drive it instead,
+    // so the view never freezes.
+    if (this->impl->fieldDriven())
+    {
+        if (this->impl->look_around_field_started < 0.0)
+            this->impl->look_around_field_started = arrival;
+        const double since = this->impl->look_around_field_last >= 0.0
+            ? arrival - this->impl->look_around_field_last : arrival - this->impl->look_around_field_started;
+        const bool fallback = since > 0.5;
+        this->impl->updateFieldStatus(arrival, fallback);
+        if (!fallback)
+            return;
+    }
     if (!relative_pose.isNull() && std::isfinite(relative_seconds) && relative_seconds > 0.0)
     {
         if (relative_seconds != this->impl->look_around_last_gyro)
@@ -1237,6 +1304,253 @@ void MobileMapView::setDevicePose(const QQuaternion &pose, double pose_seconds,
     }
     if (std::isfinite(pose_seconds) && pose_seconds > 0.0)
         engine.addCompass({pose.x(), pose.y(), pose.z(), pose.scalar()}, pose_seconds, arrival);
+    if (this->impl->window != nullptr)
+        this->impl->window->update();
+}
+
+QString MobileMapView::lookAroundFieldStatus() const
+{
+    return this->impl->look_around_field_status;
+}
+
+bool MobileMapView::lookAroundVision() const
+{
+    return this->impl->look_around_vision;
+}
+
+void MobileMapView::setLookAroundVision(bool enabled)
+{
+    if (enabled == this->impl->look_around_vision)
+        return;
+    this->impl->resetLookAround();
+    this->impl->look_around_vision = enabled;
+    this->impl->configureEngine();
+    emit lookAroundVisionChanged();
+    if (!enabled)
+    {
+        this->impl->updateCamera();
+        this->impl->setVisionStatus(QString());
+        return;
+    }
+#ifdef Q_OS_ANDROID
+    const QCameraPermission permission;
+    if (qApp->checkPermission(permission) != Qt::PermissionStatus::Granted)
+    {
+        this->impl->look_around_vision_permission_pending = true;
+        this->impl->setVisionStatus(QStringLiteral("Camera: waiting for permission"));
+        qApp->requestPermission(permission, this, [this](const QPermission &result) {
+            this->impl->look_around_vision_permission_pending = false;
+            if (result.status() != Qt::PermissionStatus::Granted)
+            {
+                this->impl->setVisionStatus(QStringLiteral("Camera: permission denied - compass fallback"));
+                return;
+            }
+            this->impl->updateCamera();
+        });
+        return;
+    }
+#endif
+    this->impl->updateCamera();
+}
+
+QString MobileMapView::lookAroundVisionStatus() const
+{
+    return this->impl->look_around_vision_status;
+}
+
+void MobileMapView::Impl::configureEngine()
+{
+    // Camera: the fusion always supplies motion and the compass only
+    // corrects north slowly. Otherwise heading from the compass while turning.
+    this->look_around_engine.setHeadingFromCompass(!this->look_around_vision);
+    // Field and camera motion already point north: show them at once.
+    this->look_around_engine.setMotionIsGeographic(fieldDriven());
+    this->look_around_engine.setMotionCorrectionFraction(this->look_around_vision
+        ? AowisMobileMap::VisionFusion::kEngineMotionCorrectionFraction
+        : AowisMobileMap::LookAroundEngine::kMotionCorrectionFraction);
+    this->look_around_engine.setGyroTimeoutSeconds(this->look_around_vision
+        ? AowisMobileMap::VisionFusion::kEngineGyroTimeoutSeconds
+        : AowisMobileMap::LookAroundEngine::kGyroTimeoutSeconds);
+}
+
+void MobileMapView::Impl::setVisionStatus(const QString &status)
+{
+    if (status == this->look_around_vision_status)
+        return;
+    this->look_around_vision_status = status;
+    emit this->item->lookAroundVisionStatusChanged();
+}
+
+// Runs the camera exactly while camera stabilization is on, Look around is
+// on, the app is in the foreground and the permission is granted.
+void MobileMapView::Impl::updateCamera()
+{
+    const bool wanted = this->look_around_vision && this->application_active &&
+                        this->model.globeEyePose().has_value() && !this->look_around_vision_permission_pending;
+    if (!wanted)
+    {
+        if (this->look_around_camera)
+            this->look_around_camera->stop();
+        return;
+    }
+    if (!this->look_around_camera)
+    {
+        this->look_around_camera = std::make_unique<LookAroundCamera>();
+        this->look_around_camera->setResultHandler([this](const AowisMobileMap::VisionTracker::Result &result) {
+            handleVision(result);
+        });
+    }
+    if (this->look_around_camera->active())
+        return;
+#ifdef Q_OS_ANDROID
+    if (qApp->checkPermission(QCameraPermission()) != Qt::PermissionStatus::Granted)
+    {
+        setVisionStatus(QStringLiteral("Camera: permission denied - compass fallback"));
+        return;
+    }
+#endif
+    this->look_around_fusion.reset();
+    this->look_around_vision_frames = 0;
+    this->look_around_vision_valid = 0;
+    this->look_around_vision_status_time = -1.0;
+    if (!this->look_around_camera->start())
+        setVisionStatus(QStringLiteral("Camera: %1 - compass fallback").arg(this->look_around_camera->problem()));
+    else
+        setVisionStatus(QStringLiteral("Camera: starting"));
+}
+
+void MobileMapView::Impl::handleVision(const AowisMobileMap::VisionTracker::Result &result)
+{
+    if (!this->look_around_vision || !this->application_active)
+        return;
+    AowisMobileMap::LookAroundRecorder::instance().add('C', result.toSeconds,
+        {result.valid ? 1.0 : 0.0, double(result.inliers), result.rotation.x, result.rotation.y,
+         result.rotation.z, result.rotation.w});
+    ++this->look_around_vision_frames;
+    if (result.valid)
+    {
+        ++this->look_around_vision_valid;
+        this->look_around_vision_points = result.inliers;
+    }
+    const double arrival = sensorClockSeconds();
+    // The camera only turns the fused pose; it reaches the engine with the
+    // next field step (motion sensors' time line).
+    this->look_around_fusion.addVision(result, arrival);
+    if (this->look_around_vision_status_time < 0.0)
+        this->look_around_vision_status_time = arrival;
+    const double span = arrival - this->look_around_vision_status_time;
+    if (span < 0.5)
+        return;
+    const double fps = this->look_around_vision_frames / span;
+    const double reliable = this->look_around_vision_frames > 0
+        ? 100.0 * this->look_around_vision_valid / this->look_around_vision_frames : 0.0;
+    QString state;
+    if (this->look_around_fusion.orientation() < 0)
+        state = QStringLiteral("learning image orientation - move the phone");
+    else if (this->look_around_fusion.visionActive(arrival))
+        state = QStringLiteral("tracking, %1 points").arg(this->look_around_vision_points);
+    else
+        state = QStringLiteral("nothing reliable - compass fallback");
+    setVisionStatus(QStringLiteral("Camera: %1 fps, %2 % reliable\n%3")
+                        .arg(fps, 0, 'f', 0).arg(reliable, 0, 'f', 0).arg(state));
+    this->look_around_vision_frames = 0;
+    this->look_around_vision_valid = 0;
+    this->look_around_vision_status_time = arrival;
+}
+
+void MobileMapView::Impl::updateFieldStatus(double now, bool fallback)
+{
+    if (this->look_around_field_status_time >= 0.0 && now - this->look_around_field_status_time < 0.5)
+        return;
+    const double span = this->look_around_field_status_time >= 0.0 ? now - this->look_around_field_status_time : 0.0;
+    const double rate = span > 0.0 ? this->look_around_field_count / span : 0.0;
+    this->look_around_field_status_time = now;
+    this->look_around_field_count = 0;
+    QString status;
+    if (fallback)
+    {
+        const double silent = this->look_around_field_last >= 0.0 ? now - this->look_around_field_last
+                                                                   : now - this->look_around_field_started;
+        status = QStringLiteral("Field: no samples for %1 s\n%6 calls%7\n%2 offered, %3 rejected\n"
+                                "newest %4 s, accepted %5 s\nphone sensors drive the view")
+            .arg(silent, 0, 'f', 1)
+            .arg(this->look_around_field_calls)
+            .arg(this->look_around_field_rejected)
+            .arg(this->look_around_field_offered, 0, 'f', 2)
+            .arg(this->look_around_field_accepted, 0, 'f', 2)
+            .arg(this->look_around_field_entries)
+            .arg(this->look_around_field_guard.isEmpty() ? QString()
+                                                         : QStringLiteral(" refused: ") + this->look_around_field_guard);
+        this->look_around_field_entries = 0;
+        this->look_around_field_calls = 0;
+        this->look_around_field_rejected = 0;
+    }
+    else
+        status = QStringLiteral("Field: %1 Hz, %2 uT\ndip %3 deg, %4")
+            .arg(rate, 0, 'f', 0)
+            .arg(this->look_around_field_strength, 0, 'f', 1)
+            .arg(this->look_around_field_dip, 0, 'f', 1)
+            .arg(this->look_around_field.trusted() ? QStringLiteral("trusted")
+                                                   : QStringLiteral("disturbed, heading held"));
+    if (status != this->look_around_field_status)
+    {
+        this->look_around_field_status = status;
+        emit this->item->lookAroundFieldStatusChanged();
+    }
+}
+
+void MobileMapView::setFieldPose(const QQuaternion &pose, double seconds, double strength,
+                                 double dip_deg, double expected_strength, double expected_dip_deg)
+{
+    ++this->impl->look_around_field_entries;
+    const char *guard = !lookAround() ? "no look around"
+                      : !this->impl->application_active ? "app inactive"
+                      : !this->impl->fieldDriven() ? "mode off"
+                      : pose.isNull() ? "null pose"
+                      : !std::isfinite(seconds) || seconds <= 0.0 ? "bad time" : nullptr;
+    this->impl->look_around_field_guard = guard != nullptr ? QString::fromLatin1(guard) : QString();
+    if (guard != nullptr)
+        return;
+    AowisMobileMap::LookAroundFieldSource &field = this->impl->look_around_field;
+    field.setExpectedField(expected_strength, expected_dip_deg);
+    AowisMobileMap::LookAroundFieldSource::Step step;
+    ++this->impl->look_around_field_calls;
+    this->impl->look_around_field_offered = seconds;
+    if (!field.add({pose.x(), pose.y(), pose.z(), pose.scalar()}, seconds, strength, dip_deg, &step))
+    {
+        // Repeats of the same reading arrive with every compass sample;
+        // only count a reading that is really older.
+        if (seconds < this->impl->look_around_field_accepted)
+            ++this->impl->look_around_field_rejected;
+        return;
+    }
+    this->impl->look_around_field_accepted = seconds;
+    const double arrival = sensorClockSeconds();
+    if (this->impl->look_around_field_last < 0.0 ||
+        arrival - this->impl->look_around_field_last > 0.5)
+    {
+        // First field sample, or back after the fallback: the engine starts
+        // over on this input (the phone's frame differs).
+        this->impl->look_around_engine.reset();
+        this->impl->look_around_fusion.reset();
+    }
+    this->impl->look_around_field_last = arrival;
+    ++this->impl->look_around_field_count;
+    this->impl->look_around_field_strength = strength;
+    this->impl->look_around_field_dip = dip_deg;
+    this->impl->updateFieldStatus(arrival, false);
+    // Motion (heading gated to turns) moves the view; the field orientation
+    // corrects north only while trusted (turn-gated in the engine).
+    AowisMobileMap::LookAroundEngine &engine = this->impl->look_around_engine;
+    engine.setMagnification(this->impl->model.globeEyePose()->magnification);
+    // The fusion moves the pose (camera heading, else the field's own
+    // motion); field readings are dated back by their filter delay.
+    AowisMobileMap::VisionFusion::Output fused;
+    if (this->impl->look_around_fusion.addField(step, arrival, &fused))
+        engine.addGyro(fused.motion, fused.seconds, arrival);
+    if (step.trusted)
+        engine.addCompass(step.compass, AowisMobileMap::VisionFusion::fieldTime(step.seconds), arrival);
+    ++this->impl->look_around_gyro_samples;
     if (this->impl->window != nullptr)
         this->impl->window->update();
 }
@@ -1269,6 +1583,8 @@ void MobileMapView::Impl::applyLookAroundFrame()
         record.heading_correction = this->look_around_engine.headingCorrectionDegrees();
         record.uses_gyro = this->look_around_engine.usesGyro();
         record.mode_switches = this->look_around_engine.modeSwitches();
+        record.field_motion = this->fieldDriven();
+        record.field_trusted = this->look_around_field.trusted();
         record.gyro_samples = this->look_around_gyro_samples;
         record.panorama = this->look_around_panorama;
         this->look_around_frames.push_back(record);
@@ -1291,12 +1607,55 @@ void MobileMapView::Impl::resetLookAround()
     writeLookAroundRecording();
     this->look_around_engine.reset();
     this->look_around_clock.reset();
+    this->look_around_field.reset();
+    this->look_around_fusion.reset();
+    this->look_around_field_last = -1.0;
+    this->look_around_field_started = -1.0;
+    this->look_around_field_status_time = -1.0;
+    this->look_around_field_count = 0;
+    this->look_around_field_calls = 0;
+    this->look_around_field_rejected = 0;
     this->look_around_gyro_samples = 0;
     this->look_around_last_gyro = 0.0;
 }
 
 void MobileMapView::Impl::writeLookAroundRecording()
 {
+    // Raw sensor events and camera results since the last write
+    // (look_around_recorder.h; replayed by tools/replay_look_around.sh).
+    const std::vector<AowisMobileMap::LookAroundRecorder::Record> records =
+        AowisMobileMap::LookAroundRecorder::instance().take();
+    if (records.size() > 100)
+    {
+        const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+            + QStringLiteral("/lookaround");
+        QFile file(directory + QStringLiteral("/sensors-")
+                   + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss")) + QStringLiteral(".csv"));
+        if (QDir().mkpath(directory) && file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+            QTextStream stream(&file);
+            stream << "# AOWIS Mobile Look around raw sensors; seconds = sensor time, arrival = CLOCK_BOOTTIME\n"
+                   << "# A accel m/s2 (x,y,z), M magnetometer uT (x,y,z), Y gyro rad/s (x,y,z),"
+                      " R rotation vector / G game rotation vector (x,y,z,w),"
+                      " U uncalibrated magnetometer uT (x,y,z, bias x,y,z),"
+                      " C camera (valid,inliers,x,y,z,w; seconds = camera clock)\n"
+                   << "# camera_stabilization=" << (this->look_around_vision ? 1 : 0)
+                   << " camera_orientation=" << this->look_around_fusion.orientation()
+                   << " camera_reported_orientation="
+                   << (this->look_around_camera ? this->look_around_camera->reportedOrientation() : -1) << "\n"
+                   << "kind,seconds,arrival,v0,v1,v2,v3,v4,v5\n";
+            for (const AowisMobileMap::LookAroundRecorder::Record &record : records)
+            {
+                stream << record.kind << ',' << QString::number(record.seconds, 'f', 6) << ','
+                       << QString::number(record.arrival, 'f', 6);
+                for (double value : record.values)
+                    stream << ',' << QString::number(value, 'g', 9);
+                stream << '\n';
+            }
+            stream.flush();
+            qInfo().noquote() << "AOWIS look around: recorded" << records.size() << "sensor events to" << file.fileName();
+        }
+    }
     if (this->look_around_frames.size() < 2)
     {
         this->look_around_frames.clear();
@@ -1317,8 +1676,11 @@ void MobileMapView::Impl::writeLookAroundRecording()
                    << "# heading_noise_deg: sample-to-sample heading noise of the driving input (gyroscope-grade: below 0.05)\n"
                    << "# source: 1 = game rotation vector drives the view, 0 = compass rotation vector\n"
                    << "# mode_switches: hand-overs between them so far (rising steadily: game rotation vector in bursts)\n"
+                   << "# field_motion: 1 = own accelerometer + magnetometer orientation drives the view;"
+                      " field_trusted: 0 = magnetometer disturbed, heading held\n"
                    << "wall_ms,interval_ms,paced_ms,paced_step_ms,core_lag_ms,delay_ms,bearing_deg,pitch_deg,"
-                      "heading_noise_deg,heading_correction_deg,source,mode_switches,gyro_samples,panorama\n";
+                      "heading_noise_deg,heading_correction_deg,source,mode_switches,field_motion,field_trusted,"
+                      "gyro_samples,panorama\n";
             const double origin = this->look_around_frames.front().wall;
             for (std::size_t index = 0; index < this->look_around_frames.size(); ++index)
             {
@@ -1336,6 +1698,8 @@ void MobileMapView::Impl::writeLookAroundRecording()
                        << QString::number(frame.heading_correction, 'f', 4) << ','
                        << (frame.uses_gyro ? 1 : 0) << ','
                        << frame.mode_switches << ','
+                       << (frame.field_motion ? 1 : 0) << ','
+                       << (frame.field_trusted ? 1 : 0) << ','
                        << frame.gyro_samples << ','
                        << (frame.panorama ? 1 : 0) << '\n';
             }
@@ -1570,6 +1934,11 @@ void MobileMapView::setLookAround(bool) {}
 bool MobileMapView::lookAroundPanorama() const { return false; }
 void MobileMapView::setLookAroundPanorama(bool) {}
 void MobileMapView::setDevicePose(const QQuaternion &, double, const QQuaternion &, double, int, double) {}
+void MobileMapView::setFieldPose(const QQuaternion &, double, double, double, double, double) {}
+QString MobileMapView::lookAroundFieldStatus() const { return QString(); }
+bool MobileMapView::lookAroundVision() const { return false; }
+void MobileMapView::setLookAroundVision(bool) {}
+QString MobileMapView::lookAroundVisionStatus() const { return QString(); }
 double MobileMapView::northAngle() const { return 0.0; }
 void MobileMapView::faceNorth() {}
 void MobileMapView::zoomBy(double) {}

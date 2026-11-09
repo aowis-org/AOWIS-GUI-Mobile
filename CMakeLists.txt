@@ -60,6 +60,11 @@ qt_add_executable(aowis-mobile
     src/mobile_map_view.h
     src/mobile_map_math.h
     src/look_around_engine.h
+    src/look_around_field.h
+    src/look_around_vision.h
+    src/look_around_recorder.h
+    src/look_around_camera.cpp
+    src/look_around_camera.h
     src/look_around_direct.h
     src/lifecycle_watchdog.cpp
     src/lifecycle_watchdog.h
@@ -150,8 +155,9 @@ target_link_libraries(aowis-mobile PRIVATE
     Qt6::Network
 )
 if(ANDROID)
-    # NDK ASensorManager / ALooper for the compass (no Qt Sensors involved).
-    target_link_libraries(aowis-mobile PRIVATE android)
+    # NDK ASensorManager / ALooper for the compass (no Qt Sensors involved),
+    # NDK Camera2 + AImageReader for Look around's camera stabilization.
+    target_link_libraries(aowis-mobile PRIVATE android camera2ndk mediandk)
 endif()
 
 if(AOWIS_MOBILE_WITH_BGFX)
@@ -288,6 +294,19 @@ if(BUILD_TESTING)
         src/compass_fusion.h src/compass_heading.h)
     target_include_directories(aowis-mobile-look-around-engine-tests PRIVATE src)
     add_test(NAME aowis-mobile-look-around-engine COMMAND aowis-mobile-look-around-engine-tests)
+    # Look around without a gyroscope: own accelerometer + magnetometer
+    # orientation (pure C++, no Qt).
+    add_executable(aowis-mobile-look-around-field-tests
+        tests/look_around_field_tests.cpp src/look_around_field.h src/look_around_engine.h
+        src/compass_fusion.h src/compass_heading.h)
+    target_include_directories(aowis-mobile-look-around-field-tests PRIVATE src)
+    add_test(NAME aowis-mobile-look-around-field COMMAND aowis-mobile-look-around-field-tests)
+    # Camera rotation tracking and fusion on synthetic camera images (pure C++).
+    add_executable(aowis-mobile-look-around-vision-tests
+        tests/look_around_vision_tests.cpp src/look_around_vision.h src/look_around_field.h
+        src/look_around_engine.h src/compass_fusion.h src/compass_heading.h)
+    target_include_directories(aowis-mobile-look-around-vision-tests PRIVATE src)
+    add_test(NAME aowis-mobile-look-around-vision COMMAND aowis-mobile-look-around-vision-tests)
     # Direct look-around engine (the one the map uses): pure C++, no Qt.
     add_executable(aowis-mobile-look-around-direct-tests
         tests/look_around_direct_tests.cpp src/look_around_direct.h

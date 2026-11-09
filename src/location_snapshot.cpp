@@ -49,14 +49,19 @@ LocationSnapshot LocationSnapshot::fromPosition(const QGeoPositionInfo &position
             snapshot.declinationDegrees = variation;
     }
 #ifdef Q_OS_ANDROID
-    if (!qIsFinite(snapshot.declinationDegrees))
     {
         const QJniObject field("android/hardware/GeomagneticField", "(FFFJ)V",
             static_cast<jfloat>(snapshot.latitude), static_cast<jfloat>(snapshot.longitude),
             static_cast<jfloat>(snapshot.altitudeAvailable ? snapshot.altitudeMeters : 0.0),
             static_cast<jlong>(position.timestamp().toMSecsSinceEpoch()));
         if (field.isValid())
-            snapshot.declinationDegrees = field.callMethod<jfloat>("getDeclination", "()F");
+        {
+            if (!qIsFinite(snapshot.declinationDegrees))
+                snapshot.declinationDegrees = field.callMethod<jfloat>("getDeclination", "()F");
+            snapshot.inclinationDegrees = field.callMethod<jfloat>("getInclination", "()F");
+            // Android reports nanotesla.
+            snapshot.fieldStrengthMicroTesla = field.callMethod<jfloat>("getFieldStrength", "()F") / 1000.0;
+        }
     }
 #endif
     snapshot.timestampUtc = position.timestamp().toUTC().toString(Qt::ISODateWithMs);

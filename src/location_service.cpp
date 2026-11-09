@@ -91,6 +91,8 @@ double LocationService::horizontalAccuracyMeters() const { return this->m_fix.ho
 double LocationService::verticalAccuracyMeters() const { return this->m_fix.verticalAccuracyMeters; }
 double LocationService::speedMetersPerSecond() const { return this->m_fix.speedMetersPerSecond; }
 double LocationService::declinationDegrees() const { return this->m_fix.declinationDegrees; }
+double LocationService::inclinationDegrees() const { return this->m_fix.inclinationDegrees; }
+double LocationService::fieldStrengthMicroTesla() const { return this->m_fix.fieldStrengthMicroTesla; }
 double LocationService::headingDegrees() const { return this->m_fix.headingDegrees; }
 QString LocationService::timestampUtc() const { return this->m_fix.timestampUtc; }
 int LocationService::fixAgeSeconds() const

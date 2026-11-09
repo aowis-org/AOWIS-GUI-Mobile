@@ -28,6 +28,18 @@ class CompassService final : public QObject
     // advances one or both.
     Q_PROPERTY(double orientationTimestampSeconds READ orientationTimestampSeconds NOTIFY poseChanged)
     Q_PROPERTY(double relativeTimestampSeconds READ relativeTimestampSeconds NOTIFY poseChanged)
+    // AOWIS' own orientation from accelerometer + magnetometer (time-matched,
+    // see look_around_field.h), its magnetometer timestamp, field strength
+    // (microtesla) and dip (degrees below the horizontal). Timestamp 0: none yet.
+    Q_PROPERTY(QQuaternion fieldOrientationQuaternion READ fieldOrientationQuaternion NOTIFY poseChanged)
+    Q_PROPERTY(double fieldTimestampSeconds READ fieldTimestampSeconds NOTIFY poseChanged)
+    Q_PROPERTY(double fieldStrength READ fieldStrength NOTIFY poseChanged)
+    Q_PROPERTY(double fieldDipDegrees READ fieldDipDegrees NOTIFY poseChanged)
+    // The phone lists a gyroscope sensor (it may still be emulated).
+    Q_PROPERTY(bool hasGyroscope READ hasGyroscope CONSTANT)
+    // Once a second while running: sensor events per second at each stage of
+    // the own field orientation (English diagnostics).
+    Q_PROPERTY(QString fieldDiagnostics READ fieldDiagnostics NOTIFY fieldDiagnosticsChanged)
     Q_PROPERTY(int screenRotationDegrees READ screenRotationDegrees NOTIFY poseChanged)
     Q_PROPERTY(double headingDegrees READ headingDegrees NOTIFY headingChanged)
     Q_PROPERTY(double roseHeadingDegrees READ roseHeadingDegrees NOTIFY headingChanged)
@@ -52,6 +64,12 @@ public:
     QQuaternion relativeOrientationQuaternion() const;
     double orientationTimestampSeconds() const;
     double relativeTimestampSeconds() const;
+    QQuaternion fieldOrientationQuaternion() const;
+    double fieldTimestampSeconds() const;
+    double fieldStrength() const;
+    double fieldDipDegrees() const;
+    bool hasGyroscope() const;
+    QString fieldDiagnostics() const;
     int screenRotationDegrees() const;
     double headingDegrees() const;
     double roseHeadingDegrees() const;
@@ -75,6 +93,7 @@ signals:
     void changed();
     void headingChanged();
     void poseChanged();
+    void fieldDiagnosticsChanged();
     void pageVisibleChanged(bool visible);
 
 private:
@@ -108,6 +127,16 @@ private:
     QQuaternion m_relativeOrientation{0.0f, 0.0f, 0.0f, 0.0f};
     double m_orientationSeconds = 0.0;
     double m_relativeSeconds = 0.0;
+    QQuaternion m_fieldOrientation;
+    double m_fieldSeconds = 0.0;
+    double m_fieldStrength = 0.0;
+    double m_fieldDip = 0.0;
+    unsigned long long m_fieldReceived = 0;
+    CompassSensorSource::Counters m_lastCounters;
+    unsigned long long m_lastFieldReceived = 0;
+    qint64 m_lastDiagnosticsMs = -1;
+    QString m_fieldDiagnostics;
+    void updateFieldDiagnostics();
     qint64 m_lastStatusEmitMs = -1;
     qint64 m_startMs = -1;
     int m_sampleCount = 0;

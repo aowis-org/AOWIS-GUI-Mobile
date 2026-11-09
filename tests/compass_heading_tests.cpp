@@ -251,6 +251,88 @@ void report(const char *name, const Run &run)
               << run.meanAbsError << ", range " << run.displayRange
               << ", reverse frames " << run.reverseFrames << '\n';
 }
+
+// Look around on a cheap phone without gyroscope (recorded on a Ulefone
+// Armor X13, benchmarks/lookaround/): held upright, camera facing
+// 'heading', tilted up and down by 'tiltDegrees' (4 s period) after 2 s at
+// rest until 10 s, then turned by 'turnDegrees' at 90 deg/s. The phone's
+// field lags the tilt by 'fieldLag' seconds, as recorded: its dip then
+// swings far from the true 66 deg, near 90 the horizontal field vanishes.
+// Returns the largest error of the camera bearing (elevation within 45 deg).
+struct LookRun
+{
+    double maxBearingError = 0.0;
+    double maxElevationError = 0.0;
+};
+
+Quaternion upright(double heading, double elevation)
+{
+    // Flat phone pitched up 90 deg: camera (-Z) looks at the horizon.
+    return devicePose(heading, 90.0 + elevation, 0.0);
+}
+
+double cameraBearing(const AowisCompass::Quaternion &q, double *elevation)
+{
+    const AowisCompass::Vector3 v = AowisCompass::rotateDeviceToWorld(q, {0.0, 0.0, -1.0});
+    *elevation = std::asin(std::clamp(v.z, -1.0, 1.0)) / kDeg;
+    return std::atan2(v.x, v.y) / kDeg;
+}
+
+LookRun playLookAround(double tiltDegrees, double fieldLag, double turnDegrees)
+{
+    AowisCompass::AttitudeFusion fusion;
+    fusion.setGyroscopeAvailable(false);
+    Noise noise(5);
+    const Vec field{0.0, 20.0, -44.0};
+    const Vec gravityUp{0.0, 0.0, AowisCompass::AttitudeFusion::kStandardGravity};
+    const double turnSeconds = std::fabs(turnDegrees) / 90.0;
+    const std::function<double(double)> headingAt = [turnDegrees, turnSeconds](double t) {
+        if (t < 10.0 || turnSeconds <= 0.0)
+            return 0.0;
+        return turnDegrees * std::min(1.0, (t - 10.0) / turnSeconds);
+    };
+    const std::function<double(double)> elevationAt = [tiltDegrees](double t) {
+        return t < 2.0 || t >= 10.0 ? 0.0 : tiltDegrees * std::sin(2.0 * AowisCompass::kPi * (t - 2.0) / 4.0);
+    };
+    LookRun run;
+    const double dt = 1.0 / 120.0;
+    double nextField = 0.0;
+    for (int step = 0; step * dt <= 16.0; ++step)
+    {
+        const double t = step * dt;
+        Vec g = toDevice(upright(headingAt(t), elevationAt(t)), gravityUp);
+        g.x += noise.gaussian(0.05);
+        g.y += noise.gaussian(0.05);
+        g.z += noise.gaussian(0.05);
+        fusion.addAccelerometer(g.x, g.y, g.z, t);
+        if (t + 1e-9 >= nextField)
+        {
+            const double seen = std::max(0.0, t - fieldLag);
+            Vec m = toDevice(upright(headingAt(seen), elevationAt(seen)), field);
+            m.x += noise.gaussian(0.4);
+            m.y += noise.gaussian(0.4);
+            m.z += noise.gaussian(0.4);
+            fusion.addMagneticField(m.x, m.y, m.z, t);
+            nextField += 1.0 / 50.0;
+        }
+        if (!fusion.hasOrientation() || t < 2.5)
+            continue;
+        double elevation = 0.0;
+        const double bearing = cameraBearing(fusion.orientation(), &elevation);
+        const double trueElevation = elevationAt(t);
+        if (std::fabs(trueElevation) > 45.0)
+            continue;
+        // Up to 0.6 s after the turn ends the heading may still settle
+        // (the field itself arrives up to 'fieldLag' late).
+        if (t >= 10.0 && t < 10.0 + turnSeconds + 0.6)
+            continue;
+        run.maxBearingError = std::max(run.maxBearingError,
+                                       angularError(AowisCompass::normalize(bearing),
+                                                    AowisCompass::normalize(headingAt(t))));
+        run.maxElevationError = std::max(run.maxElevationError, std::fabs(elevation - trueElevation));
+    }
+    return run;
+}
 }
 
 int main()
@@ -493,6 +575,23 @@ int main()
     FusionRun plainSettled = playFusion(false, 12.0, 9.0, turning, 1.0, 0.3);
     reportFusion("fusion no gyro settled after turn", plainSettled);
     CHECK(plainSettled.maxError < 2.0);
+
+    // Look around without gyroscope: tilting up/down must not swing the
+    // heading, also with the lagging field of cheap phones; turning must
+    // still be followed.
+    const LookRun cleanTilt = playLookAround(40.0, 0.0, 0.0);
+    std::cout << "no gyro, tilt +-40 deg, clean field: bearing within " << cleanTilt.maxBearingError
+              << " deg, elevation within " << cleanTilt.maxElevationError << " deg\n";
+    CHECK(cleanTilt.maxBearingError < 3.0);
+    CHECK(cleanTilt.maxElevationError < 14.0);
+    const LookRun laggingTilt = playLookAround(55.0, 0.4, 0.0);
+    std::cout << "no gyro, tilt +-55 deg, field 0.4 s late: bearing within " << laggingTilt.maxBearingError
+              << " deg\n";
+    CHECK(laggingTilt.maxBearingError < 10.0);
+    const LookRun turnAfterTilt = playLookAround(55.0, 0.4, 120.0);
+    std::cout << "no gyro, tilt, then turn 120 deg: bearing within " << turnAfterTilt.maxBearingError
+              << " deg outside the turn\n";
+    CHECK(turnAfterTilt.maxBearingError < 10.0);
 
     std::cout << "compass heading tests passed\n";
     return 0;

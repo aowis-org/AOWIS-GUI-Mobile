@@ -31,6 +31,9 @@ class LocationService final : public QObject
     Q_PROPERTY(double speedMetersPerSecond READ speedMetersPerSecond NOTIFY changed)
     Q_PROPERTY(double headingDegrees READ headingDegrees NOTIFY changed)
     Q_PROPERTY(double declinationDegrees READ declinationDegrees NOTIFY changed)
+    // Expected geomagnetic field at the fix; NaN without one.
+    Q_PROPERTY(double inclinationDegrees READ inclinationDegrees NOTIFY changed)
+    Q_PROPERTY(double fieldStrengthMicroTesla READ fieldStrengthMicroTesla NOTIFY changed)
     Q_PROPERTY(QString timestampUtc READ timestampUtc NOTIFY changed)
     Q_PROPERTY(int fixAgeSeconds READ fixAgeSeconds NOTIFY changed)
 
@@ -55,6 +58,8 @@ public:
     double speedMetersPerSecond() const;
     double headingDegrees() const;
     double declinationDegrees() const;
+    double inclinationDegrees() const;
+    double fieldStrengthMicroTesla() const;
     QString timestampUtc() const;
     int fixAgeSeconds() const;
 
