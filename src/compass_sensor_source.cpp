@@ -2,10 +2,12 @@
 #include "compass_fusion.h"
 #include "compass_heading.h"
 
+#include <QDebug>
 #include <QMetaObject>
 
 #include <cmath>
 #include <utility>
+#include <vector>
 
 #ifdef Q_OS_ANDROID
 #include <android/looper.h>
@@ -18,6 +20,9 @@ namespace
 constexpr int kLooperIdent = 7;
 constexpr int kGyroscopeType = 4;       // ASENSOR_TYPE_GYROSCOPE
 constexpr int kRotationVectorType = 11; // ASENSOR_TYPE_ROTATION_VECTOR
+constexpr int kGameRotationVectorType = 15; // ASENSOR_TYPE_GAME_ROTATION_VECTOR
+// A game rotation vector older than this is not paired with a pose.
+constexpr double kRelativeMaxAgeSeconds = 0.05;
 // 100 Hz; each sensor clamps this to its own minimum delay.
 constexpr int kFastPeriodUs = 10000;
 // Status-only magnetometer while the OS rotation vector drives the heading.
@@ -33,6 +38,36 @@ const ASensor *defaultSensor(int type)
 {
     ASensorManager *manager = sensorManager();
     return manager != nullptr ? ASensorManager_getDefaultSensor(manager, type) : nullptr;
+}
+
+// One logcat line per sensor, so a report can tell a real gyroscope from a
+// vendor emulation (no gyroscope: the heading is magnetometer-only and the
+// game rotation vector, if any, is emulated from the magnetometer too).
+void logSensor(const char *role, const ASensor *sensor)
+{
+    if (sensor == nullptr)
+    {
+        qInfo().noquote() << "AOWIS compass sensor" << role << ": none";
+        return;
+    }
+    qInfo().noquote() << "AOWIS compass sensor" << role << ":" << ASensor_getName(sensor)
+                      << "| vendor" << ASensor_getVendor(sensor)
+                      << "| min delay" << ASensor_getMinDelay(sensor) << "us";
+}
+
+// Unit quaternion of a (game) rotation vector event.
+AowisCompass::Quaternion quaternionFromRotationEvent(const ASensorEvent &event)
+{
+    AowisCompass::Quaternion q;
+    q.x = event.data[0];
+    q.y = event.data[1];
+    q.z = event.data[2];
+    // data[3] (w) is provided since API 18; recompute if absent.
+    const double xyz = q.x * q.x + q.y * q.y + q.z * q.z;
+    const double w = event.data[3];
+    q.w = (std::isfinite(w) && std::fabs(xyz + w * w - 1.0) < 0.1)
+        ? w : std::sqrt(std::fmax(0.0, 1.0 - xyz));
+    return q;
 }
 #endif
 }
@@ -126,6 +161,8 @@ void CompassSensorSource::run(Mode mode)
     }
 
     const ASensor *rotation = mode == Mode::RotationVector ? defaultSensor(kRotationVectorType) : nullptr;
+    // Optional companion of the OS rotation vector for Look around.
+    const ASensor *game = mode == Mode::RotationVector ? defaultSensor(kGameRotationVectorType) : nullptr;
     const ASensor *gyroscope = mode == Mode::FusionWithGyroscope ? defaultSensor(kGyroscopeType) : nullptr;
     const ASensor *accelerometer = mode != Mode::RotationVector
         ? defaultSensor(ASENSOR_TYPE_ACCELEROMETER) : nullptr;
@@ -144,6 +181,9 @@ void CompassSensorSource::run(Mode mode)
         if (mode != Mode::RotationVector)
             registered = registered && ok;
     }
+    if (registered && game != nullptr &&
+        ASensorEventQueue_registerSensor(queue, game, kFastPeriodUs, 0) < 0)
+        game = nullptr;
     if (!registered)
     {
         ASensorManager_destroyEventQueue(manager, queue);
@@ -151,15 +191,28 @@ void CompassSensorSource::run(Mode mode)
         return;
     }
     this->m_looper.store(looper);
+    logSensor("rotation vector", rotation);
+    logSensor("game rotation vector", game);
+    logSensor("gyroscope", defaultSensor(kGyroscopeType));
+    logSensor("magnetometer", magnetometer);
 
     AowisCompass::AttitudeFusion fusion;
     fusion.setGyroscopeAvailable(gyroscope != nullptr);
     int magneticStatus = -1;
+    bool hasGame = false;
+    AowisCompass::Quaternion gamePose;
+    double gameSeconds = 0.0;
+    // Latest OS rotation vector, repeated on game rotation vector samples.
+    bool hasAbsolute = false;
+    AowisCompass::Quaternion absolutePose;
+    double absoluteSeconds = 0.0;
+    double absoluteAccuracyDegrees = -1.0;
     // Samples still queued from an earlier start/stop cycle must not be
     // presented as live after the page is reopened.
     const unsigned int generation = this->m_generation.load();
     // Output cadence: the OS rotation vector, else the gyroscope, else the
-    // magnetometer (the slowest input of the no-gyroscope fusion).
+    // magnetometer (the slowest input of the no-gyroscope fusion). Game
+    // rotation vector events add samples of their own (absoluteFresh false).
     const int drivingType = mode == Mode::RotationVector ? kRotationVectorType
                           : mode == Mode::FusionWithGyroscope ? kGyroscopeType
                           : ASENSOR_TYPE_MAGNETIC_FIELD;
@@ -173,6 +226,8 @@ void CompassSensorSource::run(Mode mode)
         ssize_t count = 0;
         while ((count = ASensorEventQueue_getEvents(queue, events, 32)) > 0)
         {
+            std::vector<Sample> samples;
+            samples.reserve(static_cast<std::size_t>(count));
             for (ssize_t index = 0; index < count; ++index)
             {
                 const ASensorEvent &event = events[index];
@@ -188,22 +243,48 @@ void CompassSensorSource::run(Mode mode)
                                             event.acceleration.z, seconds);
                 else if (event.type == kGyroscopeType)
                     fusion.addGyroscope(event.data[0], event.data[1], event.data[2], seconds);
-
-                if (event.type != drivingType)
-                    continue;
-                if (event.type == kRotationVectorType)
+                else if (event.type == kGameRotationVectorType)
                 {
-                    sample.x = event.data[0];
-                    sample.y = event.data[1];
-                    sample.z = event.data[2];
-                    // data[3] (w) is provided since API 18; recompute if absent.
-                    const double xyz = sample.x * sample.x + sample.y * sample.y + sample.z * sample.z;
-                    const double w = event.data[3];
-                    sample.w = (std::isfinite(w) && std::fabs(xyz + w * w - 1.0) < 0.1)
-                        ? w : std::sqrt(std::fmax(0.0, 1.0 - xyz));
-                    const double accuracy = event.data[4];
-                    sample.headingAccuracyDegrees = (std::isfinite(accuracy) && accuracy > 0.0)
-                        ? accuracy * 180.0 / AowisCompass::kPi : -1.0;
+                    gamePose = quaternionFromRotationEvent(event);
+                    gameSeconds = seconds;
+                    hasGame = true;
+                }
+
+                // Motion first: each game rotation vector event is a sample of
+                // its own, so the compass never sets the pace of Look around.
+                const bool gameSample = event.type == kGameRotationVectorType && hasAbsolute;
+                if (event.type != drivingType && !gameSample)
+                    continue;
+                if (event.type == kRotationVectorType || gameSample)
+                {
+                    if (event.type == kRotationVectorType)
+                    {
+                        absolutePose = quaternionFromRotationEvent(event);
+                        absoluteSeconds = seconds;
+                        const double accuracy = event.data[4];
+                        absoluteAccuracyDegrees = (std::isfinite(accuracy) && accuracy > 0.0)
+                            ? accuracy * 180.0 / AowisCompass::kPi : -1.0;
+                        hasAbsolute = true;
+                    }
+                    sample.absoluteFresh = !gameSample;
+                    sample.x = absolutePose.x;
+                    sample.y = absolutePose.y;
+                    sample.z = absolutePose.z;
+                    sample.w = absolutePose.w;
+                    sample.headingAccuracyDegrees = absoluteAccuracyDegrees;
+                    if (hasGame && std::fabs(seconds - gameSeconds) <= kRelativeMaxAgeSeconds)
+                    {
+                        sample.hasRelative = true;
+                        sample.relativeSeconds = gameSeconds;
+                        sample.relativeX = gamePose.x;
+                        sample.relativeY = gamePose.y;
+                        sample.relativeZ = gamePose.z;
+                        sample.relativeW = gamePose.w;
+                    }
+                    sample.magneticStatus = magneticStatus;
+                    sample.seconds = absoluteSeconds;
+                    samples.push_back(sample);
+                    continue;
                 }
                 else
                 {
@@ -217,19 +298,25 @@ void CompassSensorSource::run(Mode mode)
                 }
                 sample.magneticStatus = magneticStatus;
                 sample.seconds = seconds;
-                // Context object 'this': Qt drops the call if it is destroyed;
-                // the destructor joins this thread before that can happen.
-                QMetaObject::invokeMethod(this, [this, sample, generation]() {
-                    if (this->m_handler && !this->m_stopRequested.load() &&
-                        this->m_generation.load() == generation)
-                        this->m_handler(sample);
-                }, Qt::QueuedConnection);
+                samples.push_back(sample);
             }
+            if (samples.empty())
+                continue;
+            // Keep every reading for fusion, with one GUI event per NDK batch.
+            QMetaObject::invokeMethod(this, [this, samples = std::move(samples), generation]() {
+                for (const Sample &sample : samples)
+                {
+                    if (!this->m_handler || this->m_stopRequested.load() ||
+                        this->m_generation.load() != generation)
+                        return;
+                    this->m_handler(sample);
+                }
+            }, Qt::QueuedConnection);
         }
     }
 
     this->m_looper.store(nullptr);
-    for (const ASensor *sensor : {rotation, gyroscope, accelerometer, magnetometer})
+    for (const ASensor *sensor : {rotation, game, gyroscope, accelerometer, magnetometer})
     {
         if (sensor != nullptr)
             ASensorEventQueue_disableSensor(queue, sensor);

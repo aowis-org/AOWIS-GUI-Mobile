@@ -44,9 +44,12 @@ Window {
         target: compassService
         function onPoseChanged() {
             if (mapView.lookAround && compassService.hasOrientation)
-                mapView.setDeviceOrientation(compassService.orientationQuaternion,
-                                            compassService.screenRotationDegrees,
-                                            locationService.declinationDegrees)
+                mapView.setDevicePose(compassService.orientationQuaternion,
+                                      compassService.orientationTimestampSeconds,
+                                      compassService.relativeOrientationQuaternion,
+                                      compassService.relativeTimestampSeconds,
+                                      compassService.screenRotationDegrees,
+                                      locationService.declinationDegrees)
         }
     }
     property string saveFeedback: ""
@@ -300,6 +303,12 @@ Window {
                     text: qsTr("Look around")
                     checked: mapView.lookAround
                     onToggled: mapView.lookAround = checked
+                }
+                Switch {
+                    visible: mapView.lookAround
+                    text: qsTr("Panorama test (no map)")
+                    checked: mapView.lookAroundPanorama
+                    onToggled: mapView.lookAroundPanorama = checked
                 }
                 Label {
                     visible: mapView.lookAround

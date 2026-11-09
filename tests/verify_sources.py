@@ -153,6 +153,8 @@ checks = [
         "src/compass_heading.h", "src/compass_heading_filter.h",
         "src/compass_sensor_source.cpp", "src/compass_sensor_source.h",
         "src/compass_fusion.h", "tests/compass_heading_tests.cpp",
+        "src/look_around_engine.h", "tests/look_around_engine_tests.cpp",
+        "src/look_around_direct.h", "tests/look_around_direct_tests.cpp",
     ])),
 ]
 for name, ok in checks:

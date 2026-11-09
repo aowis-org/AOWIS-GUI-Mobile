@@ -36,6 +36,12 @@ class MobileMapView : public QQuickItem
     Q_PROPERTY(bool savedCamera READ savedCamera CONSTANT)
     Q_PROPERTY(bool globe READ globe NOTIFY cameraChanged)
     Q_PROPERTY(bool lookAround READ lookAround WRITE setLookAround NOTIFY lookAroundChanged)
+    // Look-around diagnostics: a 360-degree test panorama instead of the
+    // map, through the same sensors, motion engine, frame clock and
+    // renderer frame (MapBgfxMapView::setPanorama()). Smooth over the
+    // panorama but not over the map: the map's rendering is too slow.
+    Q_PROPERTY(bool lookAroundPanorama READ lookAroundPanorama WRITE setLookAroundPanorama
+               NOTIFY lookAroundPanoramaChanged)
     Q_PROPERTY(double northAngle READ northAngle NOTIFY northAngleChanged)
     Q_PROPERTY(bool globeAvailable READ globeAvailable NOTIFY statusChanged)
     Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
@@ -64,7 +70,15 @@ public:
     double northAngle() const;
     bool lookAround() const;
     void setLookAround(bool enabled);
-    Q_INVOKABLE void setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg, double declination_deg);
+    bool lookAroundPanorama() const;
+    void setLookAroundPanorama(bool enabled);
+    // pose: latest compass pose, device to ENU (magnetic), at pose_seconds.
+    // relative_pose: gyroscope-only pose at relative_seconds, or a null
+    // quaternion. A newer relative_seconds advances the view; a newer
+    // pose_seconds only adjusts its heading. Times are sensor timestamps.
+    Q_INVOKABLE void setDevicePose(const QQuaternion &pose, double pose_seconds,
+                                   const QQuaternion &relative_pose, double relative_seconds,
+                                   int screen_rotation_deg, double declination_deg);
     Q_INVOKABLE void faceNorth();
     QVariantList providers() const;
     QString providerId() const;
@@ -94,6 +108,7 @@ signals:
     void cameraChanged();
     void northAngleChanged();
     void lookAroundChanged();
+    void lookAroundPanoramaChanged();
     void repeatedGpsReturn();
     void providersChanged();
     void providerIdChanged();

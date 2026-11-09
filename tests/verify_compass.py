@@ -89,6 +89,25 @@ checks = {
         'activePage !== "map"' in qml,
     "live heading identified as magnetic, never true":
         "MAGNETIC" in qml and "not true north" in qml,
+    "look around: gyroscope motion, compass heading, sensor timestamps":
+        "kGameRotationVectorType = 15" in rv and "sample.hasRelative = true" in rv and
+        "relativeOrientationQuaternion" in header and "relativeTimestampSeconds" in header and
+        "orientationTimestampSeconds" in header and
+        "compassService.relativeOrientationQuaternion" in qml and
+        "compassService.relativeTimestampSeconds" in qml and
+        "compassService.orientationTimestampSeconds" in qml and
+        "sample.absoluteFresh = !gameSample" in rv and "if (!sample.absoluteFresh)" in service and
+        "aowis-mobile-look-around-engine-tests" in cmake and
+        "look-around-engine" in (root / "compile_linux.sh").read_text() and
+        "look_around_stabilizer" not in cmake and
+        "look_around_clock.frameTime(wall)" in (root / "src/mobile_map_view.cpp").read_text() and
+        "class LookAroundFrameClock" in (root / "src/look_around_engine.h").read_text(),
+    "look around: panorama test mode wired to the renderer and recorded":
+        "view->setPanorama(image)" in (root / "src/mobile_map_view.cpp").read_text() and
+        "mapView.lookAroundPanorama" in qml and
+        "assets/panorama/look-around-test.jpg" in cmake and
+        (root / "assets/panorama/look-around-test.jpg").is_file() and
+        ",panorama\\n" in (root / "src/mobile_map_view.cpp").read_text(),
     "pure C++ heading regression test wired to ctest":
         "aowis-mobile-compass-heading-tests" in cmake and
         "aowis-mobile-compass-heading" in (root / "compile_linux.sh").read_text(),

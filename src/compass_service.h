@@ -20,6 +20,14 @@ class CompassService final : public QObject
     Q_PROPERTY(bool hasHeading READ hasHeading NOTIFY changed)
     Q_PROPERTY(bool hasOrientation READ hasOrientation NOTIFY poseChanged)
     Q_PROPERTY(QQuaternion orientationQuaternion READ orientationQuaternion NOTIFY poseChanged)
+    // Gyroscope-only orientation paired with orientationQuaternion; a null
+    // quaternion when the phone has no game rotation vector.
+    Q_PROPERTY(QQuaternion relativeOrientationQuaternion READ relativeOrientationQuaternion NOTIFY poseChanged)
+    // Sensor timestamps in seconds (monotonic, not wall clock) of the latest
+    // compass reading and of the gyroscope-only orientation. A pose update
+    // advances one or both.
+    Q_PROPERTY(double orientationTimestampSeconds READ orientationTimestampSeconds NOTIFY poseChanged)
+    Q_PROPERTY(double relativeTimestampSeconds READ relativeTimestampSeconds NOTIFY poseChanged)
     Q_PROPERTY(int screenRotationDegrees READ screenRotationDegrees NOTIFY poseChanged)
     Q_PROPERTY(double headingDegrees READ headingDegrees NOTIFY headingChanged)
     Q_PROPERTY(double roseHeadingDegrees READ roseHeadingDegrees NOTIFY headingChanged)
@@ -41,6 +49,9 @@ public:
     bool hasHeading() const;
     bool hasOrientation() const;
     QQuaternion orientationQuaternion() const;
+    QQuaternion relativeOrientationQuaternion() const;
+    double orientationTimestampSeconds() const;
+    double relativeTimestampSeconds() const;
     int screenRotationDegrees() const;
     double headingDegrees() const;
     double roseHeadingDegrees() const;
@@ -94,6 +105,9 @@ private:
     qint64 m_lastReadingMs = -1;
     qint64 m_lastPoseMs = -1;
     QQuaternion m_orientation;
+    QQuaternion m_relativeOrientation{0.0f, 0.0f, 0.0f, 0.0f};
+    double m_orientationSeconds = 0.0;
+    double m_relativeSeconds = 0.0;
     qint64 m_lastStatusEmitMs = -1;
     qint64 m_startMs = -1;
     int m_sampleCount = 0;

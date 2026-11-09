@@ -31,6 +31,11 @@ sensors the phone has):
 
 1. **Android fused rotation vector** (`TYPE_ROTATION_VECTOR`), ~100 Hz.
    If it is listed but silent for 2.5 s, the next source is used.
+   Alongside it, the **game rotation vector** (`TYPE_GAME_ROTATION_VECTOR`,
+   no magnetometer) is read where available. Each of its events is a sample
+   of its own (`absoluteFresh` false, repeating the latest compass reading);
+   map Look around takes its motion from these at the gyroscope's rate (see
+   `docs/map.md`). The dial, sample count and rate use compass readings only.
 2. **AOWIS fusion with gyroscope** (`src/compass_fusion.h`): the gyroscope is
    integrated at full rate; the orientation is pulled towards the
    accelerometer/magnetometer solution (TRIAD) with a 2 s time constant,

@@ -59,6 +59,8 @@ qt_add_executable(aowis-mobile
     src/mobile_map_view.cpp
     src/mobile_map_view.h
     src/mobile_map_math.h
+    src/look_around_engine.h
+    src/look_around_direct.h
     src/lifecycle_watchdog.cpp
     src/lifecycle_watchdog.h
 )
@@ -89,6 +91,15 @@ set_source_files_properties(assets/icons/aowis.png PROPERTIES QT_RESOURCE_ALIAS 
 qt_add_resources(aowis-mobile "aowis_application_icon"
     PREFIX "/aowis"
     FILES assets/icons/aowis.png
+)
+
+# Look-around diagnostics: the 360-degree test panorama
+# (MobileMapView::lookAroundPanorama, docs/map.md).
+set_source_files_properties(assets/panorama/look-around-test.jpg PROPERTIES
+    QT_RESOURCE_ALIAS panorama/look-around-test.jpg)
+qt_add_resources(aowis-mobile "aowis_look_around_panorama"
+    PREFIX "/aowis"
+    FILES assets/panorama/look-around-test.jpg
 )
 
 if(APPLE AND NOT ANDROID)
@@ -271,6 +282,18 @@ if(BUILD_TESTING)
         tests/compass_heading_tests.cpp src/compass_heading.h src/compass_heading_filter.h src/compass_fusion.h)
     target_include_directories(aowis-mobile-compass-heading-tests PRIVATE src)
     add_test(NAME aowis-mobile-compass-heading COMMAND aowis-mobile-compass-heading-tests)
+    # Look-around motion engine: pure C++, no Qt.
+    add_executable(aowis-mobile-look-around-engine-tests
+        tests/look_around_engine_tests.cpp src/look_around_engine.h
+        src/compass_fusion.h src/compass_heading.h)
+    target_include_directories(aowis-mobile-look-around-engine-tests PRIVATE src)
+    add_test(NAME aowis-mobile-look-around-engine COMMAND aowis-mobile-look-around-engine-tests)
+    # Direct look-around engine (the one the map uses): pure C++, no Qt.
+    add_executable(aowis-mobile-look-around-direct-tests
+        tests/look_around_direct_tests.cpp src/look_around_direct.h
+        src/compass_fusion.h src/compass_heading.h)
+    target_include_directories(aowis-mobile-look-around-direct-tests PRIVATE src)
+    add_test(NAME aowis-mobile-look-around-direct COMMAND aowis-mobile-look-around-direct-tests)
     add_executable(aowis-mobile-gradienter-math-tests
         tests/gradienter_math_tests.cpp src/gradienter_math.h)
     target_include_directories(aowis-mobile-gradienter-math-tests PRIVATE src)

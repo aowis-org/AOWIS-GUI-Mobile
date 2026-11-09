@@ -81,6 +81,21 @@ QQuaternion CompassService::orientationQuaternion() const
     return this->m_orientation;
 }
 
+QQuaternion CompassService::relativeOrientationQuaternion() const
+{
+    return this->m_relativeOrientation;
+}
+
+double CompassService::orientationTimestampSeconds() const
+{
+    return this->m_orientationSeconds;
+}
+
+double CompassService::relativeTimestampSeconds() const
+{
+    return this->m_relativeSeconds;
+}
+
 int CompassService::screenRotationDegrees() const
 {
     return this->m_displayRotationDegrees;
@@ -317,8 +332,22 @@ void CompassService::handleSample(const CompassSensorSource::Sample &sample)
                                       static_cast<float>(sample.x / norm),
                                       static_cast<float>(sample.y / norm),
                                       static_cast<float>(sample.z / norm));
+    this->m_relativeOrientation = QQuaternion(0.0f, 0.0f, 0.0f, 0.0f);
+    const double relativeNorm = std::hypot(std::hypot(sample.relativeX, sample.relativeY),
+                                           std::hypot(sample.relativeZ, sample.relativeW));
+    if (sample.hasRelative && std::isfinite(relativeNorm) && relativeNorm >= 0.5)
+        this->m_relativeOrientation = QQuaternion(static_cast<float>(sample.relativeW / relativeNorm),
+                                                  static_cast<float>(sample.relativeX / relativeNorm),
+                                                  static_cast<float>(sample.relativeY / relativeNorm),
+                                                  static_cast<float>(sample.relativeZ / relativeNorm));
+    this->m_orientationSeconds = sample.seconds;
+    this->m_relativeSeconds = this->m_relativeOrientation.isNull() ? 0.0 : sample.relativeSeconds;
     this->m_lastPoseMs = this->m_clock.elapsed();
     emit poseChanged();
+    // A game rotation vector sample repeats the latest compass reading:
+    // Look around only. The dial, its rate and its status follow the compass.
+    if (!sample.absoluteFresh)
+        return;
     const double heading = AowisCompass::headingFromRotationVector(
         sample.x, sample.y, sample.z, sample.w, this->m_displayRotationDegrees);
     if (heading < 0.0)

@@ -7,7 +7,7 @@
 
 #include "lifecycle_watchdog.h"
 #include "mobile_map_math.h"
-#include "look_around_stabilizer.h"
+#include "look_around_engine.h"
 #include "compass_heading.h"
 
 #include "map/bgfx/map_bgfx_2d_projection.h"
@@ -46,6 +46,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#ifdef Q_OS_ANDROID
+#include <time.h>
+#endif
 #include <utility>
 #include <vector>
 
@@ -55,6 +58,19 @@ int64_t steadyMicroseconds()
 {
     const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
     return std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+}
+
+double sensorClockSeconds()
+{
+#ifdef Q_OS_ANDROID
+    // Android sensor timestamps include time spent in suspend.
+    timespec now{};
+    if (clock_gettime(CLOCK_BOOTTIME, &now) != 0)
+        return -1.0;
+    return static_cast<double>(now.tv_sec) + static_cast<double>(now.tv_nsec) * 1e-9;
+#else
+    return steadyMicroseconds() * 1e-6;
+#endif
 }
 
 QPalette mapPalette(bool dark)
@@ -100,6 +116,7 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QSize viewport() const;
     void attachWindow(QQuickWindow *window);
     void renderPass();
+    void applyLookAroundFrame();
     void releaseContext();
     void rebuildServer();
     void panBy(const QPointF &delta);
@@ -131,8 +148,34 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     QString server_status;
     bool saved_camera = false;
     QQuaternion eye_enu_to_ecef;
-    QQuaternion stabilized_device_pose;
-    int64_t last_pose_us = 0;
+    QQuaternion magnetic_to_true;
+    QQuaternion screen_to_device;
+    AowisMobileMap::LookAroundEngine look_around_engine;
+    AowisMobileMap::LookAroundFrameClock look_around_clock;
+    // Look-around frame recording (diagnostics): the first two minutes of a
+    // session, written to AppDataLocation/lookaround/ when it ends.
+    struct LookAroundFrame
+    {
+        double wall = 0.0;
+        double paced = 0.0;
+        double core = 0.0;
+        double delay = 0.0;
+        double bearing = 0.0;
+        double pitch = 0.0;
+        double heading_noise = 0.0;
+        double heading_correction = 0.0;
+        int gyro_samples = 0;
+        bool uses_gyro = false;
+        int mode_switches = 0;
+        bool panorama = false;
+    };
+    static constexpr std::size_t kLookAroundRecordFrames = 7200;
+    std::vector<LookAroundFrame> look_around_frames;
+    int look_around_gyro_samples = 0;
+    double look_around_last_gyro = 0.0;
+    bool look_around_panorama = false;
+    void resetLookAround();
+    void writeLookAroundRecording();
 
     bool has_marker = false;
     bool marker_fresh = false;
@@ -354,6 +397,9 @@ void MobileMapView::Impl::attachWindow(QQuickWindow *new_window)
     this->window = new_window;
     if (new_window == nullptr)
         return;
+    this->window_connections.push_back(QObject::connect(
+        new_window, &QQuickWindow::afterAnimating, this->item,
+        [this]() { applyLookAroundFrame(); }));
     // Qt Quick's basic render loop (main.cpp): these run on the GUI thread,
     // the map view's thread, with Qt's OpenGL context current.
     this->window_connections.push_back(QObject::connect(
@@ -766,7 +812,7 @@ void MobileMapView::Impl::setApplicationActive(bool active)
     if (this->application_active == active)
         return;
     this->application_active = active;
-    this->last_pose_us = 0;
+    resetLookAround();
     recordLifecycleEvent(active ? QStringLiteral("app_active") : QStringLiteral("app_inactive"));
     if (active)
     {
@@ -1107,7 +1153,7 @@ void MobileMapView::setLookAround(bool enabled)
     if (enabled == lookAround() || (enabled && !globe()))
         return;
     this->impl->resetGestures();
-    this->impl->last_pose_us = 0;
+    this->impl->resetLookAround();
     MapModel &model = this->impl->model;
     if (enabled)
     {
@@ -1131,31 +1177,174 @@ void MobileMapView::setLookAround(bool enabled)
     }
     else
     {
+        setLookAroundPanorama(false);
         model.setGlobeEyePose(std::nullopt);
         this->impl->returnToFix();
     }
     emit lookAroundChanged();
 }
 
-void MobileMapView::setDeviceOrientation(const QQuaternion &pose, int screen_rotation_deg, double declination_deg)
+bool MobileMapView::lookAroundPanorama() const
 {
-    if (!lookAround() || pose.isNull())
+    return this->impl->look_around_panorama;
+}
+
+void MobileMapView::setLookAroundPanorama(bool enabled)
+{
+    if (enabled == this->impl->look_around_panorama || (enabled && !lookAround()))
         return;
-    MapGlobeEyePose camera = *this->impl->model.globeEyePose();
+    QImage image;
+    if (enabled)
+    {
+        image.load(QStringLiteral(":/aowis/panorama/look-around-test.jpg"));
+        if (image.isNull())
+        {
+            qWarning() << "AOWIS look around: test panorama could not be loaded";
+            return;
+        }
+    }
+    this->impl->look_around_panorama = enabled;
+    this->impl->view->setPanorama(image);
+    emit lookAroundPanoramaChanged();
+}
+
+void MobileMapView::setDevicePose(const QQuaternion &pose, double pose_seconds,
+                                  const QQuaternion &relative_pose, double relative_seconds,
+                                  int screen_rotation_deg, double declination_deg)
+{
+    if (!lookAround() || !this->impl->application_active || pose.isNull())
+        return;
     // Screen-top in native device coordinates is (sin(rotation), cos(rotation), 0).
-    const QQuaternion screen_to_device = QQuaternion::fromAxisAndAngle(0, 0, 1, -screen_rotation_deg);
+    this->impl->screen_to_device = QQuaternion::fromAxisAndAngle(0, 0, 1, -screen_rotation_deg);
     // East-positive declination turns magnetic north toward east. ENU's
     // positive rotation about Up turns north toward west.
-    const QQuaternion magnetic_to_true = std::isfinite(declination_deg)
+    this->impl->magnetic_to_true = std::isfinite(declination_deg)
         ? QQuaternion::fromAxisAndAngle(0, 0, 1, -declination_deg) : QQuaternion();
-    const int64_t now = steadyMicroseconds();
-    const double elapsed = this->impl->last_pose_us == 0 ? 0.0 : (now - this->impl->last_pose_us) * 1e-6;
-    this->impl->last_pose_us = now;
-    this->impl->stabilized_device_pose = AowisMobileMap::stabilizeLookAround(
-        this->impl->stabilized_device_pose, pose, camera.magnification, elapsed);
-    camera.orientation = (this->impl->eye_enu_to_ecef * magnetic_to_true *
-                          this->impl->stabilized_device_pose * screen_to_device).normalized();
-    this->impl->model.setGlobeEyePose(camera);
+    // Inputs keep their sensor timestamps; the engine core advances in fixed
+    // steps of sensor time and frames read it at their own time. Arrival and
+    // frame times share sensorClockSeconds(), so any offset to the sensor
+    // clock cancels.
+    AowisMobileMap::LookAroundEngine &engine = this->impl->look_around_engine;
+    const double arrival = sensorClockSeconds();
+    engine.setMagnification(this->impl->model.globeEyePose()->magnification);
+    if (!relative_pose.isNull() && std::isfinite(relative_seconds) && relative_seconds > 0.0)
+    {
+        if (relative_seconds != this->impl->look_around_last_gyro)
+            ++this->impl->look_around_gyro_samples;
+        this->impl->look_around_last_gyro = relative_seconds;
+        engine.addGyro({relative_pose.x(), relative_pose.y(), relative_pose.z(), relative_pose.scalar()},
+                       relative_seconds, arrival);
+    }
+    if (std::isfinite(pose_seconds) && pose_seconds > 0.0)
+        engine.addCompass({pose.x(), pose.y(), pose.z(), pose.scalar()}, pose_seconds, arrival);
+    if (this->impl->window != nullptr)
+        this->impl->window->update();
+}
+
+void MobileMapView::Impl::applyLookAroundFrame()
+{
+    if (!this->application_active || !this->look_around_engine.hasPose() ||
+        !this->model.globeEyePose().has_value() || !mapViewVisible())
+        return;
+    MapGlobeEyePose camera = *this->model.globeEyePose();
+    // The screen shows frames one refresh apart, but the moment a frame is
+    // prepared jitters by several ms. Sample the motion at the phase-locked
+    // presentation time, not at that raw moment.
+    const double wall = sensorClockSeconds();
+    const double paced = this->look_around_clock.frameTime(wall);
+    const AowisCompass::Quaternion shown = this->look_around_engine.poseForFrame(paced);
+    const QQuaternion device_pose(float(shown.w), float(shown.x),
+                                  float(shown.y), float(shown.z));
+    if (this->look_around_frames.size() < kLookAroundRecordFrames)
+    {
+        const QVector3D axis = device_pose.rotatedVector(QVector3D(0.0f, 0.0f, -1.0f));
+        LookAroundFrame record;
+        record.wall = wall;
+        record.paced = paced;
+        record.core = this->look_around_engine.coreSeconds();
+        record.delay = this->look_around_engine.displayDelaySeconds();
+        record.bearing = std::atan2(double(axis.x()), double(axis.y())) * 180.0 / std::acos(-1.0);
+        record.pitch = std::asin(std::clamp(double(axis.z()), -1.0, 1.0)) * 180.0 / std::acos(-1.0);
+        record.heading_noise = this->look_around_engine.headingNoiseDegrees();
+        record.heading_correction = this->look_around_engine.headingCorrectionDegrees();
+        record.uses_gyro = this->look_around_engine.usesGyro();
+        record.mode_switches = this->look_around_engine.modeSwitches();
+        record.gyro_samples = this->look_around_gyro_samples;
+        record.panorama = this->look_around_panorama;
+        this->look_around_frames.push_back(record);
+    }
+    this->look_around_gyro_samples = 0;
+    const QQuaternion orientation = (this->eye_enu_to_ecef * this->magnetic_to_true *
+                                     device_pose * this->screen_to_device).normalized();
+    if (orientation == camera.orientation)
+        return;
+    camera.orientation = orientation;
+    this->model.setGlobeEyePose(camera);
+    // The shown moment moves on between sensor batches: keep frames coming
+    // while the view is still changing.
+    if (this->window != nullptr)
+        this->window->update();
+}
+
+void MobileMapView::Impl::resetLookAround()
+{
+    writeLookAroundRecording();
+    this->look_around_engine.reset();
+    this->look_around_clock.reset();
+    this->look_around_gyro_samples = 0;
+    this->look_around_last_gyro = 0.0;
+}
+
+void MobileMapView::Impl::writeLookAroundRecording()
+{
+    if (this->look_around_frames.size() < 2)
+    {
+        this->look_around_frames.clear();
+        return;
+    }
+    // Pull with: adb exec-out run-as org.aowis.mobile tar -C files/lookaround -cf - . | tar -xf -
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/lookaround");
+    if (QDir().mkpath(directory))
+    {
+        QFile file(directory + QStringLiteral("/frames-")
+                   + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss")) + QStringLiteral(".csv"));
+        if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+            QTextStream stream(&file);
+            stream << "# AOWIS Mobile Look around frames; times in ms from the first frame (sensor clock)\n"
+                   << "# core_lag_ms = frame time - newest core time (meaningful when the clocks agree)\n"
+                   << "# heading_noise_deg: sample-to-sample heading noise of the driving input (gyroscope-grade: below 0.05)\n"
+                   << "# source: 1 = game rotation vector drives the view, 0 = compass rotation vector\n"
+                   << "# mode_switches: hand-overs between them so far (rising steadily: game rotation vector in bursts)\n"
+                   << "wall_ms,interval_ms,paced_ms,paced_step_ms,core_lag_ms,delay_ms,bearing_deg,pitch_deg,"
+                      "heading_noise_deg,heading_correction_deg,source,mode_switches,gyro_samples,panorama\n";
+            const double origin = this->look_around_frames.front().wall;
+            for (std::size_t index = 0; index < this->look_around_frames.size(); ++index)
+            {
+                const LookAroundFrame &frame = this->look_around_frames[index];
+                const LookAroundFrame &previous = this->look_around_frames[index == 0 ? 0 : index - 1];
+                stream << QString::number((frame.wall - origin) * 1e3, 'f', 3) << ','
+                       << QString::number((frame.wall - previous.wall) * 1e3, 'f', 3) << ','
+                       << QString::number((frame.paced - origin) * 1e3, 'f', 3) << ','
+                       << QString::number((frame.paced - previous.paced) * 1e3, 'f', 3) << ','
+                       << QString::number((frame.wall - frame.core) * 1e3, 'f', 3) << ','
+                       << QString::number(frame.delay * 1e3, 'f', 3) << ','
+                       << QString::number(frame.bearing, 'f', 4) << ','
+                       << QString::number(frame.pitch, 'f', 4) << ','
+                       << QString::number(frame.heading_noise, 'f', 4) << ','
+                       << QString::number(frame.heading_correction, 'f', 4) << ','
+                       << (frame.uses_gyro ? 1 : 0) << ','
+                       << frame.mode_switches << ','
+                       << frame.gyro_samples << ','
+                       << (frame.panorama ? 1 : 0) << '\n';
+            }
+            stream.flush();
+            qInfo().noquote() << "AOWIS look around: recorded" << this->look_around_frames.size()
+                              << "frames to" << file.fileName();
+        }
+    }
+    this->look_around_frames.clear();
 }
 
 double MobileMapView::northAngle() const
@@ -1378,7 +1567,9 @@ void MobileMapView::setLocationMarker(bool, double, double, bool, bool) {}
 void MobileMapView::setGlobe(bool) {}
 bool MobileMapView::lookAround() const { return false; }
 void MobileMapView::setLookAround(bool) {}
-void MobileMapView::setDeviceOrientation(const QQuaternion &, int, double) {}
+bool MobileMapView::lookAroundPanorama() const { return false; }
+void MobileMapView::setLookAroundPanorama(bool) {}
+void MobileMapView::setDevicePose(const QQuaternion &, double, const QQuaternion &, double, int, double) {}
 double MobileMapView::northAngle() const { return 0.0; }
 void MobileMapView::faceNorth() {}
 void MobileMapView::zoomBy(double) {}

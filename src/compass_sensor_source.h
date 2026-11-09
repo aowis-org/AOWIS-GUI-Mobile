@@ -36,6 +36,20 @@ public:
         double y = 0.0;
         double z = 0.0;
         double w = 1.0;
+        // x..w is a new compass reading at 'seconds'. False on samples
+        // emitted for a game rotation vector event: x..w and 'seconds' then
+        // repeat the latest compass reading.
+        bool absoluteFresh = true;
+        // Gyroscope + accelerometer only (Android game rotation vector).
+        // Smooth and precise for relative motion, but its heading reference
+        // is arbitrary and drifts: Look around takes its motion from here,
+        // at this sensor's own rate, and only its heading from x..w.
+        bool hasRelative = false;
+        double relativeSeconds = 0.0;         // game rotation event time
+        double relativeX = 0.0;
+        double relativeY = 0.0;
+        double relativeZ = 0.0;
+        double relativeW = 1.0;
         double headingAccuracyDegrees = -1.0; // -1: not reported
         int magneticStatus = -1;              // Android SENSOR_STATUS_*, -1 unknown
         double seconds = 0.0;                 // sensor timestamp (monotonic)
