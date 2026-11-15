@@ -68,7 +68,7 @@ Window {
     function openPage(page) {
         mapMenu.close()
         navigationDrawer.close()
-        if (page === "settings" && activePage !== "units") {
+        if (page === "settings" && activePage !== "units" && activePage !== "wireguard") {
             mapServerUrl.text = mapServerSettings.serverUrl
             mapServerPort.text = mapServerSettings.serverPort > 0
                                ? String(mapServerSettings.serverPort) : ""
@@ -87,7 +87,7 @@ Window {
             mapMenu.close()
         } else if (navigationDrawer.opened) {
             navigationDrawer.close()
-        } else if (activePage === "units") {
+        } else if (activePage === "units" || activePage === "wireguard") {
             openPage("settings")
         } else if (activePage !== "map") {
             openPage("map")
@@ -828,6 +828,33 @@ Window {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {
+                        visible: wireguardVpnSettings.engineAvailable
+                        text: qsTr("Encrypted WireGuard tunnels for servers that are only reachable over a VPN. They run inside AOWIS only.")
+                        color: root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    Button {
+                        id: wireguardButton
+                        visible: wireguardVpnSettings.engineAvailable
+                        Layout.fillWidth: true
+                        text: qsTr("WireGuard VPN")
+                        palette.buttonText: root.uiText
+                        palette.text: root.uiText
+                        background: Rectangle {
+                            implicitHeight: 44
+                            radius: 10
+                            color: wireguardButton.down ? root.uiPressed : root.uiRaised
+                            border.color: wireguardButton.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        onClicked: root.openPage("wireguard")
+                    }
+                    Rectangle {
+                        visible: wireguardVpnSettings.engineAvailable
+                        Layout.fillWidth: true; height: 1; color: root.uiBorder
+                    }
+                    Label {
                         text: qsTr("Appearance")
                         color: root.uiAccent
                         font.bold: true
@@ -922,6 +949,27 @@ Window {
         borderColor: root.uiBorder
         selectedColor: root.uiSelection
         selectedTextColor: root.uiSelectedText
+        rightToLeft: languageSettings.rightToLeft
+        onBackRequested: root.openPage("settings")
+    }
+
+    WireGuardSettingsPage {
+        id: wireguardPage
+        anchors.fill: parent
+        visible: root.activePage === "wireguard"
+        surfaceColor: root.uiSurface
+        raisedColor: root.uiRaised
+        pressedColor: root.uiPressed
+        inputColor: root.uiInput
+        textColor: root.uiText
+        mutedColor: root.uiMuted
+        placeholderColor: root.uiPlaceholder
+        accentColor: root.uiAccent
+        borderColor: root.uiBorder
+        selectedColor: root.uiSelection
+        selectedTextColor: root.uiSelectedText
+        successColor: root.uiSuccess
+        errorColor: root.uiError
         rightToLeft: languageSettings.rightToLeft
         onBackRequested: root.openPage("settings")
     }

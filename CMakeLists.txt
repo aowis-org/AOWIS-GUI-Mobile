@@ -30,6 +30,8 @@ qt_add_executable(aowis-mobile
     src/main.cpp
     src/map_server_settings.cpp
     src/map_server_settings.h
+    src/wireguard_vpn_settings.cpp
+    src/wireguard_vpn_settings.h
     src/appearance_settings.cpp
     src/appearance_settings.h
     src/language_settings.cpp
@@ -166,10 +168,11 @@ set_source_files_properties(qml/GradienterVial.qml PROPERTIES QT_RESOURCE_ALIAS 
 set_source_files_properties(qml/PlumbBobInstrument.qml PROPERTIES QT_RESOURCE_ALIAS PlumbBobInstrument.qml)
 set_source_files_properties(qml/ToolMenuButton.qml PROPERTIES QT_RESOURCE_ALIAS ToolMenuButton.qml)
 set_source_files_properties(qml/UnitSettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS UnitSettingsPage.qml)
+set_source_files_properties(qml/WireGuardSettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS WireGuardSettingsPage.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml qml/UnitSettingsPage.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml qml/UnitSettingsPage.qml qml/WireGuardSettingsPage.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock
@@ -380,6 +383,14 @@ if(BUILD_TESTING)
     target_include_directories(aowis-mobile-map-server-settings-tests PRIVATE src)
     target_link_libraries(aowis-mobile-map-server-settings-tests PRIVATE Qt6::Core)
     add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
+    if(AOWIS_MOBILE_WITH_WIREGUARD)
+        add_executable(aowis-mobile-wireguard-settings-tests
+            tests/wireguard_vpn_settings_tests.cpp src/wireguard_vpn_settings.cpp src/wireguard_vpn_settings.h)
+        target_include_directories(aowis-mobile-wireguard-settings-tests PRIVATE src)
+        target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core AOWIS::Network)
+        target_compile_definitions(aowis-mobile-wireguard-settings-tests PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=1)
+        add_test(NAME aowis-mobile-wireguard-settings COMMAND aowis-mobile-wireguard-settings-tests)
+    endif()
     add_executable(aowis-mobile-unit-registry-contract-tests
         tests/unit_registry_contract_tests.cpp)
     target_link_libraries(aowis-mobile-unit-registry-contract-tests PRIVATE AOWIS::Model)

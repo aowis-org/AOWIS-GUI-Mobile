@@ -39,12 +39,14 @@ The userspace WireGuard engine of AOWIS-NETWORK (wireguard-go + gVisor
 netstack behind an authenticated loopback SOCKS5 proxy) runs inside the app:
 no Android `VpnService`, no system VPN, nothing else on the phone is routed.
 
-1. **Dependency and build (source done, build pending):** NETWORK is a pinned
+1. **Dependency and build (done):** NETWORK is a pinned
    submodule (`tools/init_network.sh`); the Android build cross-compiles the
    engine with Go and the NDK as a 16 KiB-aligned `libaowis_wireguard.so`
    packaged into the APK; Linux builds it with the host Go.
-2. **Settings → WireGuard VPN:** profile list, import (`.conf` file or
-   pasted text), edit, delete, status with Start/Stop, translated.
+2. **Settings → WireGuard VPN (source done, build/device check pending):**
+   profile list, import (`.conf` file or pasted text) with live
+   diagnostics, edit, delete, status with Start/Stop, translated. See
+   [WireGuard VPN](wireguard-vpn.md).
 3. **Map server through a profile:** the map server setting selects an
    optional WireGuard profile; tiles and terrain then use only that tunnel
    (fail closed, never direct).

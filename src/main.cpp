@@ -8,6 +8,7 @@
 #include "gradienter_service.h"
 #include "plumb_bob_service.h"
 #include "flashlight_service.h"
+#include "wireguard_vpn_settings.h"
 
 #include <QCommandLineParser>
 #include <QDebug>
@@ -62,6 +63,9 @@ int main(int argc, char *argv[])
     GradienterService gradienterService;
     PlumbBobService plumbBobService;
     FlashlightService flashlightService;
+    // Declared before the engine: QML bindings never outlive it, and its
+    // tunnels stop when the application ends.
+    WireGuardVpnSettings wireguardVpnSettings;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
@@ -72,6 +76,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("gradienterService"), &gradienterService);
     engine.rootContext()->setContextProperty(QStringLiteral("plumbBobService"), &plumbBobService);
     engine.rootContext()->setContextProperty(QStringLiteral("flashlightService"), &flashlightService);
+    engine.rootContext()->setContextProperty(QStringLiteral("wireguardVpnSettings"), &wireguardVpnSettings);
     // Qt Quick tracks qsTr() bindings; changing translations never reloads the
     // QML component tree or restarts any render/sensor services.
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
@@ -88,6 +93,9 @@ int main(int argc, char *argv[])
                      &flashlightService, &FlashlightService::changed);
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
                      &mapServerSettings, &MapServerSettings::errorChanged);
+    // Status texts are produced in C++; re-evaluate them in the new language.
+    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
+                     &wireguardVpnSettings, &WireGuardVpnSettings::statusRevisionChanged);
     engine.loadFromModule(QStringLiteral("AOWIS.Mobile"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty())
         return 1;

@@ -1,0 +1,642 @@
+#include "wireguard_vpn_settings.h"
+
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QFile>
+#include <QSettings>
+#include <QThread>
+#include <QTimer>
+#include <QUuid>
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+
+#if AOWIS_MOBILE_WITH_WIREGUARD
+#include "aowis/network/wireguard_client.h"
+#include "aowis/network/wireguard_conf.h"
+#endif
+
+namespace {
+
+// A handshake older than WireGuard's rekey/expiry window (180 s) means the
+// tunnel carries no traffic, whatever the engine state says.
+constexpr qint64 stale_handshake_ms = 180 * 1000;
+constexpr qint64 max_conf_bytes = 2 * 1024 * 1024;
+
+QString ageText(qint64 milliseconds)
+{
+    const qint64 seconds = std::max<qint64>(0, milliseconds / 1000);
+    if (seconds < 60)
+        return WireGuardVpnSettings::tr("%1 s ago").arg(seconds);
+    if (seconds < 3600)
+        return WireGuardVpnSettings::tr("%1 min ago").arg(seconds / 60);
+    return WireGuardVpnSettings::tr("%1 h ago").arg(seconds / 3600);
+}
+
+#if AOWIS_MOBILE_WITH_WIREGUARD
+QString issueText(aowis::network::WireGuardConfIssue issue)
+{
+    using Issue = aowis::network::WireGuardConfIssue;
+    switch (issue)
+    {
+    case Issue::invalid_text: return WireGuardVpnSettings::tr("The text contains a NUL byte or is larger than 2 MiB.");
+    case Issue::invalid_line: return WireGuardVpnSettings::tr("Not a [section] or key = value line.");
+    case Issue::unexpected_section: return WireGuardVpnSettings::tr("Unknown section; only [Interface] and [Peer] are supported.");
+    case Issue::duplicate_interface: return WireGuardVpnSettings::tr("More than one [Interface] section.");
+    case Issue::multiple_peers: return WireGuardVpnSettings::tr("More than one [Peer] section; AOWIS supports exactly one peer.");
+    case Issue::directive_outside_section: return WireGuardVpnSettings::tr("Setting outside of a section.");
+    case Issue::empty_value: return WireGuardVpnSettings::tr("Setting without a value.");
+    case Issue::duplicate_directive: return WireGuardVpnSettings::tr("Setting appears more than once.");
+    case Issue::unknown_directive: return WireGuardVpnSettings::tr("Unknown setting.");
+    case Issue::ignored_directive: return WireGuardVpnSettings::tr("Setting is ignored by AOWIS; hook commands are never run.");
+    case Issue::invalid_key: return WireGuardVpnSettings::tr("Invalid WireGuard key.");
+    case Issue::multiple_addresses: return WireGuardVpnSettings::tr("Only one interface address is supported.");
+    case Issue::invalid_address: return WireGuardVpnSettings::tr("Invalid interface address.");
+    case Issue::invalid_dns: return WireGuardVpnSettings::tr("Invalid DNS server address.");
+    case Issue::ignored_dns_search_domain: return WireGuardVpnSettings::tr("DNS search domains are ignored.");
+    case Issue::invalid_allowed_ip: return WireGuardVpnSettings::tr("Invalid AllowedIPs entry.");
+    case Issue::invalid_endpoint: return WireGuardVpnSettings::tr("Invalid endpoint; use host:port or [IPv6]:port.");
+    case Issue::invalid_number: return WireGuardVpnSettings::tr("Invalid number.");
+    case Issue::missing_interface: return WireGuardVpnSettings::tr("The [Interface] section is missing.");
+    case Issue::missing_peer: return WireGuardVpnSettings::tr("The [Peer] section is missing.");
+    case Issue::missing_private_key: return WireGuardVpnSettings::tr("PrivateKey is missing.");
+    case Issue::missing_address: return WireGuardVpnSettings::tr("Address is missing.");
+    case Issue::missing_peer_public_key: return WireGuardVpnSettings::tr("The peer's PublicKey is missing.");
+    case Issue::missing_endpoint: return WireGuardVpnSettings::tr("The peer's Endpoint is missing.");
+    case Issue::missing_allowed_ips: return WireGuardVpnSettings::tr("The peer's AllowedIPs are missing.");
+    }
+    return WireGuardVpnSettings::tr("Invalid configuration.");
+}
+
+aowis::network::WireGuardConfParse parse(const QString &text)
+{
+    const QByteArray utf8 = text.toUtf8();
+    return aowis::network::parseWireGuardConf(std::string_view(utf8.constData(), static_cast<std::size_t>(utf8.size())));
+}
+#endif
+
+} // namespace
+
+WireGuardVpnSettings::WireGuardVpnSettings(QObject *parent, const QString &settingsFile)
+    : QObject(parent)
+{
+    if (settingsFile.isEmpty())
+    {
+        // App-private storage (Android: the app's data directory).
+        this->settings = std::make_unique<QSettings>(
+            QSettings::NativeFormat, QSettings::UserScope,
+            QStringLiteral("AOWIS"), QStringLiteral("AOWIS-GUI-Mobile"));
+    }
+    else
+        this->settings = std::make_unique<QSettings>(settingsFile, QSettings::IniFormat);
+
+    const int count = this->settings->beginReadArray(QStringLiteral("wireguard/profiles"));
+    for (int i = 0; i < count; ++i)
+    {
+        this->settings->setArrayIndex(i);
+        Profile profile;
+        profile.id = this->settings->value(QStringLiteral("id")).toString();
+        profile.name = this->settings->value(QStringLiteral("name")).toString();
+        profile.text = this->settings->value(QStringLiteral("conf")).toString();
+        if (!profile.id.isEmpty() && !profile.name.isEmpty() && this->indexOf(profile.id) < 0)
+            this->stored.append(profile);
+    }
+    this->settings->endArray();
+
+    this->poll = new QTimer(this);
+    this->poll->setInterval(1000);
+    connect(this->poll, &QTimer::timeout, this, &WireGuardVpnSettings::bumpStatus);
+}
+
+WireGuardVpnSettings::~WireGuardVpnSettings()
+{
+    // Starts block at most for endpoint resolution; never leave a worker
+    // running against a destroyed object. Clients stop as they are released.
+    for (QHash<QString, Tunnel>::iterator it = this->tunnels.begin(); it != this->tunnels.end(); ++it)
+    {
+        if (it->starting != nullptr)
+        {
+            it->starting->disconnect(this);
+            it->starting->wait();
+            delete it->starting;
+            it->starting = nullptr;
+        }
+    }
+    for (QThread *thread : this->orphans)
+    {
+        thread->disconnect(this);
+        thread->wait();
+        delete thread;
+    }
+    this->orphans.clear();
+    this->tunnels.clear();
+}
+
+QVariantList WireGuardVpnSettings::profiles() const
+{
+    QVector<Profile> sorted = this->stored;
+    std::sort(sorted.begin(), sorted.end(), [](const Profile &a, const Profile &b) {
+        return QString::localeAwareCompare(a.name, b.name) < 0;
+    });
+    QVariantList list;
+    for (const Profile &profile : sorted)
+    {
+        QVariantMap item;
+        item.insert(QStringLiteral("id"), profile.id);
+        item.insert(QStringLiteral("name"), profile.name);
+#if AOWIS_MOBILE_WITH_WIREGUARD
+        const aowis::network::WireGuardConfParse parsed = parse(profile.text);
+        item.insert(QStringLiteral("endpoint"), parsed.ok() ? QString::fromStdString(parsed.config.endpoint) : QString());
+        item.insert(QStringLiteral("address"), parsed.ok() ? QString::fromStdString(parsed.config.address) : QString());
+#endif
+        list.append(item);
+    }
+    return list;
+}
+
+int WireGuardVpnSettings::statusRevision() const
+{
+    return this->revision;
+}
+
+QString WireGuardVpnSettings::error() const
+{
+    return this->last_error;
+}
+
+bool WireGuardVpnSettings::engineAvailable() const
+{
+    return AOWIS_MOBILE_WITH_WIREGUARD != 0;
+}
+
+QVariantMap WireGuardVpnSettings::check(const QString &text) const
+{
+    QVariantMap result;
+    QVariantList messages;
+#if AOWIS_MOBILE_WITH_WIREGUARD
+    const aowis::network::WireGuardConfParse parsed = parse(text);
+    for (const aowis::network::WireGuardConfDiagnostic &diagnostic : parsed.diagnostics)
+    {
+        const bool is_error = diagnostic.severity == aowis::network::WireGuardConfSeverity::error;
+        QString message = issueText(diagnostic.issue);
+        if (diagnostic.line > 0)
+            message = tr("Line %1: %2").arg(static_cast<qulonglong>(diagnostic.line)).arg(message);
+        if (!is_error)
+            message = tr("Warning: %1").arg(message);
+        QVariantMap item;
+        item.insert(QStringLiteral("error"), is_error);
+        item.insert(QStringLiteral("text"), message);
+        messages.append(item);
+    }
+    result.insert(QStringLiteral("ok"), parsed.ok());
+#else
+    Q_UNUSED(text)
+    QVariantMap item;
+    item.insert(QStringLiteral("error"), true);
+    item.insert(QStringLiteral("text"), tr("WireGuard is not available in this build."));
+    messages.append(item);
+    result.insert(QStringLiteral("ok"), false);
+#endif
+    result.insert(QStringLiteral("messages"), messages);
+    return result;
+}
+
+int WireGuardVpnSettings::indexOf(const QString &id) const
+{
+    for (int i = 0; i < this->stored.size(); ++i)
+    {
+        if (this->stored.at(i).id == id)
+            return i;
+    }
+    return -1;
+}
+
+bool WireGuardVpnSettings::nameTaken(const QString &name, const QString &except_id) const
+{
+    for (const Profile &profile : this->stored)
+    {
+        if (profile.id != except_id && profile.name.compare(name, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    return false;
+}
+
+bool WireGuardVpnSettings::validateProfile(const QString &name, const QString &text, const QString &except_id)
+{
+    if (name.trimmed().isEmpty())
+    {
+        this->setError(tr("Enter a profile name."));
+        return false;
+    }
+    if (this->nameTaken(name.trimmed(), except_id))
+    {
+        this->setError(tr("A profile with this name already exists."));
+        return false;
+    }
+    if (!this->check(text).value(QStringLiteral("ok")).toBool())
+    {
+        this->setError(tr("The configuration has errors; fix them before saving."));
+        return false;
+    }
+    return true;
+}
+
+bool WireGuardVpnSettings::persist()
+{
+    this->settings->remove(QStringLiteral("wireguard/profiles"));
+    this->settings->beginWriteArray(QStringLiteral("wireguard/profiles"), static_cast<int>(this->stored.size()));
+    for (int i = 0; i < this->stored.size(); ++i)
+    {
+        this->settings->setArrayIndex(i);
+        this->settings->setValue(QStringLiteral("id"), this->stored.at(i).id);
+        this->settings->setValue(QStringLiteral("name"), this->stored.at(i).name);
+        this->settings->setValue(QStringLiteral("conf"), this->stored.at(i).text);
+    }
+    this->settings->endArray();
+    this->settings->sync();
+    if (this->settings->status() != QSettings::NoError)
+    {
+        this->setError(tr("Could not save WireGuard profiles to local storage."));
+        return false;
+    }
+    return true;
+}
+
+QString WireGuardVpnSettings::addProfile(const QString &name, const QString &text)
+{
+    if (!this->validateProfile(name, text, QString()))
+        return QString();
+    Profile profile;
+    profile.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    profile.name = name.trimmed();
+    profile.text = text;
+    this->stored.append(profile);
+    if (!this->persist())
+    {
+        this->stored.removeLast();
+        return QString();
+    }
+    this->setError(QString());
+    emit profilesChanged();
+    return profile.id;
+}
+
+bool WireGuardVpnSettings::updateProfile(const QString &id, const QString &name, const QString &text)
+{
+    const int index = this->indexOf(id);
+    if (index < 0)
+    {
+        this->setError(tr("Profile not found."));
+        return false;
+    }
+    if (!this->validateProfile(name, text, id))
+        return false;
+    const Profile previous = this->stored.at(index);
+    this->stored[index].name = name.trimmed();
+    this->stored[index].text = text;
+    if (!this->persist())
+    {
+        this->stored[index] = previous;
+        return false;
+    }
+    if (previous.text != text)
+        this->discardTunnel(id);
+    this->setError(QString());
+    emit profilesChanged();
+    return true;
+}
+
+bool WireGuardVpnSettings::removeProfile(const QString &id)
+{
+    const int index = this->indexOf(id);
+    if (index < 0)
+    {
+        this->setError(tr("Profile not found."));
+        return false;
+    }
+    const Profile previous = this->stored.at(index);
+    this->stored.removeAt(index);
+    if (!this->persist())
+    {
+        this->stored.insert(index, previous);
+        return false;
+    }
+    this->discardTunnel(id);
+    this->setError(QString());
+    emit profilesChanged();
+    return true;
+}
+
+QString WireGuardVpnSettings::profileName(const QString &id) const
+{
+    const int index = this->indexOf(id);
+    return index < 0 ? QString() : this->stored.at(index).name;
+}
+
+QString WireGuardVpnSettings::profileText(const QString &id) const
+{
+    const int index = this->indexOf(id);
+    return index < 0 ? QString() : this->stored.at(index).text;
+}
+
+QString WireGuardVpnSettings::readConfFile(const QUrl &url)
+{
+    // Qt for Android opens content:// URIs from the system file picker.
+    QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString());
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        this->setError(tr("Could not read the selected file."));
+        return QString();
+    }
+    const QByteArray data = file.read(max_conf_bytes + 1);
+    if (data.size() > max_conf_bytes)
+    {
+        this->setError(tr("The selected file is larger than 2 MiB."));
+        return QString();
+    }
+    this->setError(QString());
+    return QString::fromUtf8(data);
+}
+
+QString WireGuardVpnSettings::suggestedName(const QUrl &url) const
+{
+    // content:// URIs carry the document name percent-encoded, e.g.
+    // ".../document/primary%3ADownload%2Fwg0.conf".
+    QString name = QUrl::fromPercentEncoding(url.toString(QUrl::FullyEncoded).toUtf8());
+    const qsizetype cut = std::max(name.lastIndexOf(QLatin1Char('/')), name.lastIndexOf(QLatin1Char(':')));
+    if (cut >= 0)
+        name = name.mid(cut + 1);
+    if (name.endsWith(QStringLiteral(".conf"), Qt::CaseInsensitive))
+        name.chop(5);
+    name = name.trimmed();
+    if (name.isEmpty())
+        name = tr("WireGuard profile");
+    QString candidate = name;
+    for (int n = 2; this->nameTaken(candidate, QString()); ++n)
+        candidate = QStringLiteral("%1 (%2)").arg(name).arg(n);
+    return candidate;
+}
+
+bool WireGuardVpnSettings::startTunnel(const QString &id)
+{
+#if AOWIS_MOBILE_WITH_WIREGUARD
+    const int index = this->indexOf(id);
+    if (index < 0)
+    {
+        this->setError(tr("Profile not found."));
+        return false;
+    }
+    Tunnel &tunnel = this->tunnels[id];
+    if (tunnel.running || tunnel.starting != nullptr)
+    {
+        tunnel.stop_requested = false;
+        return true;
+    }
+    const aowis::network::WireGuardConfParse parsed = parse(this->stored.at(index).text);
+    if (!parsed.ok())
+    {
+        tunnel.error = tr("The configuration has errors; fix them before saving.");
+        this->bumpStatus();
+        return false;
+    }
+    tunnel.client = std::make_shared<aowis::network::WireGuardClient>();
+    tunnel.error.clear();
+    tunnel.stop_requested = false;
+    // start() may resolve the endpoint's host name: keep it off the GUI thread.
+    std::shared_ptr<aowis::network::WireGuardClient> client = tunnel.client;
+    const aowis::network::WireGuardConfig config = parsed.config;
+    std::shared_ptr<bool> ok = std::make_shared<bool>(false);
+    std::shared_ptr<std::string> message = std::make_shared<std::string>();
+    QThread *thread = QThread::create([client, config, ok, message]() {
+        *ok = client->start(config, message.get());
+    });
+    tunnel.starting = thread;
+    connect(thread, &QThread::finished, this, [this, id, thread, ok, message]() {
+        this->finishStart(id, thread, *ok, QString::fromStdString(*message));
+    });
+    thread->start();
+    this->setError(QString());
+    this->bumpStatus();
+    this->updateTimer();
+    return true;
+#else
+    Q_UNUSED(id)
+    this->setError(tr("WireGuard is not available in this build."));
+    return false;
+#endif
+}
+
+void WireGuardVpnSettings::finishStart(const QString &id, QThread *thread, bool ok, const QString &message)
+{
+    QHash<QString, Tunnel>::iterator it = this->tunnels.find(id);
+    if (it == this->tunnels.end() || it->starting != thread)
+    {
+        // Profile removed or changed meanwhile: its client was released.
+        thread->deleteLater();
+        return;
+    }
+    it->starting = nullptr;
+    thread->deleteLater();
+    if (!ok)
+    {
+        it->client.reset();
+        it->running = false;
+        it->error = message;
+    }
+    else if (it->stop_requested)
+    {
+        it->client->stop();
+        it->client.reset();
+        it->running = false;
+    }
+    else
+        it->running = true;
+    it->stop_requested = false;
+    this->bumpStatus();
+    this->updateTimer();
+}
+
+void WireGuardVpnSettings::stopTunnel(const QString &id)
+{
+    QHash<QString, Tunnel>::iterator it = this->tunnels.find(id);
+    if (it == this->tunnels.end())
+        return;
+    if (it->starting != nullptr)
+    {
+        it->stop_requested = true;
+    }
+    else
+    {
+        if (it->client)
+            it->client->stop();
+        it->client.reset();
+        it->running = false;
+        it->error.clear();
+    }
+    this->bumpStatus();
+    this->updateTimer();
+}
+
+void WireGuardVpnSettings::discardTunnel(const QString &id)
+{
+    QHash<QString, Tunnel>::iterator it = this->tunnels.find(id);
+    if (it == this->tunnels.end())
+        return;
+    if (it->starting != nullptr)
+    {
+        // The worker keeps its own client reference; the client stops itself
+        // when the worker's last reference goes away.
+        QThread *thread = it->starting;
+        std::shared_ptr<aowis::network::WireGuardClient> client = it->client;
+        disconnect(thread, nullptr, this, nullptr);
+        this->orphans.append(thread);
+        connect(thread, &QThread::finished, this, [this, thread, client]() {
+            client->stop();
+            this->orphans.removeAll(thread);
+            thread->deleteLater();
+        });
+    }
+    else if (it->client)
+        it->client->stop();
+    this->tunnels.erase(it);
+    this->bumpStatus();
+    this->updateTimer();
+}
+
+QVariantMap WireGuardVpnSettings::status(const QString &id, int revision) const
+{
+    Q_UNUSED(revision)
+    QVariantMap result;
+    QString state = QStringLiteral("stopped");
+    QString state_text = tr("Stopped");
+    QString handshake_text;
+    QString traffic_text;
+    QString peer_text;
+    bool running = false;
+    const QHash<QString, Tunnel>::const_iterator it = this->tunnels.constFind(id);
+    if (it != this->tunnels.constEnd())
+    {
+        if (it->starting != nullptr)
+        {
+            state = QStringLiteral("starting");
+            state_text = it->stop_requested ? tr("Stopping…") : tr("Starting…");
+            running = !it->stop_requested;
+        }
+        else if (it->running && it->client)
+        {
+            running = true;
+#if AOWIS_MOBILE_WITH_WIREGUARD
+            aowis::network::WireGuardTelemetry telemetry;
+            if (it->client->telemetry(&telemetry))
+            {
+                const qint64 now = QDateTime::currentMSecsSinceEpoch();
+                const QLocale locale;
+                if (telemetry.lastHandshakeUnixMs <= 0)
+                {
+                    state = QStringLiteral("waiting");
+                    state_text = tr("Running · waiting for the first handshake");
+                    handshake_text = tr("Never");
+                }
+                else
+                {
+                    const qint64 age = now - telemetry.lastHandshakeUnixMs;
+                    handshake_text = ageText(age);
+                    if (age > stale_handshake_ms)
+                    {
+                        state = QStringLiteral("stale");
+                        state_text = tr("Last handshake %1 — check the endpoint, keys and network.")
+                                         .arg(handshake_text);
+                    }
+                    else
+                    {
+                        state = QStringLiteral("connected");
+                        state_text = tr("Connected");
+                    }
+                }
+                traffic_text = tr("%1 received · %2 sent")
+                                   .arg(dataSizeText(telemetry.receivedBytes, locale),
+                                        dataSizeText(telemetry.sentBytes, locale));
+                peer_text = QString::fromStdString(telemetry.peerEndpoint);
+            }
+            else
+            {
+                state = QStringLiteral("waiting");
+                state_text = tr("Running");
+            }
+#endif
+        }
+        else if (!it->error.isEmpty())
+        {
+            state = QStringLiteral("error");
+            state_text = tr("Could not start: %1").arg(it->error);
+        }
+    }
+    result.insert(QStringLiteral("state"), state);
+    result.insert(QStringLiteral("running"), running);
+    result.insert(QStringLiteral("stateText"), state_text);
+    result.insert(QStringLiteral("handshakeText"), handshake_text);
+    result.insert(QStringLiteral("trafficText"), traffic_text);
+    result.insert(QStringLiteral("peerText"), peer_text);
+    return result;
+}
+
+QString WireGuardVpnSettings::dataSizeText(quint64 bytes, const QLocale &locale)
+{
+    QLocale plain = locale;
+    plain.setNumberOptions(plain.numberOptions() | QLocale::OmitGroupSeparator);
+    if (bytes < 1024)
+        return tr("%1 B").arg(plain.toString(static_cast<qulonglong>(bytes)));
+    constexpr int largest_unit = 6;
+    int unit = 0;
+    double value = static_cast<double>(bytes);
+    while (value >= 1024.0 && unit < largest_unit)
+    {
+        value /= 1024.0;
+        ++unit;
+    }
+    int decimals = value < 10.0 ? 2 : (value < 100.0 ? 1 : 0);
+    const double scale = decimals == 2 ? 100.0 : (decimals == 1 ? 10.0 : 1.0);
+    if (unit < largest_unit && std::round(value * scale) / scale >= 1024.0)
+    {
+        // Rounding carried into the next unit (1023.7 KiB -> "1.00 MiB").
+        value /= 1024.0;
+        ++unit;
+        decimals = 2;
+    }
+    const QString number = plain.toString(value, 'f', decimals);
+    switch (unit)
+    {
+    case 1: return tr("%1 KiB").arg(number);
+    case 2: return tr("%1 MiB").arg(number);
+    case 3: return tr("%1 GiB").arg(number);
+    case 4: return tr("%1 TiB").arg(number);
+    case 5: return tr("%1 PiB").arg(number);
+    default: return tr("%1 EiB").arg(number);
+    }
+}
+
+void WireGuardVpnSettings::setError(const QString &message)
+{
+    if (this->last_error == message)
+        return;
+    this->last_error = message;
+    emit errorChanged();
+}
+
+void WireGuardVpnSettings::bumpStatus()
+{
+    ++this->revision;
+    emit statusRevisionChanged();
+}
+
+void WireGuardVpnSettings::updateTimer()
+{
+    bool active = false;
+    for (QHash<QString, Tunnel>::const_iterator it = this->tunnels.constBegin(); it != this->tunnels.constEnd(); ++it)
+        active = active || it->running || it->starting != nullptr;
+    if (active && !this->poll->isActive())
+        this->poll->start();
+    else if (!active && this->poll->isActive())
+        this->poll->stop();
+}
