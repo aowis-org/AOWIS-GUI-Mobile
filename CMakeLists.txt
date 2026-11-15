@@ -403,7 +403,7 @@ if(BUILD_TESTING)
         add_executable(aowis-mobile-wireguard-settings-tests
             tests/wireguard_vpn_settings_tests.cpp src/wireguard_vpn_settings.cpp src/wireguard_vpn_settings.h)
         target_include_directories(aowis-mobile-wireguard-settings-tests PRIVATE src)
-        target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core AOWIS::Network aowis::config)
+        target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core Qt6::Network AOWIS::Network aowis::config)
         target_compile_definitions(aowis-mobile-wireguard-settings-tests PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=1)
         add_test(NAME aowis-mobile-wireguard-settings COMMAND aowis-mobile-wireguard-settings-tests)
     endif()

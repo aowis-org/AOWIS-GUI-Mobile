@@ -6,9 +6,13 @@
 #include <QDir>
 #include <QFile>
 #include <QLocale>
+#include <QNetworkProxy>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QUrl>
+
+#include <functional>
 
 static bool check(bool condition, const char *message)
 {
@@ -133,6 +137,56 @@ int main(int argc, char *argv[])
         settings.startTunnel(office);
         settings.stopTunnel(office);
         if (!check(waitWhileStarting(settings, office) == QStringLiteral("stopped"), "stop during start wins")) return 1;
+
+        // A connection (the map server) requires the profile: the tunnel
+        // starts on demand, its proxy is handed out, a user Stop blocks it
+        // with a reason instead of a direct fallback, and the profile cannot
+        // be deleted while it is used.
+        int availability = 0;
+        QObject::connect(&settings, &WireGuardVpnSettings::tunnelAvailabilityChanged, &settings,
+                         [&availability, office](const QString &profile_id) { if (profile_id == office) ++availability; });
+        settings.setProfileUsers([office](const QString &profile_id) {
+            return profile_id == office ? QStringList{QStringLiteral("Map server")} : QStringList();
+        });
+        QNetworkProxy proxy;
+        QString reason;
+        settings.startTunnel(office);
+        settings.stopTunnel(office); // A user Stop is remembered...
+        waitWhileStarting(settings, office);
+        settings.require(QStringLiteral("map-server"), office);
+        if (!check(!settings.proxyFor(office, &proxy, &reason) && reason.contains(QStringLiteral("is stopped")),
+                   "a user-stopped tunnel is not started for a connection")) return 1;
+        settings.startTunnel(office); // ...until the user starts it again.
+        waitWhileStarting(settings, office);
+        if (!check(settings.proxyFor(office, &proxy, &reason) && proxy.type() == QNetworkProxy::Socks5Proxy
+                       && proxy.port() > 0 && !proxy.user().isEmpty()
+                       && (proxy.capabilities() & QNetworkProxy::HostNameLookupCapability),
+                   "running tunnel hands out its authenticated SOCKS5 proxy")) return 1;
+        if (!check(availability >= 2, "consumers are told about tunnel changes")) return 1;
+        if (!check(!settings.removeProfile(office) && settings.error().contains(QStringLiteral("Map server")),
+                   "a used profile cannot be deleted")) return 1;
+        if (!check(settings.profileUsers(office, 0) == QStringList{QStringLiteral("Map server")}, "users listed")) return 1;
+        settings.stopTunnel(office);
+        if (!check(!settings.proxyFor(office, &proxy, &reason) && reason.contains(QStringLiteral("Settings")),
+                   "stopped tunnel blocks the connection with a pointer to Settings")) return 1;
+        // A user-started tunnel keeps running when the connection releases it.
+        settings.startTunnel(office);
+        waitWhileStarting(settings, office);
+        settings.require(QStringLiteral("map-server"), QString());
+        if (!check(settings.status(office, 0).value(QStringLiteral("running")).toBool(),
+                   "user-started tunnel survives the release")) return 1;
+        settings.stopTunnel(office);
+        settings.setProfileUsers(std::function<QStringList(const QString &)>());
+
+        // Demand alone starts a tunnel, and releasing it stops it again.
+        const QString field_site = settings.addProfile(QStringLiteral("Field site"), QString(), valid_conf);
+        settings.require(QStringLiteral("map-server"), field_site);
+        if (!check(waitWhileStarting(settings, field_site) == QStringLiteral("waiting")
+                       && settings.proxyFor(field_site, &proxy, &reason), "demand starts the tunnel")) return 1;
+        settings.require(QStringLiteral("map-server"), QString());
+        if (!check(settings.status(field_site, 0).value(QStringLiteral("state")) == QStringLiteral("stopped"),
+                   "released demand stops the tunnel")) return 1;
+        if (!check(settings.removeProfile(field_site), "unused profile deleted")) return 1;
     }
     {
         WireGuardVpnSettings reloaded(nullptr, root);

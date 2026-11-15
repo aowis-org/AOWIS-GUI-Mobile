@@ -6,8 +6,10 @@
 
 class QSettings;
 
-// Stores the AOWIS-SERVER-MAP endpoint; this class does not initiate network
-// requests. MobileMapView reads the URL and loads tiles and terrain from it.
+// Stores the AOWIS-SERVER-MAP endpoint and the WireGuard profile it is
+// reached through (empty: direct); this class does not initiate network
+// requests. MobileMapView reads both and loads tiles and terrain, through
+// that profile's tunnel only when one is set.
 class MapServerSettings final : public QObject
 {
     Q_OBJECT
@@ -15,6 +17,7 @@ class MapServerSettings final : public QObject
     Q_PROPERTY(int serverPort READ serverPort NOTIFY endpointChanged)
     Q_PROPERTY(QString endpointUrl READ endpointUrl NOTIFY endpointChanged)
     Q_PROPERTY(bool configured READ configured NOTIFY endpointChanged)
+    Q_PROPERTY(QString wireguardProfileId READ wireguardProfileId NOTIFY endpointChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
 
 public:
@@ -26,9 +29,12 @@ public:
     int serverPort() const;
     QString endpointUrl() const;
     bool configured() const;
+    QString wireguardProfileId() const;
     QString error() const;
 
-    Q_INVOKABLE bool save(const QString &url, const QString &portText);
+    // wireguardProfileId: AOWIS-CONFIG id of a WireGuard profile, or empty.
+    Q_INVOKABLE bool save(const QString &url, const QString &portText,
+                          const QString &wireguardProfileId = QString());
 
 signals:
     void endpointChanged();
@@ -42,5 +48,6 @@ private:
     std::unique_ptr<QSettings> settings;
     QString savedUrl;
     int savedPort = 0;
+    QString savedProfile;
     QString validationError;
 };

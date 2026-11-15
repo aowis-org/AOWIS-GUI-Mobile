@@ -66,6 +66,15 @@ int main(int argc, char *argv[])
     // Declared before the engine: QML bindings never outlive it, and its
     // tunnels stop when the application ends.
     WireGuardVpnSettings wireguardVpnSettings;
+    // The map server is the only connection that can use a WireGuard profile.
+    wireguardVpnSettings.setProfileUsers([&mapServerSettings](const QString &profile_id) {
+        QStringList users;
+        if (!profile_id.isEmpty() && mapServerSettings.wireguardProfileId() == profile_id)
+            users.append(QCoreApplication::translate("WireGuardVpnSettings", "Map server"));
+        return users;
+    });
+    QObject::connect(&mapServerSettings, &MapServerSettings::endpointChanged,
+                     &wireguardVpnSettings, &WireGuardVpnSettings::notifyUsersChanged);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);

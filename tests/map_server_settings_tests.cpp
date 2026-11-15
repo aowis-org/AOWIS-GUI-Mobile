@@ -42,6 +42,19 @@ int main(int argc, char *argv[])
         if (!check(reloaded.serverPort() == 443, "port restored")) return 1;
         if (!check(reloaded.save(QStringLiteral("http://192.168.2.102"), QStringLiteral("8080")), "IPv4 address accepted")) return 1;
         if (!check(reloaded.endpointUrl() == QStringLiteral("http://192.168.2.102:8080"), "IPv4 endpoint formed")) return 1;
+        if (!check(reloaded.wireguardProfileId().isEmpty(), "direct by default")) return 1;
+        if (!check(reloaded.save(QStringLiteral("http://10.50.0.1"), QStringLiteral("8080"),
+                                 QStringLiteral("0190f6c4-1a2b-7c3d-8e4f-5a6b7c8d9e0f")), "save with WireGuard profile")) return 1;
+    }
+    {
+        MapServerSettings tunnelled(nullptr, file);
+        if (!check(tunnelled.wireguardProfileId() == QStringLiteral("0190f6c4-1a2b-7c3d-8e4f-5a6b7c8d9e0f"), "WireGuard profile restored")) return 1;
+        if (!check(tunnelled.save(QStringLiteral("http://10.50.0.1"), QStringLiteral("8080")) && tunnelled.wireguardProfileId().isEmpty(),
+                   "saving without a profile makes the connection direct")) return 1;
+    }
+    {
+        MapServerSettings direct(nullptr, file);
+        if (!check(direct.wireguardProfileId().isEmpty(), "direct connection restored")) return 1;
     }
     qInfo() << "Map server settings persistence and validation passed.";
     return 0;

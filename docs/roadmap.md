@@ -48,9 +48,11 @@ no Android `VpnService`, no system VPN, nothing else on the phone is routed.
    diagnostics, edit, delete, status with Start/Stop, translated; stored
    with AOWIS-CONFIG (owner `gui-mobile`). See
    [WireGuard VPN](wireguard-vpn.md).
-3. **Map server through a profile:** the map server setting selects an
-   optional WireGuard profile; tiles and terrain then use only that tunnel
-   (fail closed, never direct).
+3. **Map server through a profile (source done, build/device check
+   pending):** the map server setting selects an optional WireGuard profile;
+   tiles, terrain and the catalog then use only that tunnel (fail closed,
+   never direct), started on demand and retried; the used profile cannot be
+   deleted. See [WireGuard VPN](wireguard-vpn.md).
 
 **Accept when:** on a real phone the map loads through the tunnel with the
 server reachable only over WireGuard, Stop/Start and Home/resume recover, and

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QHash>
+#include <QSet>
+#include <QStringList>
 #include <QLocale>
 #include <QObject>
 #include <QString>
@@ -8,8 +10,10 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+#include <functional>
 #include <memory>
 
+class QNetworkProxy;
 class QThread;
 class QTimer;
 
@@ -29,7 +33,8 @@ struct Error;
 // per profile on request: AOWIS-NETWORK's userspace engine behind a loopback
 // SOCKS5 proxy, so no Android VpnService and nothing else on the phone is
 // routed. AOWIS-NETWORK's parser is the only one: whatever it accepts the
-// engine can run. No app connection uses a tunnel yet; the map server will.
+// engine can run. Connections (the map server) require() a profile's tunnel:
+// it starts on demand, is retried while it fails, and is never bypassed.
 class WireGuardVpnSettings final : public QObject
 {
     Q_OBJECT
@@ -77,8 +82,25 @@ public:
     Q_INVOKABLE QString readConfFile(const QUrl &url);
     Q_INVOKABLE QString suggestedName(const QUrl &url) const;
 
+    // The user's Start/Stop. A stopped tunnel stays stopped, also for the
+    // connections that require it (they fail with a pointer to Settings),
+    // until started again or AOWIS restarts.
     Q_INVOKABLE bool startTunnel(const QString &id);
     Q_INVOKABLE void stopTunnel(const QString &id);
+
+    // consumer (e.g. "map-server") needs profile_id's tunnel; an empty
+    // profile_id releases it. A tunnel only a released consumer wanted stops.
+    void require(const QString &consumer, const QString &profile_id);
+    // The running tunnel's SOCKS5 proxy (in-tunnel host name lookup), or
+    // false with a translated reason (starting, failed and retrying, stopped
+    // by the user, profile missing). Never a direct fallback.
+    bool proxyFor(const QString &profile_id, QNetworkProxy *proxy, QString *reason) const;
+    // Labels of the connections using a profile ("Map server"); deleting a
+    // used profile is refused, also by CONFIG's reference guard.
+    void setProfileUsers(std::function<QStringList(const QString &)> users);
+    Q_INVOKABLE QStringList profileUsers(const QString &id, int revision) const;
+    // Call when a connection's profile choice changed.
+    Q_INVOKABLE void notifyUsersChanged() { this->bumpStatus(); }
     // {state: stopped|starting|waiting|connected|stale|error, running: bool,
     //  stateText, handshakeText, trafficText, peerText}
     Q_INVOKABLE QVariantMap status(const QString &id, int revision) const;
@@ -91,6 +113,9 @@ signals:
     void profilesChanged();
     void statusRevisionChanged();
     void errorChanged();
+    // The tunnel of profile_id started, failed, stopped or was replaced:
+    // consumers ask proxyFor() again and rebuild their connections.
+    void tunnelAvailabilityChanged(const QString &profile_id);
 
 private:
     struct Profile
@@ -108,6 +133,8 @@ private:
         bool stop_requested = false; // Stop pressed while starting
         bool running = false;
         QString error;               // Last start error (engine text)
+        int failures = 0;            // Consecutive failed starts (retry backoff)
+        quint64 generation = 0;      // Invalidates pending retries
     };
 
     int indexOf(const QString &id) const;
@@ -119,6 +146,9 @@ private:
     void setError(const QString &message);
     void bumpStatus();
     void updateTimer();
+    bool startEngine(const QString &id);
+    void stopEngine(const QString &id);
+    bool wanted(const QString &id) const;
     void finishStart(const QString &id, QThread *thread, bool ok, const QString &message);
     void discardTunnel(const QString &id);
 
@@ -129,6 +159,10 @@ private:
     QVector<Profile> stored;
     QHash<QString, Tunnel> tunnels;
     QVector<QThread *> orphans; // Starts of discarded profiles, still running
+    QSet<QString> user_started;  // Started with the Start button
+    QSet<QString> user_stopped;  // Stopped with the Stop button
+    QHash<QString, QString> consumers; // consumer -> required profile id
+    std::function<QStringList(const QString &)> profile_users;
     QTimer *poll = nullptr;
     int revision = 0;
     QString last_error;

@@ -282,18 +282,22 @@ Rectangle {
                         }
                     }
                     PageButton {
-                        text: page.selectedStatus.running === true ? qsTr("Stop tunnel") : qsTr("Start tunnel")
+                        text: page.selectedStatus.active === true ? qsTr("Stop tunnel") : qsTr("Start tunnel")
                         enabled: wireguardVpnSettings.engineAvailable
                         onClicked: {
-                            if (page.selectedStatus.running === true)
+                            if (page.selectedStatus.active === true)
                                 wireguardVpnSettings.stopTunnel(page.selectedId)
                             else
                                 wireguardVpnSettings.startTunnel(page.selectedId)
                         }
                     }
                     Label {
+                        readonly property var users: wireguardVpnSettings.profileUsers(
+                            page.selectedId, wireguardVpnSettings.statusRevision)
                         Layout.fillWidth: true
-                        text: qsTr("No AOWIS connection uses WireGuard yet. Starting a tunnel checks the handshake with the server.")
+                        text: users.length > 0
+                              ? qsTr("Used by: %1. While it is used, the tunnel starts automatically and cannot be deleted.").arg(users.join(", "))
+                              : qsTr("Not used by any AOWIS connection. Starting the tunnel checks the handshake with the server.")
                         color: page.mutedColor
                         wrapMode: Text.WordWrap
                         font.pixelSize: 12

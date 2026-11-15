@@ -9,6 +9,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QNetworkProxy>
 #include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <utility>
 
 #if AOWIS_MOBILE_WITH_WIREGUARD
 #include "aowis/network/wireguard_client.h"
@@ -341,16 +343,6 @@ bool WireGuardVpnSettings::validateProfile(const QString &name, const QString &t
     return true;
 }
 
-namespace {
-
-// No AOWIS connection references a WireGuard profile yet: deletion is never
-// blocked. The map server connection will count its references here.
-aowis::config::Result<std::size_t> noReferences(const aowis::config::OwnerSession &, const aowis::config::ObjectId &)
-{
-    return aowis::config::Result<std::size_t>::success(0);
-}
-
-} // namespace
 
 QString WireGuardVpnSettings::addProfile(const QString &name, const QString &description, const QString &text)
 {
@@ -417,8 +409,22 @@ bool WireGuardVpnSettings::removeProfile(const QString &id)
         this->setError(tr("Profile not found."));
         return false;
     }
+    const QStringList users = this->profileUsers(id, 0);
+    if (!users.isEmpty())
+    {
+        this->setError(tr("Used by: %1. Change its connection in Settings first.").arg(users.join(QStringLiteral(", "))));
+        return false;
+    }
+    // CONFIG's guard counts again inside its owner session.
+    const aowis::config::WireGuardReferenceCount references =
+        [this](const aowis::config::OwnerSession &, const aowis::config::ObjectId &object)
+    {
+        const QString referenced = QString::fromStdString(object.value());
+        return aowis::config::Result<std::size_t>::success(
+            static_cast<std::size_t>(this->profileUsers(referenced, 0).size()));
+    };
     const aowis::config::Result<bool> erased = this->profile_store->erase(
-        object_id.value(), this->stored.at(index).revision.toStdString(), noReferences);
+        object_id.value(), this->stored.at(index).revision.toStdString(), references);
     if (!erased)
     {
         this->setError(this->storageErrorText(erased.error()));
@@ -491,6 +497,14 @@ QString WireGuardVpnSettings::suggestedName(const QUrl &url) const
 
 bool WireGuardVpnSettings::startTunnel(const QString &id)
 {
+    // The user's explicit Start also ends an earlier Stop.
+    this->user_stopped.remove(id);
+    this->user_started.insert(id);
+    return this->startEngine(id);
+}
+
+bool WireGuardVpnSettings::startEngine(const QString &id)
+{
 #if AOWIS_MOBILE_WITH_WIREGUARD
     const int index = this->indexOf(id);
     if (index < 0)
@@ -509,11 +523,13 @@ bool WireGuardVpnSettings::startTunnel(const QString &id)
     {
         tunnel.error = tr("The configuration has errors; fix them before saving.");
         this->bumpStatus();
+        emit tunnelAvailabilityChanged(id);
         return false;
     }
     tunnel.client = std::make_shared<aowis::network::WireGuardClient>();
     tunnel.error.clear();
     tunnel.stop_requested = false;
+    ++tunnel.generation; // Cancels a pending retry
     // start() may resolve the endpoint's host name: keep it off the GUI thread.
     std::shared_ptr<aowis::network::WireGuardClient> client = tunnel.client;
     const aowis::network::WireGuardConfig config = parsed.config;
@@ -530,12 +546,27 @@ bool WireGuardVpnSettings::startTunnel(const QString &id)
     this->setError(QString());
     this->bumpStatus();
     this->updateTimer();
+    emit tunnelAvailabilityChanged(id);
     return true;
 #else
     Q_UNUSED(id)
     this->setError(tr("WireGuard is not available in this build."));
     return false;
 #endif
+}
+
+bool WireGuardVpnSettings::wanted(const QString &id) const
+{
+    if (this->user_stopped.contains(id))
+        return false;
+    if (this->user_started.contains(id))
+        return true;
+    for (QHash<QString, QString>::const_iterator it = this->consumers.constBegin(); it != this->consumers.constEnd(); ++it)
+    {
+        if (it.value() == id)
+            return true;
+    }
+    return false;
 }
 
 void WireGuardVpnSettings::finishStart(const QString &id, QThread *thread, bool ok, const QString &message)
@@ -554,6 +585,7 @@ void WireGuardVpnSettings::finishStart(const QString &id, QThread *thread, bool 
         it->client.reset();
         it->running = false;
         it->error = message;
+        ++it->failures;
     }
     else if (it->stop_requested)
     {
@@ -562,17 +594,45 @@ void WireGuardVpnSettings::finishStart(const QString &id, QThread *thread, bool 
         it->running = false;
     }
     else
+    {
         it->running = true;
+        it->failures = 0;
+    }
     it->stop_requested = false;
+    // A connection still needs the tunnel: retry after 5, 10, 20, 40, then
+    // every 60 seconds, unless the user stopped it.
+    if (!ok && this->wanted(id))
+    {
+        const int delay = std::min(60000, 5000 << std::min(it->failures - 1, 4));
+        const quint64 generation = it->generation;
+        QTimer::singleShot(delay, this, [this, id, generation]() {
+            QHash<QString, Tunnel>::iterator again = this->tunnels.find(id);
+            if (again == this->tunnels.end() || again->generation != generation || again->running
+                || again->starting != nullptr || !this->wanted(id))
+                return;
+            this->startEngine(id);
+        });
+    }
     this->bumpStatus();
     this->updateTimer();
+    emit tunnelAvailabilityChanged(id);
 }
 
 void WireGuardVpnSettings::stopTunnel(const QString &id)
 {
+    // Stays stopped, also for the connections that use the profile, until
+    // the user starts it again (or AOWIS restarts).
+    this->user_started.remove(id);
+    this->user_stopped.insert(id);
+    this->stopEngine(id);
+}
+
+void WireGuardVpnSettings::stopEngine(const QString &id)
+{
     QHash<QString, Tunnel>::iterator it = this->tunnels.find(id);
     if (it == this->tunnels.end())
         return;
+    ++it->generation;
     if (it->starting != nullptr)
     {
         it->stop_requested = true;
@@ -584,35 +644,109 @@ void WireGuardVpnSettings::stopTunnel(const QString &id)
         it->client.reset();
         it->running = false;
         it->error.clear();
+        it->failures = 0;
     }
     this->bumpStatus();
     this->updateTimer();
+    emit tunnelAvailabilityChanged(id);
 }
 
 void WireGuardVpnSettings::discardTunnel(const QString &id)
 {
+    this->user_started.remove(id);
     QHash<QString, Tunnel>::iterator it = this->tunnels.find(id);
-    if (it == this->tunnels.end())
-        return;
-    if (it->starting != nullptr)
+    if (it != this->tunnels.end())
     {
-        // The worker keeps its own client reference; the client stops itself
-        // when the worker's last reference goes away.
-        QThread *thread = it->starting;
-        std::shared_ptr<aowis::network::WireGuardClient> client = it->client;
-        disconnect(thread, nullptr, this, nullptr);
-        this->orphans.append(thread);
-        connect(thread, &QThread::finished, this, [this, thread, client]() {
-            client->stop();
-            this->orphans.removeAll(thread);
-            thread->deleteLater();
-        });
+        if (it->starting != nullptr)
+        {
+            // The worker keeps its own client reference; the client stops
+            // once the worker has finished.
+            QThread *thread = it->starting;
+            std::shared_ptr<aowis::network::WireGuardClient> client = it->client;
+            disconnect(thread, nullptr, this, nullptr);
+            this->orphans.append(thread);
+            connect(thread, &QThread::finished, this, [this, thread, client]() {
+                client->stop();
+                this->orphans.removeAll(thread);
+                thread->deleteLater();
+            });
+        }
+        else if (it->client)
+            it->client->stop();
+        this->tunnels.erase(it);
     }
-    else if (it->client)
-        it->client->stop();
-    this->tunnels.erase(it);
+    // A connection using the profile gets the new configuration at once.
+    if (this->indexOf(id) >= 0 && this->wanted(id))
+        this->startEngine(id);
     this->bumpStatus();
     this->updateTimer();
+    emit tunnelAvailabilityChanged(id);
+}
+
+void WireGuardVpnSettings::require(const QString &consumer, const QString &profile_id)
+{
+    const QString previous = this->consumers.value(consumer);
+    if (profile_id.isEmpty())
+        this->consumers.remove(consumer);
+    else
+        this->consumers.insert(consumer, profile_id);
+    if (!previous.isEmpty() && previous != profile_id && !this->wanted(previous))
+        this->stopEngine(previous);
+    if (!profile_id.isEmpty() && this->wanted(profile_id) && this->indexOf(profile_id) >= 0)
+    {
+        QHash<QString, Tunnel>::const_iterator it = this->tunnels.constFind(profile_id);
+        if (it == this->tunnels.constEnd() || (!it->running && it->starting == nullptr))
+            this->startEngine(profile_id);
+    }
+}
+
+bool WireGuardVpnSettings::proxyFor(const QString &profile_id, QNetworkProxy *proxy, QString *reason) const
+{
+#if AOWIS_MOBILE_WITH_WIREGUARD
+    const QString name = this->profileName(profile_id);
+    if (name.isEmpty())
+    {
+        *reason = tr("The WireGuard profile of this connection no longer exists. Choose another one in Settings.");
+        return false;
+    }
+    if (this->user_stopped.contains(profile_id))
+    {
+        *reason = tr("The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.").arg(name);
+        return false;
+    }
+    const QHash<QString, Tunnel>::const_iterator it = this->tunnels.constFind(profile_id);
+    if (it != this->tunnels.constEnd() && it->running && it->client)
+    {
+        // TCP through the tunnel, host names resolved inside it.
+        const aowis::network::Socks5Proxy socks = it->client->proxy();
+        *proxy = QNetworkProxy(QNetworkProxy::Socks5Proxy, QString::fromStdString(socks.host), socks.port,
+                               QString::fromStdString(socks.username), QString::fromStdString(socks.password));
+        proxy->setCapabilities(QNetworkProxy::TunnelingCapability | QNetworkProxy::HostNameLookupCapability);
+        reason->clear();
+        return true;
+    }
+    if (it != this->tunnels.constEnd() && it->starting == nullptr && !it->error.isEmpty())
+        *reason = tr("The WireGuard tunnel “%1” could not start (retrying): %2").arg(name, it->error);
+    else
+        *reason = tr("Starting the WireGuard tunnel “%1”…").arg(name);
+    return false;
+#else
+    Q_UNUSED(profile_id)
+    Q_UNUSED(proxy)
+    *reason = tr("WireGuard is not available in this build.");
+    return false;
+#endif
+}
+
+void WireGuardVpnSettings::setProfileUsers(std::function<QStringList(const QString &)> users)
+{
+    this->profile_users = std::move(users);
+}
+
+QStringList WireGuardVpnSettings::profileUsers(const QString &id, int revision) const
+{
+    Q_UNUSED(revision)
+    return this->profile_users ? this->profile_users(id) : QStringList();
 }
 
 QVariantMap WireGuardVpnSettings::status(const QString &id, int revision) const
@@ -680,11 +814,15 @@ QVariantMap WireGuardVpnSettings::status(const QString &id, int revision) const
         else if (!it->error.isEmpty())
         {
             state = QStringLiteral("error");
-            state_text = tr("Could not start: %1").arg(it->error);
+            state_text = this->wanted(id) ? tr("Could not start (retrying): %1").arg(it->error)
+                                          : tr("Could not start: %1").arg(it->error);
         }
     }
+    // Start/Stop: also stoppable while a connection keeps retrying it.
+    const bool active = running || (state == QStringLiteral("error") && this->wanted(id));
     result.insert(QStringLiteral("state"), state);
     result.insert(QStringLiteral("running"), running);
+    result.insert(QStringLiteral("active"), active);
     result.insert(QStringLiteral("stateText"), state_text);
     result.insert(QStringLiteral("handshakeText"), handshake_text);
     result.insert(QStringLiteral("trafficText"), traffic_text);

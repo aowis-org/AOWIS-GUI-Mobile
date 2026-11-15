@@ -28,6 +28,7 @@ MapServerSettings::MapServerSettings(QObject *parent, const QString &settingsFil
     {
         this->savedUrl = normalized;
         this->savedPort = port;
+        this->savedProfile = this->settings->value(QStringLiteral("mapServer/wireguardProfile")).toString();
     }
 }
 
@@ -55,6 +56,11 @@ QString MapServerSettings::endpointUrl() const
 bool MapServerSettings::configured() const
 {
     return !this->savedUrl.isEmpty() && this->savedPort > 0;
+}
+
+QString MapServerSettings::wireguardProfileId() const
+{
+    return this->savedProfile;
 }
 
 QString MapServerSettings::error() const
@@ -109,8 +115,10 @@ bool MapServerSettings::validate(const QString &url, const QString &portText,
     return true;
 }
 
-bool MapServerSettings::save(const QString &url, const QString &portText)
+bool MapServerSettings::save(const QString &url, const QString &portText,
+                             const QString &wireguardProfileId)
 {
+    const QString profile = wireguardProfileId.trimmed();
     QString normalized;
     QString message;
     int port = 0;
@@ -121,15 +129,20 @@ bool MapServerSettings::save(const QString &url, const QString &portText)
     }
     this->settings->setValue(QStringLiteral("mapServer/url"), normalized);
     this->settings->setValue(QStringLiteral("mapServer/port"), port);
+    if (profile.isEmpty())
+        this->settings->remove(QStringLiteral("mapServer/wireguardProfile"));
+    else
+        this->settings->setValue(QStringLiteral("mapServer/wireguardProfile"), profile);
     this->settings->sync();
     if (this->settings->status() != QSettings::NoError)
     {
         setError(QStringLiteral("Could not save map server settings to local storage."));
         return false;
     }
-    const bool changed = (this->savedUrl != normalized || this->savedPort != port);
+    const bool changed = (this->savedUrl != normalized || this->savedPort != port || this->savedProfile != profile);
     this->savedUrl = normalized;
     this->savedPort = port;
+    this->savedProfile = profile;
     setError(QString());
     if (changed)
         emit endpointChanged();

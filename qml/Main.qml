@@ -73,6 +73,7 @@ Window {
             mapServerPort.text = mapServerSettings.serverPort > 0
                                ? String(mapServerSettings.serverPort) : ""
             saveFeedback = ""
+            mapServerTunnel.selectId(mapServerSettings.wireguardProfileId)
             themeSelector.currentIndex = appearanceSettings.mode === "dark" ? 1
                                        : appearanceSettings.mode === "light" ? 2 : 0
             const languages = ["en", "fr", "ar", "de", "es"]
@@ -129,6 +130,8 @@ Window {
         visible: root.activePage === "map"
         enabled: root.activePage === "map" && !navigationDrawer.opened
         serverUrl: mapServerSettings.endpointUrl
+        wireguard: wireguardVpnSettings
+        wireguardProfileId: mapServerSettings.wireguardProfileId
         darkTheme: root.darkTheme
     }
 
@@ -192,6 +195,34 @@ Window {
             border.color: root.uiAccent
         }
         Accessible.name: qsTr("No map server configured. Tap to open Settings.")
+    }
+
+    // The map server is reached only through its WireGuard tunnel, which is
+    // not running: say why, over the map, and where to fix it.
+    Button {
+        visible: root.activePage === "map" && mapServerSettings.configured && mapView.serverBlocked
+        anchors.top: parent.top
+        anchors.left: mapMenuButton.visible ? mapMenuButton.right : parent.left
+        anchors.right: hamburgerButton.left
+        anchors.margins: 14
+        height: Math.max(52, blockedText.implicitHeight + 16)
+        z: 2
+        onClicked: root.openPage("wireguard")
+        contentItem: Text {
+            id: blockedText
+            text: qsTr("%1 Tap to open WireGuard VPN.").arg(mapView.serverStatus)
+            color: root.uiText
+            font.pixelSize: 13
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: 11
+            color: root.uiRaised
+            border.color: root.uiError
+        }
+        Accessible.name: blockedText.text
     }
 
     Button {
@@ -777,6 +808,115 @@ Window {
                         validator: IntValidator { bottom: 1; top: 65535 }
                         onTextEdited: root.saveFeedback = ""
                     }
+                    Label {
+                        visible: wireguardVpnSettings.engineAvailable
+                        text: qsTr("Connection")
+                        color: root.uiText
+                        font.pixelSize: 14
+                    }
+                    ComboBox {
+                        id: mapServerTunnel
+                        visible: wireguardVpnSettings.engineAvailable
+                        Layout.fillWidth: true
+                        textRole: "label"
+                        // Direct first, then the WireGuard profiles; a saved profile
+                        // that no longer exists stays visible (and blocks the map).
+                        property string pendingId: ""
+                        readonly property var choices: {
+                            const list = [{ id: "", label: qsTr("Direct (no VPN)") }]
+                            const profiles = wireguardVpnSettings.profiles
+                            let found = pendingId === ""
+                            for (let i = 0; i < profiles.length; ++i) {
+                                list.push({ id: profiles[i].id, label: qsTr("WireGuard: %1").arg(profiles[i].name) })
+                                found = found || profiles[i].id === pendingId
+                            }
+                            if (!found)
+                                list.push({ id: pendingId, label: qsTr("Missing WireGuard profile") })
+                            return list
+                        }
+                        model: choices
+                        readonly property string selectedId: currentIndex >= 0 && currentIndex < choices.length
+                                                            ? choices[currentIndex].id : ""
+                        function selectId(id) {
+                            pendingId = id
+                            for (let i = 0; i < choices.length; ++i) {
+                                if (choices[i].id === id) {
+                                    currentIndex = i
+                                    return
+                                }
+                            }
+                            currentIndex = 0
+                        }
+                        onChoicesChanged: selectId(pendingId)
+                        onActivated: function(index) {
+                            pendingId = choices[index].id
+                            root.saveFeedback = ""
+                        }
+                        palette.text: root.uiText
+                        palette.buttonText: root.uiText
+                        palette.base: root.uiInput
+                        palette.window: root.uiInput
+                        palette.highlight: root.uiSelection
+                        palette.highlightedText: root.uiSelectedText
+                        indicator: UiIcon {
+                            kind: "down"
+                            strokeColor: root.uiText
+                            width: 22
+                            height: 22
+                            x: languageSettings.rightToLeft ? 14 : mapServerTunnel.width - width - 14
+                            y: (mapServerTunnel.height - height) / 2
+                        }
+                        contentItem: Text {
+                            text: mapServerTunnel.displayText
+                            color: root.uiText
+                            leftPadding: languageSettings.rightToLeft ? 32 : 12
+                            rightPadding: languageSettings.rightToLeft ? 12 : 32
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        background: Rectangle {
+                            implicitHeight: 48
+                            radius: 10
+                            color: root.uiInput
+                            border.color: mapServerTunnel.activeFocus ? root.uiAccent : root.uiBorder
+                        }
+                        delegate: ItemDelegate {
+                            width: mapServerTunnel.width
+                            text: modelData.label
+                            highlighted: mapServerTunnel.highlightedIndex === index
+                            palette.text: root.uiText
+                            palette.highlightedText: root.uiSelectedText
+                            background: Rectangle {
+                                color: parent.highlighted ? root.uiSelection : root.uiInput
+                            }
+                        }
+                        popup: Popup {
+                            y: mapServerTunnel.height - 1
+                            width: mapServerTunnel.width
+                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 240)
+                            padding: 2
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: mapServerTunnel.popup.visible ? mapServerTunnel.delegateModel : null
+                                currentIndex: mapServerTunnel.highlightedIndex
+                                ScrollIndicator.vertical: ScrollIndicator { }
+                            }
+                            background: Rectangle {
+                                radius: 10
+                                color: root.uiInput
+                                border.color: root.uiBorder
+                            }
+                        }
+                    }
+                    Label {
+                        visible: wireguardVpnSettings.engineAvailable && mapServerTunnel.selectedId !== ""
+                        text: qsTr("Tiles, terrain and imagery are then loaded only through this tunnel, never directly.")
+                        color: root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
                     Button {
                         palette.buttonText: root.uiText
                         palette.text: root.uiText
@@ -793,9 +933,10 @@ Window {
                         enabled: mapServerUrl.text.trim().length > 0 && mapServerPort.acceptableInput
                         onClicked: {
                             root.saveSucceeded = mapServerSettings.save(
-                                        mapServerUrl.text, mapServerPort.text)
+                                        mapServerUrl.text, mapServerPort.text, mapServerTunnel.selectedId)
                             root.saveFeedback = root.saveSucceeded ? "saved" : "error"
                             if (root.saveSucceeded) {
+                                wireguardVpnSettings.notifyUsersChanged()
                                 mapServerUrl.text = mapServerSettings.serverUrl
                                 mapServerPort.text = String(mapServerSettings.serverPort)
                                 mapServerUrl.focus = false
@@ -811,9 +952,14 @@ Window {
                         Layout.fillWidth: true
                     }
                     Label {
-                        text: mapServerSettings.configured
-                              ? qsTr("Saved endpoint: %1").arg(mapServerSettings.endpointUrl)
-                              : qsTr("No map server configured yet.")
+                        text: !mapServerSettings.configured
+                              ? qsTr("No map server configured yet.")
+                              : mapServerSettings.wireguardProfileId === ""
+                                ? qsTr("Saved endpoint: %1").arg(mapServerSettings.endpointUrl)
+                                : qsTr("Saved endpoint: %1 through WireGuard “%2”").arg(mapServerSettings.endpointUrl)
+                                      .arg(wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId) !== ""
+                                           ? wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId)
+                                           : qsTr("Missing WireGuard profile"))
                         color: root.uiText
                         font.pixelSize: 13
                         wrapMode: Text.WrapAnywhere
