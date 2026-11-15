@@ -83,12 +83,17 @@ GOOS=android GOARCH=arm64 CC="$engine_cc" \
     "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" "$engine_dir"
 engine_library="$engine_dir/libaowis_wireguard.so"
 # The app's loader resolves it by SONAME; Android 15+ needs 16 KiB pages.
-"$ndk_bin/llvm-readelf" -d "$engine_library" | grep -q 'SONAME.*\[libaowis_wireguard\.so\]' || {
+# Captured first: `readelf | grep -q` can fail under pipefail (SIGPIPE).
+engine_dynamic="$("$ndk_bin/llvm-readelf" -d "$engine_library")"
+[[ "$engine_dynamic" == *'Library soname: [libaowis_wireguard.so]'* ]] || {
     echo "Engine library lacks SONAME libaowis_wireguard.so: $engine_library" >&2
+    printf '%s\n' "$engine_dynamic" | grep -E 'SONAME|NEEDED' >&2 || true
     exit 1
 }
-"$ndk_bin/llvm-readelf" -lW "$engine_library" | awk '$1 == "LOAD" && $NF != "0x4000" && $NF != "0x10000" { bad = 1 } END { exit bad }' || {
+engine_segments="$("$ndk_bin/llvm-readelf" -lW "$engine_library")"
+printf '%s\n' "$engine_segments" | awk '$1 == "LOAD" && $NF != "0x4000" && $NF != "0x10000" { bad = 1 } END { exit bad }' || {
     echo "Engine library LOAD segments are not 16 KiB aligned: $engine_library" >&2
+    printf '%s\n' "$engine_segments" | grep -E '^ *LOAD' >&2 || true
     exit 1
 }
 
