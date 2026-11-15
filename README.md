@@ -83,7 +83,12 @@ A `.gitmodules` entry is not enough: the repository must also track a gitlink
 with a diagnostic. New clones should use `git clone --recurse-submodules`,
 or run `./git_submodule_init.sh` afterwards.
 
-Linux (installed Qt 6 including Qt Positioning, CMake, Ninja, C++ compiler):
+Linux (the distribution's Qt 6.5+, CMake, Ninja, a C++20 compiler and Go;
+Arch, Debian 13 / Ubuntu 25.04 or newer, Fedora). `compile_linux.sh` checks
+these first and prints the install command for the detected distribution,
+e.g. the `apt-get` package list on Debian/Ubuntu, which also covers the Qt
+GUI private headers and the separately packaged QML modules. Debian 12 and
+Ubuntu 24.04 ship Qt 6.4, which is too old.
 
 ```bash
 ./compile_linux.sh                # build and launch with the map

@@ -412,7 +412,10 @@
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "تُحمَّل المربعات والتضاريس والصور عندئذٍ عبر هذا النفق فقط، وليس مباشرة أبدًا.",
     "Used by: %1. Change its connection in Settings first.": "يستخدمه: %1. غيّر اتصاله في الإعدادات أولًا.",
     "Used by: %1. While it is used, the tunnel starts automatically and cannot be deleted.": "يستخدمه: %1. ما دام مستخدمًا، يبدأ النفق تلقائيًا ولا يمكن حذفه.",
-    "WireGuard: %1": "WireGuard: %1"
+    "WireGuard: %1": "WireGuard: %1",
+    "The keys could not be protected with the Android Keystore, so the profile was not saved.": "تعذّرت حماية المفاتيح باستخدام Android Keystore، لذا لم يُحفظ الملف الشخصي.",
+    "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "لا يمكن فك تشفير مفاتيح %1 من ملفات WireGuard الشخصية على هذا الجهاز (مثلًا بعد إعادة التثبيت أو استعادة نسخة احتياطية على هاتف آخر). الصق المفاتيح مجددًا أو استورد تلك الملفات مرة أخرى.",
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "لا يمكن فك تشفير مفاتيح “%1” على هذا الجهاز. عدّل الملف الشخصي والصق مفاتيحه مجددًا، أو استورده مرة أخرى."
   },
   "de": {
     "%1 (custom)": "%1 (benutzerdefiniert)",
@@ -827,7 +830,10 @@
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "Kacheln, Gelände und Bilder werden dann nur über diesen Tunnel geladen, nie direkt.",
     "Used by: %1. Change its connection in Settings first.": "Genutzt von: %1. Ändern Sie zuerst dessen Verbindung in den Einstellungen.",
     "Used by: %1. While it is used, the tunnel starts automatically and cannot be deleted.": "Genutzt von: %1. Solange es genutzt wird, startet der Tunnel automatisch und kann nicht gelöscht werden.",
-    "WireGuard: %1": "WireGuard: %1"
+    "WireGuard: %1": "WireGuard: %1",
+    "The keys could not be protected with the Android Keystore, so the profile was not saved.": "Die Schlüssel konnten nicht mit dem Android Keystore geschützt werden, daher wurde das Profil nicht gespeichert.",
+    "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "Die Schlüssel von %1 WireGuard-Profilen können auf diesem Gerät nicht entschlüsselt werden (zum Beispiel nach einer Neuinstallation oder einer auf ein anderes Telefon zurückgespielten Sicherung). Fügen Sie die Schlüssel erneut ein oder importieren Sie diese Profile erneut.",
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Die Schlüssel von „%1“ können auf diesem Gerät nicht entschlüsselt werden. Bearbeiten Sie das Profil und fügen Sie seine Schlüssel erneut ein, oder importieren Sie es erneut."
   },
   "es": {
     "%1 (custom)": "%1 (personalizado)",
@@ -1242,7 +1248,10 @@
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "Los mosaicos, el relieve y las imágenes se cargan entonces solo a través de este túnel, nunca directamente.",
     "Used by: %1. Change its connection in Settings first.": "Usado por: %1. Cambie primero su conexión en Configuración.",
     "Used by: %1. While it is used, the tunnel starts automatically and cannot be deleted.": "Usado por: %1. Mientras se usa, el túnel se inicia automáticamente y no se puede eliminar.",
-    "WireGuard: %1": "WireGuard: %1"
+    "WireGuard: %1": "WireGuard: %1",
+    "The keys could not be protected with the Android Keystore, so the profile was not saved.": "No se pudieron proteger las claves con el Android Keystore, así que el perfil no se guardó.",
+    "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "Las claves de %1 perfiles de WireGuard no se pueden descifrar en este dispositivo (por ejemplo, tras una reinstalación o una copia de seguridad restaurada en otro teléfono). Vuelva a pegar las claves o importe de nuevo esos perfiles.",
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Las claves de «%1» no se pueden descifrar en este dispositivo. Edite el perfil y vuelva a pegar sus claves, o impórtelo de nuevo."
   },
   "fr": {
     "%1 (custom)": "%1 (personnalisé)",
@@ -1657,6 +1666,9 @@
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "Les tuiles, le relief et l’imagerie sont alors chargés uniquement via ce tunnel, jamais directement.",
     "Used by: %1. Change its connection in Settings first.": "Utilisé par : %1. Modifiez d’abord sa connexion dans les paramètres.",
     "Used by: %1. While it is used, the tunnel starts automatically and cannot be deleted.": "Utilisé par : %1. Tant qu’il est utilisé, le tunnel démarre automatiquement et ne peut pas être supprimé.",
-    "WireGuard: %1": "WireGuard : %1"
+    "WireGuard: %1": "WireGuard : %1",
+    "The keys could not be protected with the Android Keystore, so the profile was not saved.": "Les clés n’ont pas pu être protégées par l’Android Keystore ; le profil n’a donc pas été enregistré.",
+    "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "Les clés de %1 profils WireGuard ne peuvent pas être déchiffrées sur cet appareil (par exemple après une réinstallation ou une sauvegarde restaurée sur un autre téléphone). Collez à nouveau les clés ou réimportez ces profils.",
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Les clés de « %1 » ne peuvent pas être déchiffrées sur cet appareil. Modifiez le profil et collez à nouveau ses clés, ou réimportez-le."
   }
 }

@@ -35,6 +35,8 @@ chmod +x "$TMP_DIR/mockbin/cmake" "$TMP_DIR/mockbin/ctest" "$TMP_DIR/mockbin/go"
 export PATH="$TMP_DIR/mockbin:$PATH"
 export AOWIS_LINUX_TEST_LOG="$TMP_DIR/build.log"
 export AOWIS_LINUX_JOBS=3
+# The dependency check has its own test (tests/test_linux_preflight.sh).
+export AOWIS_LINUX_SKIP_PREFLIGHT=1
 
 assert_contains() {
     if ! grep -F -- "$1" "$AOWIS_LINUX_TEST_LOG" >/dev/null; then

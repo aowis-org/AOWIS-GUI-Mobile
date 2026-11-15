@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # AOWIS Mobile with the AOWIS map (bgfx in Qt Quick): targeted native Linux build.
-# Use Arch's installed Qt 6, never Android's Docker Qt cross-toolchain.
+# Uses the distribution's Qt 6 (Arch, Debian/Ubuntu, Fedora), never Android's
+# Docker Qt cross-toolchain. Missing packages are named before CMake runs.
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 usage() {
@@ -18,12 +19,18 @@ Usage: ./compile_linux.sh [options]
 Environment:
   AOWIS_BUILD_TYPE  CMake build type (default RelWithDebInfo).
   AOWIS_LINUX_JOBS Parallel build jobs (default number of available CPUs).
+  AOWIS_LINUX_SKIP_PREFLIGHT=1  Skip the dependency check (custom Qt/Go setups).
 
-Requires CMake, Ninja, and host Qt 6 (Core, Gui, Qml, Quick, QuickControls2, Positioning, Sensors, OpenGL, Network).
-On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative qt6-positioning qt6-sensors
+Requires CMake, Ninja, a C++20 compiler, Go (WireGuard engine) and Qt 6.5+
+(Core, Gui with private headers, Qml, Quick, QuickControls2, Positioning,
+Sensors, OpenGL, Network and the QML modules Controls, Layouts, Dialogs).
+Missing pieces are reported with the install command for this distribution:
+  Arch:          sudo pacman -S --needed cmake ninja gcc go qt6-base qt6-declarative qt6-positioning qt6-sensors
+  Debian/Ubuntu: Debian 13 (trixie), Ubuntu 25.04 or newer (older releases ship Qt < 6.5);
+                 the apt-get package list is printed by the check.
 For the map (AOWIS-GUI-Render with its pinned bgfx) and GeographicLib: ./git_submodule_init.sh.
 For MODEL registration (once): ./tools/init_model.sh.
-For the embedded WireGuard engine: ./tools/init_network.sh (once) and Go (Arch: go).
+For the embedded WireGuard engine: ./tools/init_network.sh (once).
 For configuration storage: ./tools/init_config.sh (once).
 HELP
 }
@@ -40,13 +47,6 @@ while (( $# > 0 )); do
         *) usage >&2; exit 2 ;;
     esac
     shift
-done
-
-for tool in cmake ninja; do
-    command -v "$tool" >/dev/null 2>&1 || {
-        printf 'AOWIS Mobile Linux: missing required command: %s\n' "$tool" >&2
-        exit 1
-    }
 done
 
 BUILD_TYPE="${AOWIS_BUILD_TYPE:-RelWithDebInfo}"
@@ -70,10 +70,11 @@ if [[ ! -f "$PROJECT_DIR/external/AOWIS-NETWORK/CMakeLists.txt" ]]; then
     printf 'AOWIS Mobile Linux: NETWORK submodule missing. Run ./tools/init_network.sh once.\n' >&2
     exit 1
 fi
-command -v go >/dev/null 2>&1 || {
-    printf 'AOWIS Mobile Linux: Go is required for the embedded WireGuard engine (Arch: sudo pacman -S go).\n' >&2
-    exit 1
-}
+if [[ "${AOWIS_LINUX_SKIP_PREFLIGHT:-0}" != 1 ]]; then
+    # shellcheck source=tools/linux_build_preflight.sh
+    source "$PROJECT_DIR/tools/linux_build_preflight.sh"
+    aowis_linux_preflight "$PROJECT_DIR" || exit 1
+fi
 
 BUILD_DIR="$PROJECT_DIR/build-linux-bgfx"
 BGFX=ON

@@ -1,4 +1,5 @@
 #include "wireguard_vpn_settings.h"
+#include "wireguard_key_sealing.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -12,6 +13,7 @@
 #include <QThread>
 #include <QUrl>
 
+#include <algorithm>
 #include <functional>
 
 static bool check(bool condition, const char *message)
@@ -196,6 +198,88 @@ int main(int argc, char *argv[])
                        && reloaded.profileDescription(office) == QStringLiteral("Main site")
                        && reloaded.profileText(office).contains(QStringLiteral("10.50.0.3/32")),
                    "profiles restored after restart")) return 1;
+    }
+
+    // Secrets sealed in storage (Android: the Keystore). A reversible fake
+    // sealer stands in for it here.
+    {
+        const QString prefix = WireGuardKeySealing::sealedPrefix();
+        const WireGuardKeySealing::Seal seal = [prefix](const QString &plain) {
+            QString reversed = plain;
+            std::reverse(reversed.begin(), reversed.end());
+            return prefix + QString::fromLatin1(reversed.toUtf8().toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+        };
+        const WireGuardKeySealing::Unseal unseal = [prefix](const QString &token, QString *plain) {
+            if (!token.startsWith(prefix))
+                return false;
+            QString value = QString::fromUtf8(QByteArray::fromBase64(token.mid(prefix.size()).toLatin1(), QByteArray::Base64UrlEncoding));
+            std::reverse(value.begin(), value.end());
+            *plain = value;
+            return true;
+        };
+        const WireGuardKeySealing::Unseal foreign = [](const QString &, QString *) { return false; };
+
+        // Only the secret values change; comments, other lines and CRLF stay.
+        const QString text = QStringLiteral("[Interface]\r\n  privatekey=yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk= # mine\r\nAddress = 10.50.0.2/32\r\n"
+                                            "[Peer]\r\nPresharedKey = FpCyhws9cxwWoV4xELtfJvjJN+zQVRPISllRWgeopVE=\r\n");
+        QString sealed;
+        if (!check(WireGuardKeySealing::hasPlainSecrets(text) && WireGuardKeySealing::sealSecrets(text, seal, &sealed)
+                       && !sealed.contains(QStringLiteral("yAnz5TF")) && !sealed.contains(QStringLiteral("FpCyhws9"))
+                       && sealed.contains(QStringLiteral("  privatekey=") + prefix) && sealed.contains(QStringLiteral(" # mine\r\n"))
+                       && sealed.contains(QStringLiteral("Address = 10.50.0.2/32\r\n"))
+                       && WireGuardKeySealing::hasSealedSecrets(sealed) && !WireGuardKeySealing::hasPlainSecrets(sealed),
+                   "only PrivateKey/PresharedKey values are sealed")) return 1;
+        QString opened;
+        if (!check(WireGuardKeySealing::unsealSecrets(sealed, unseal, &opened) && opened == text, "sealed text opens to the original")) return 1;
+        if (!check(!WireGuardKeySealing::unsealSecrets(sealed, foreign, &opened) && opened == sealed, "foreign key leaves the tokens")) return 1;
+        const WireGuardKeySealing::Seal broken = [](const QString &) { return QString(); };
+        if (!check(!WireGuardKeySealing::sealSecrets(text, broken, &sealed), "a failed seal is reported")) return 1;
+
+        QTemporaryDir sealing_directory;
+        const QString sealing_root = sealing_directory.filePath(QStringLiteral("aowis"));
+        QString plain_id;
+        {
+            // Stored before sealing existed (or on desktop): plain.
+            WireGuardVpnSettings plain(nullptr, sealing_root);
+            plain.setKeySealing(WireGuardKeySealing::Seal(), WireGuardKeySealing::Unseal());
+            plain_id = plain.addProfile(QStringLiteral("Legacy"), QString(), valid_conf);
+            if (!check(!plain_id.isEmpty(), "plain profile stored")) return 1;
+        }
+        {
+            // The first load with a sealer seals it in place.
+            WireGuardVpnSettings migrating(nullptr, sealing_root);
+            migrating.setKeySealing(seal, unseal);
+            if (!check(migrating.profileText(plain_id) == valid_conf && migrating.storageProblem().isEmpty(),
+                       "migrated profile still opens")) return 1;
+            const QString sealed_id = migrating.addProfile(QStringLiteral("Sealed"), QString(), valid_conf);
+            if (!check(!sealed_id.isEmpty() && migrating.profileText(sealed_id) == valid_conf, "new profile sealed and opened")) return 1;
+            migrating.setKeySealing(broken, unseal);
+            if (!check(migrating.addProfile(QStringLiteral("Unprotected"), QString(), valid_conf).isEmpty()
+                           && migrating.error().contains(QStringLiteral("Keystore")),
+                       "never stored plain when sealing fails")) return 1;
+        }
+        {
+            // Without the sealing key (other phone, reinstall): locked, not
+            // started, and the reason is shown, never a plain fallback.
+            WireGuardVpnSettings stranger(nullptr, sealing_root);
+            stranger.setKeySealing(seal, foreign);
+            QNetworkProxy proxy;
+            QString reason;
+            bool all_locked = !stranger.profiles().isEmpty();
+            for (const QVariant &entry : stranger.profiles())
+                all_locked = all_locked && entry.toMap().value(QStringLiteral("locked")).toBool();
+            if (!check(all_locked && !stranger.profileText(plain_id).contains(QStringLiteral("yAnz5TF"))
+                           && stranger.storageProblem().contains(QStringLiteral("cannot be decrypted")),
+                       "profiles sealed with another key are locked")) return 1;
+            if (!check(!stranger.startTunnel(plain_id)
+                           && stranger.status(plain_id, 1).value(QStringLiteral("stateText")).toString().contains(QStringLiteral("cannot be decrypted"))
+                           && !stranger.proxyFor(plain_id, &proxy, &reason) && reason.contains(QStringLiteral("cannot be decrypted")),
+                       "a locked profile never starts")) return 1;
+            // Pasting the key again unlocks it.
+            if (!check(stranger.updateProfile(plain_id, QStringLiteral("Legacy"), QString(), valid_conf), "re-entered key saved")) return 1;
+            stranger.setKeySealing(seal, unseal);
+            if (!check(stranger.profileText(plain_id) == valid_conf, "re-entered key opens with the new key")) return 1;
+        }
     }
 
     const QLocale c(QLocale::C);

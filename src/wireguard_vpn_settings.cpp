@@ -1,5 +1,7 @@
 #include "wireguard_vpn_settings.h"
 
+#include "android_keystore_sealer.h"
+
 #include <aowis/config/config_root.h>
 #include <aowis/config/object_id.h>
 #include <aowis/config/owner_id.h>
@@ -89,6 +91,8 @@ aowis::network::WireGuardConfParse parse(const QString &text)
 WireGuardVpnSettings::WireGuardVpnSettings(QObject *parent, const QString &namespaceRoot)
     : QObject(parent)
     , namespace_root(namespaceRoot)
+    , sealer(AndroidKeystoreSealer::seal())
+    , unsealer(AndroidKeystoreSealer::unseal())
 {
     this->openStorage();
     this->reload();
@@ -135,6 +139,7 @@ QVariantList WireGuardVpnSettings::profiles() const
         item.insert(QStringLiteral("id"), profile.id);
         item.insert(QStringLiteral("name"), profile.name);
         item.insert(QStringLiteral("description"), profile.description);
+        item.insert(QStringLiteral("locked"), profile.locked);
 #if AOWIS_MOBILE_WITH_WIREGUARD
         const aowis::network::WireGuardConfParse parsed = parse(profile.text);
         item.insert(QStringLiteral("endpoint"), parsed.ok() ? QString::fromStdString(parsed.config.endpoint) : QString());
@@ -226,6 +231,7 @@ void WireGuardVpnSettings::reload()
         return;
     }
     int unreadable = static_cast<int>(listing.value().unreadable.size());
+    int locked = 0;
     for (const aowis::config::WireGuardProfileSummary &summary : listing.value().profiles)
     {
         const aowis::config::Result<aowis::config::WireGuardProfile> read = this->profile_store->read(summary.info.id);
@@ -239,12 +245,68 @@ void WireGuardVpnSettings::reload()
         profile.revision = QString::fromStdString(read.value().summary.info.revision);
         profile.name = QString::fromStdString(read.value().summary.name);
         profile.description = QString::fromStdString(read.value().summary.description);
-        profile.text = QString::fromStdString(read.value().configuration);
+        const QString stored_text = QString::fromStdString(read.value().configuration);
+        // Without an unsealer (desktop) the text is used as stored; sealed
+        // values in it (copied from a phone) cannot be opened: locked.
+        if (this->unsealer)
+            profile.locked = !WireGuardKeySealing::unsealSecrets(stored_text, this->unsealer, &profile.text);
+        else
+        {
+            profile.text = stored_text;
+            profile.locked = WireGuardKeySealing::hasSealedSecrets(stored_text);
+        }
+        // Profiles stored before sealing was available: seal them now.
+        std::string resealed;
+        if (!profile.locked && this->sealer && WireGuardKeySealing::hasPlainSecrets(stored_text)
+            && this->storedText(profile.text, &resealed))
+        {
+            const aowis::config::WireGuardProfileInput input{
+                read.value().summary.name, read.value().summary.description, resealed};
+            const aowis::config::Result<aowis::config::WireGuardProfile> updated = this->profile_store->update(
+                read.value().summary.info.id, read.value().summary.info.revision, input);
+            if (updated)
+                profile.revision = QString::fromStdString(updated.value().summary.info.revision);
+        }
+        if (profile.locked)
+            ++locked;
         this->stored.append(profile);
     }
-    this->storage_problem = unreadable > 0
-        ? tr("%1 stored WireGuard profiles are damaged and cannot be read.").arg(unreadable)
-        : QString();
+    QStringList problems;
+    if (unreadable > 0)
+        problems.append(tr("%1 stored WireGuard profiles are damaged and cannot be read.").arg(unreadable));
+    if (locked > 0)
+        problems.append(tr("The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.").arg(locked));
+    this->storage_problem = problems.join(QLatin1Char(' '));
+}
+
+void WireGuardVpnSettings::setKeySealing(WireGuardKeySealing::Seal seal, WireGuardKeySealing::Unseal unseal)
+{
+    this->sealer = std::move(seal);
+    this->unsealer = std::move(unseal);
+    this->reload();
+    emit profilesChanged();
+}
+
+bool WireGuardVpnSettings::storedText(const QString &text, std::string *out)
+{
+    if (!this->sealer)
+    {
+        *out = text.toStdString();
+        return true;
+    }
+    QString sealed;
+    if (!WireGuardKeySealing::sealSecrets(text, this->sealer, &sealed))
+    {
+        this->setError(tr("The keys could not be protected with the Android Keystore, so the profile was not saved."));
+        return false;
+    }
+    *out = sealed.toStdString();
+    return true;
+}
+
+QString WireGuardVpnSettings::lockedText(const QString &name) const
+{
+    return tr("The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.").arg(name);
 }
 
 QString WireGuardVpnSettings::storageErrorText(const aowis::config::Error &error) const
@@ -353,8 +415,11 @@ QString WireGuardVpnSettings::addProfile(const QString &name, const QString &des
         this->setError(this->storage_problem);
         return QString();
     }
+    std::string stored_text;
+    if (!this->storedText(text, &stored_text))
+        return QString();
     const aowis::config::WireGuardProfileInput input{
-        name.trimmed().toStdString(), description.trimmed().toStdString(), text.toStdString()};
+        name.trimmed().toStdString(), description.trimmed().toStdString(), stored_text};
     const aowis::config::Result<aowis::config::WireGuardProfile> imported = this->profile_store->importText(input);
     if (!imported)
     {
@@ -381,8 +446,11 @@ bool WireGuardVpnSettings::updateProfile(const QString &id, const QString &name,
     if (!this->validateProfile(name, text, id))
         return false;
     const bool text_changed = this->stored.at(index).text != text;
+    std::string stored_text;
+    if (!this->storedText(text, &stored_text))
+        return false;
     const aowis::config::WireGuardProfileInput input{
-        name.trimmed().toStdString(), description.trimmed().toStdString(), text.toStdString()};
+        name.trimmed().toStdString(), description.trimmed().toStdString(), stored_text};
     const aowis::config::Result<aowis::config::WireGuardProfile> updated = this->profile_store->update(
         object_id.value(), this->stored.at(index).revision.toStdString(), input);
     if (!updated)
@@ -517,6 +585,13 @@ bool WireGuardVpnSettings::startEngine(const QString &id)
     {
         tunnel.stop_requested = false;
         return true;
+    }
+    if (this->stored.at(index).locked)
+    {
+        tunnel.error = this->lockedText(this->stored.at(index).name);
+        this->bumpStatus();
+        emit tunnelAvailabilityChanged(id);
+        return false;
     }
     const aowis::network::WireGuardConfParse parsed = parse(this->stored.at(index).text);
     if (!parsed.ok())
@@ -709,6 +784,12 @@ bool WireGuardVpnSettings::proxyFor(const QString &profile_id, QNetworkProxy *pr
         *reason = tr("The WireGuard profile of this connection no longer exists. Choose another one in Settings.");
         return false;
     }
+    const int index = this->indexOf(profile_id);
+    if (index >= 0 && this->stored.at(index).locked)
+    {
+        *reason = this->lockedText(name);
+        return false;
+    }
     if (this->user_stopped.contains(profile_id))
     {
         *reason = tr("The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.").arg(name);
@@ -817,6 +898,12 @@ QVariantMap WireGuardVpnSettings::status(const QString &id, int revision) const
             state_text = this->wanted(id) ? tr("Could not start (retrying): %1").arg(it->error)
                                           : tr("Could not start: %1").arg(it->error);
         }
+    }
+    const int index = this->indexOf(id);
+    if (!running && index >= 0 && this->stored.at(index).locked)
+    {
+        state = QStringLiteral("error");
+        state_text = this->lockedText(this->stored.at(index).name);
     }
     // Start/Stop: also stoppable while a connection keeps retrying it.
     const bool active = running || (state == QStringLiteral("error") && this->wanted(id));

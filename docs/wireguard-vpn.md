@@ -25,9 +25,24 @@ system VPN icon, and nothing else on the phone is routed through a tunnel.
   there), on desktop Linux `~/.config/aowis/gui-mobile`. CONFIG keeps the
   exact text plus name and description, revision-checks every update and
   delete (a change from elsewhere is a conflict, never overwritten), and
-  reports damaged records instead of failing the whole list. **The private
-  key is stored unencrypted there**, as on the desktop; Android Keystore
-  encryption is not implemented yet.
+  reports damaged records instead of failing the whole list.
+- **Secrets on Android are sealed with the Android Keystore:** the values of
+  `PrivateKey` and `PresharedKey` are stored as
+  `aowis-keystore-v1:<base64url(IV ‖ ciphertext ‖ tag)>` (AES-256-GCM, the
+  prefix authenticated; `android/src/org/aowis/mobile/KeystoreSealer.java`);
+  everything else in the `.conf` stays readable. The Keystore key never
+  leaves the Keystore and is not part of backups. If sealing fails the
+  profile is not saved (never a plain fallback). Profiles stored in plain
+  text earlier are sealed on the next start. On desktop Linux secrets stay
+  plain in `~/.config/aowis/gui-mobile` (private directory), as in the GUI.
+- **Locked profiles:** when sealed values cannot be opened (app reinstalled,
+  backup restored to another phone, Keystore reset) the profile is shown
+  with a notice and never started; its tunnel consumers (the map server)
+  are blocked with the same reason. Edit it and paste the keys again, or
+  import it again. Tests: `tests/test_android_keystore_sealer.sh` (the Java
+  sealer on the host JDK, stub Android classes) and
+  `aowis-mobile-wireguard-settings` (only secret values change, migration,
+  locked profiles, no plain fallback).
 - Deletion goes through CONFIG's reference guard: the profile the map server
   uses cannot be deleted (the page says "Used by: Map server").
 - Saving a changed configuration stops that profile's running tunnel.

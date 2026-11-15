@@ -1,5 +1,7 @@
 #pragma once
 
+#include "wireguard_key_sealing.h"
+
 #include <QHash>
 #include <QSet>
 #include <QStringList>
@@ -109,6 +111,11 @@ public:
     // digits, no group separators ("312 KiB", "2.50 GiB").
     static QString dataSizeText(quint64 bytes, const QLocale &locale);
 
+    // How PrivateKey/PresharedKey values are stored: sealed (Android: the
+    // Keystore, set by the constructor) or, with empty functions, plain.
+    // Plain profiles are sealed on the next load. Tests inject their own.
+    void setKeySealing(WireGuardKeySealing::Seal seal, WireGuardKeySealing::Unseal unseal);
+
 signals:
     void profilesChanged();
     void statusRevisionChanged();
@@ -124,7 +131,8 @@ private:
         QString revision; // CONFIG's optimistic-concurrency token
         QString name;
         QString description;
-        QString text;
+        QString text;        // Plain text (secrets opened)
+        bool locked = false; // Its sealed secrets cannot be opened here
     };
     struct Tunnel
     {
@@ -140,6 +148,10 @@ private:
     int indexOf(const QString &id) const;
     bool nameTaken(const QString &name, const QString &except_id) const;
     bool validateProfile(const QString &name, const QString &text, const QString &except_id);
+    // The text as stored: secrets sealed when a sealer is set. False (error
+    // set) when sealing fails; a secret is never stored plain instead.
+    bool storedText(const QString &text, std::string *out);
+    QString lockedText(const QString &name) const;
     bool openStorage();
     void reload();
     QString storageErrorText(const aowis::config::Error &error) const;
@@ -163,6 +175,8 @@ private:
     QSet<QString> user_stopped;  // Stopped with the Stop button
     QHash<QString, QString> consumers; // consumer -> required profile id
     std::function<QStringList(const QString &)> profile_users;
+    WireGuardKeySealing::Seal sealer;
+    WireGuardKeySealing::Unseal unsealer;
     QTimer *poll = nullptr;
     int revision = 0;
     QString last_error;

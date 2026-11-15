@@ -32,6 +32,10 @@ qt_add_executable(aowis-mobile
     src/map_server_settings.h
     src/wireguard_vpn_settings.cpp
     src/wireguard_vpn_settings.h
+    src/wireguard_key_sealing.cpp
+    src/wireguard_key_sealing.h
+    src/android_keystore_sealer.cpp
+    src/android_keystore_sealer.h
     src/appearance_settings.cpp
     src/appearance_settings.h
     src/language_settings.cpp
@@ -401,7 +405,9 @@ if(BUILD_TESTING)
     add_test(NAME aowis-mobile-map-server-settings COMMAND aowis-mobile-map-server-settings-tests)
     if(AOWIS_MOBILE_WITH_WIREGUARD)
         add_executable(aowis-mobile-wireguard-settings-tests
-            tests/wireguard_vpn_settings_tests.cpp src/wireguard_vpn_settings.cpp src/wireguard_vpn_settings.h)
+            tests/wireguard_vpn_settings_tests.cpp src/wireguard_vpn_settings.cpp src/wireguard_vpn_settings.h
+            src/wireguard_key_sealing.cpp src/wireguard_key_sealing.h
+            src/android_keystore_sealer.cpp src/android_keystore_sealer.h)
         target_include_directories(aowis-mobile-wireguard-settings-tests PRIVATE src)
         target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core Qt6::Network AOWIS::Network aowis::config)
         target_compile_definitions(aowis-mobile-wireguard-settings-tests PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=1)
