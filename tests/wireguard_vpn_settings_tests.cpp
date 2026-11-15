@@ -62,7 +62,8 @@ int main(int argc, char *argv[])
                    "new installation has no profiles and usable storage")) return 1;
 
         // Diagnostics are translated texts with line numbers and never echo keys.
-        const QString broken = QStringLiteral("[Interface]\nPrivateKey = nope\nAddress = 10.50.0.2/32\n[Peer]\nEndpoint = 127.0.0.1:9\nAllowedIPs = 10.50.0.0/24\nPostUp = rm -rf /\n");
+        // Hooks are ignored (warning) only in [Interface]; in [Peer] they are unknown.
+        const QString broken = QStringLiteral("[Interface]\nPrivateKey = nope\nAddress = 10.50.0.2/32\nPostUp = rm -rf /\n[Peer]\nEndpoint = 127.0.0.1:9\nAllowedIPs = 10.50.0.0/24\n");
         const QVariantMap diagnosis = settings.check(broken);
         const QVariantList messages = diagnosis.value(QStringLiteral("messages")).toList();
         bool line_two_key = false;
@@ -73,7 +74,7 @@ int main(int argc, char *argv[])
             const QString text = message.value(QStringLiteral("text")).toString();
             if (!check(!text.contains(QStringLiteral("nope")) && !text.contains(QStringLiteral("rm -rf")), "diagnostics never quote the text")) return 1;
             line_two_key = line_two_key || (text == QStringLiteral("Line 2: Invalid WireGuard key.") && message.value(QStringLiteral("error")).toBool());
-            hook_warning = hook_warning || (text.startsWith(QStringLiteral("Warning: Line 7:")) && !message.value(QStringLiteral("error")).toBool());
+            hook_warning = hook_warning || (text.startsWith(QStringLiteral("Warning: Line 4:")) && !message.value(QStringLiteral("error")).toBool());
         }
         if (!check(!diagnosis.value(QStringLiteral("ok")).toBool() && line_two_key && hook_warning,
                    "invalid key and ignored hook are reported with line numbers")) return 1;
