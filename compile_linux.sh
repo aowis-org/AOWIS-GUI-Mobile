@@ -24,6 +24,7 @@ On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative qt6-positi
 For the map (AOWIS-GUI-Render with its pinned bgfx) and GeographicLib: ./git_submodule_init.sh.
 For MODEL registration (once): ./tools/init_model.sh.
 For the embedded WireGuard engine: ./tools/init_network.sh (once) and Go (Arch: go).
+For configuration storage: ./tools/init_config.sh (once).
 HELP
 }
 
@@ -61,6 +62,10 @@ if [[ ! -f "$PROJECT_DIR/external/AOWIS-SERVER-MODEL/CMakeLists.txt" ||
     exit 1
 fi
 
+if [[ ! -f "$PROJECT_DIR/external/AOWIS-CONFIG/CMakeLists.txt" ]]; then
+    printf 'AOWIS Mobile Linux: CONFIG submodule missing. Run ./tools/init_config.sh once.\n' >&2
+    exit 1
+fi
 if [[ ! -f "$PROJECT_DIR/external/AOWIS-NETWORK/CMakeLists.txt" ]]; then
     printf 'AOWIS Mobile Linux: NETWORK submodule missing. Run ./tools/init_network.sh once.\n' >&2
     exit 1

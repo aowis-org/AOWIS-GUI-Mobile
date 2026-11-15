@@ -222,6 +222,8 @@ if [[ "$bgfx" == ON ]]; then
     renderer_host="$(realpath -- "$renderer_host")"
     renderer_mount=(-v "$renderer_host:/aowis-render:ro")
 fi
+[[ -f "$project_dir/external/AOWIS-CONFIG/CMakeLists.txt" ]] ||
+    die 'AOWIS-CONFIG missing: run ./tools/init_config.sh once (or ./git_submodule_init.sh --config).'
 [[ -f "$project_dir/external/AOWIS-NETWORK/CMakeLists.txt" &&
    -f "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" ]] ||
     die 'AOWIS-NETWORK missing: run ./tools/init_network.sh once (or ./git_submodule_init.sh --network).'

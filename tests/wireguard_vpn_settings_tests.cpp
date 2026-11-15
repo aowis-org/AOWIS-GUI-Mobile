@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDeadlineTimer>
+#include <QDir>
 #include <QFile>
 #include <QLocale>
 #include <QTemporaryDir>
@@ -48,11 +49,13 @@ int main(int argc, char *argv[])
     QTemporaryDir directory;
     if (!check(directory.isValid(), "temporary settings directory"))
         return 1;
-    const QString file = directory.filePath(QStringLiteral("settings.ini"));
+    // AOWIS-CONFIG namespace root ("aowis"); the owner "gui-mobile" lives below.
+    const QString root = directory.filePath(QStringLiteral("aowis"));
     QString office;
     {
-        WireGuardVpnSettings settings(nullptr, file);
-        if (!check(settings.engineAvailable() && settings.profiles().isEmpty(), "new installation has no profiles")) return 1;
+        WireGuardVpnSettings settings(nullptr, root);
+        if (!check(settings.engineAvailable() && settings.profiles().isEmpty() && settings.storageProblem().isEmpty(),
+                   "new installation has no profiles and usable storage")) return 1;
 
         // Diagnostics are translated texts with line numbers and never echo keys.
         const QString broken = QStringLiteral("[Interface]\nPrivateKey = nope\nAddress = 10.50.0.2/32\n[Peer]\nEndpoint = 127.0.0.1:9\nAllowedIPs = 10.50.0.0/24\nPostUp = rm -rf /\n");
@@ -78,19 +81,20 @@ int main(int argc, char *argv[])
                    "missing peer public key reported without a line number")) return 1;
         if (!check(settings.check(valid_conf).value(QStringLiteral("ok")).toBool(), "valid configuration accepted")) return 1;
 
-        if (!check(settings.addProfile(QStringLiteral("Broken"), broken).isEmpty() && !settings.error().isEmpty(), "invalid configuration is not saved")) return 1;
-        if (!check(settings.addProfile(QStringLiteral("  "), valid_conf).isEmpty(), "empty name rejected")) return 1;
-        office = settings.addProfile(QStringLiteral(" Office "), valid_conf);
+        if (!check(settings.addProfile(QStringLiteral("Broken"), QString(), broken).isEmpty() && !settings.error().isEmpty(), "invalid configuration is not saved")) return 1;
+        if (!check(settings.addProfile(QStringLiteral("  "), QString(), valid_conf).isEmpty(), "empty name rejected")) return 1;
+        office = settings.addProfile(QStringLiteral(" Office "), QStringLiteral(" Main site "), valid_conf);
         if (!check(!office.isEmpty() && settings.error().isEmpty(), "valid profile saved")) return 1;
-        if (!check(settings.addProfile(QStringLiteral("office"), valid_conf).isEmpty(), "duplicate name rejected (case-insensitive)")) return 1;
-        const QString field = settings.addProfile(QStringLiteral("Field"), valid_conf);
+        if (!check(QDir(root).exists(QStringLiteral("gui-mobile")), "stored in the gui-mobile owner root")) return 1;
+        if (!check(settings.addProfile(QStringLiteral("office"), QString(), valid_conf).isEmpty(), "duplicate name rejected (case-insensitive)")) return 1;
+        const QString field = settings.addProfile(QStringLiteral("Field"), QString(), valid_conf);
         if (!check(!field.isEmpty(), "second profile saved")) return 1;
         const QVariantList listed = settings.profiles();
         if (!check(listed.size() == 2 && listed.at(0).toMap().value(QStringLiteral("name")) == QStringLiteral("Field")
                        && listed.at(1).toMap().value(QStringLiteral("endpoint")) == QStringLiteral("127.0.0.1:9"),
                    "profiles sorted by name with endpoint")) return 1;
-        if (!check(!settings.updateProfile(field, QStringLiteral("Office"), valid_conf), "rename onto an existing name rejected")) return 1;
-        if (!check(settings.updateProfile(field, QStringLiteral("Field 2"), valid_conf), "rename accepted")) return 1;
+        if (!check(!settings.updateProfile(field, QStringLiteral("Office"), QString(), valid_conf), "rename onto an existing name rejected")) return 1;
+        if (!check(settings.updateProfile(field, QStringLiteral("Field 2"), QString(), valid_conf), "rename accepted")) return 1;
         if (!check(settings.removeProfile(field) && settings.profiles().size() == 1, "profile removed")) return 1;
         if (!check(settings.suggestedName(QUrl(QStringLiteral("content://com.android.providers.downloads.documents/document/primary%3ADownload%2Fwg-office.conf"))) == QStringLiteral("wg-office"),
                    "name suggested from an Android document URI")) return 1;
@@ -122,7 +126,7 @@ int main(int argc, char *argv[])
         waitWhileStarting(settings, office);
         QString edited = valid_conf;
         edited.replace(QStringLiteral("10.50.0.2/32"), QStringLiteral("10.50.0.3/32"));
-        if (!check(settings.updateProfile(office, QStringLiteral("Office"), edited)
+        if (!check(settings.updateProfile(office, QStringLiteral("Office"), QStringLiteral("Main site"), edited)
                        && settings.status(office, 0).value(QStringLiteral("state")) == QStringLiteral("stopped"),
                    "configuration change stops the tunnel")) return 1;
         // Stop while starting: the tunnel never stays up.
@@ -131,9 +135,10 @@ int main(int argc, char *argv[])
         if (!check(waitWhileStarting(settings, office) == QStringLiteral("stopped"), "stop during start wins")) return 1;
     }
     {
-        WireGuardVpnSettings reloaded(nullptr, file);
+        WireGuardVpnSettings reloaded(nullptr, root);
         const QVariantList listed = reloaded.profiles();
         if (!check(listed.size() == 1 && reloaded.profileName(office) == QStringLiteral("Office")
+                       && reloaded.profileDescription(office) == QStringLiteral("Main site")
                        && reloaded.profileText(office).contains(QStringLiteral("10.50.0.3/32")),
                    "profiles restored after restart")) return 1;
     }
@@ -146,6 +151,18 @@ int main(int argc, char *argv[])
                    && WireGuardVpnSettings::dataSizeText(300000ull * 1024, german) == QStringLiteral("293 MiB")
                    && WireGuardVpnSettings::dataSizeText(5ull * 1024 * 1024 * 1024 / 2, german) == QStringLiteral("2,50 GiB"),
                "traffic sizes scale units without group separators")) return 1;
-    qInfo() << "WireGuard VPN settings: profiles, diagnostics, persistence and tunnel start/stop passed.";
+    {
+        // A second instance changed the profile: a stale revision is a
+        // conflict, never a silent overwrite; the view reloads.
+        WireGuardVpnSettings first(nullptr, root);
+        WireGuardVpnSettings second(nullptr, root);
+        if (!check(second.updateProfile(office, QStringLiteral("Office"), QStringLiteral("Changed"), second.profileText(office)),
+                   "second instance updates")) return 1;
+        if (!check(!first.updateProfile(office, QStringLiteral("Office"), QStringLiteral("Stale"), first.profileText(office))
+                       && first.profileDescription(office) == QStringLiteral("Changed"),
+                   "stale revision rejected and reloaded")) return 1;
+        if (!check(first.removeProfile(office) && first.profiles().isEmpty(), "profile deleted")) return 1;
+    }
+    qInfo() << "WireGuard VPN settings: profiles, diagnostics, AOWIS-CONFIG persistence and tunnel start/stop passed.";
     return 0;
 }

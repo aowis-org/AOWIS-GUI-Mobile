@@ -1,15 +1,21 @@
 #include "wireguard_vpn_settings.h"
 
+#include <aowis/config/config_root.h>
+#include <aowis/config/object_id.h>
+#include <aowis/config/owner_id.h>
+#include <aowis/config/wireguard_profiles.h>
+
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
-#include <QSettings>
+#include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
-#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <string>
 
 #if AOWIS_MOBILE_WITH_WIREGUARD
@@ -78,31 +84,12 @@ aowis::network::WireGuardConfParse parse(const QString &text)
 
 } // namespace
 
-WireGuardVpnSettings::WireGuardVpnSettings(QObject *parent, const QString &settingsFile)
+WireGuardVpnSettings::WireGuardVpnSettings(QObject *parent, const QString &namespaceRoot)
     : QObject(parent)
+    , namespace_root(namespaceRoot)
 {
-    if (settingsFile.isEmpty())
-    {
-        // App-private storage (Android: the app's data directory).
-        this->settings = std::make_unique<QSettings>(
-            QSettings::NativeFormat, QSettings::UserScope,
-            QStringLiteral("AOWIS"), QStringLiteral("AOWIS-GUI-Mobile"));
-    }
-    else
-        this->settings = std::make_unique<QSettings>(settingsFile, QSettings::IniFormat);
-
-    const int count = this->settings->beginReadArray(QStringLiteral("wireguard/profiles"));
-    for (int i = 0; i < count; ++i)
-    {
-        this->settings->setArrayIndex(i);
-        Profile profile;
-        profile.id = this->settings->value(QStringLiteral("id")).toString();
-        profile.name = this->settings->value(QStringLiteral("name")).toString();
-        profile.text = this->settings->value(QStringLiteral("conf")).toString();
-        if (!profile.id.isEmpty() && !profile.name.isEmpty() && this->indexOf(profile.id) < 0)
-            this->stored.append(profile);
-    }
-    this->settings->endArray();
+    this->openStorage();
+    this->reload();
 
     this->poll = new QTimer(this);
     this->poll->setInterval(1000);
@@ -145,6 +132,7 @@ QVariantList WireGuardVpnSettings::profiles() const
         QVariantMap item;
         item.insert(QStringLiteral("id"), profile.id);
         item.insert(QStringLiteral("name"), profile.name);
+        item.insert(QStringLiteral("description"), profile.description);
 #if AOWIS_MOBILE_WITH_WIREGUARD
         const aowis::network::WireGuardConfParse parsed = parse(profile.text);
         item.insert(QStringLiteral("endpoint"), parsed.ok() ? QString::fromStdString(parsed.config.endpoint) : QString());
@@ -163,6 +151,117 @@ int WireGuardVpnSettings::statusRevision() const
 QString WireGuardVpnSettings::error() const
 {
     return this->last_error;
+}
+
+QString WireGuardVpnSettings::storageProblem() const
+{
+    return this->storage_problem;
+}
+
+bool WireGuardVpnSettings::openStorage()
+{
+    if (this->profile_store)
+        return true;
+    const aowis::config::Result<aowis::config::OwnerId> owner = aowis::config::OwnerId::parse("gui-mobile");
+    if (!owner)
+    {
+        this->storage_problem = tr("WireGuard profiles cannot be stored: %1").arg(this->storageErrorText(owner.error()));
+        return false;
+    }
+    // AOWIS-CONFIG: Android has no meaningful HOME/XDG, so the root is the
+    // app's private configuration directory there; elsewhere the user's
+    // configuration directory (~/.config/aowis/gui-mobile), as for the GUI.
+    QString base = this->namespace_root;
+    if (base.isEmpty())
+    {
+#if defined(Q_OS_ANDROID)
+        const QString location = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+#else
+        const QString location = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+#endif
+        if (!location.isEmpty())
+            base = QDir(location).filePath(QStringLiteral("aowis"));
+    }
+    if (base.isEmpty() || !QDir::isAbsolutePath(base))
+    {
+        this->storage_problem = tr("WireGuard profiles cannot be stored: no private configuration directory is available.");
+        return false;
+    }
+    const aowis::config::Result<aowis::config::ConfigRoot> root = aowis::config::ConfigRoot::fromNamespaceRoot(
+        owner.value(), std::filesystem::path(QDir::cleanPath(base).toStdString()));
+    if (!root)
+    {
+        this->storage_problem = tr("WireGuard profiles cannot be stored: %1").arg(this->storageErrorText(root.error()));
+        return false;
+    }
+    aowis::config::Result<aowis::config::OwnerStore> opened = aowis::config::OwnerStore::open(root.value());
+    if (!opened)
+    {
+        this->storage_problem = tr("WireGuard profiles cannot be stored: %1").arg(this->storageErrorText(opened.error()));
+        return false;
+    }
+    aowis::config::Result<aowis::config::WireGuardProfiles> profiles = aowis::config::WireGuardProfiles::open(opened.value());
+    if (!profiles)
+    {
+        this->storage_problem = tr("WireGuard profiles cannot be stored: %1").arg(this->storageErrorText(profiles.error()));
+        return false;
+    }
+    this->store = std::make_unique<aowis::config::OwnerStore>(std::move(opened.value()));
+    this->profile_store = std::make_unique<aowis::config::WireGuardProfiles>(std::move(profiles.value()));
+    this->storage_problem.clear();
+    return true;
+}
+
+void WireGuardVpnSettings::reload()
+{
+    this->stored.clear();
+    if (!this->openStorage())
+        return;
+    const aowis::config::Result<aowis::config::WireGuardProfileListing> listing = this->profile_store->list();
+    if (!listing)
+    {
+        this->storage_problem = tr("WireGuard profiles cannot be read: %1").arg(this->storageErrorText(listing.error()));
+        return;
+    }
+    int unreadable = static_cast<int>(listing.value().unreadable.size());
+    for (const aowis::config::WireGuardProfileSummary &summary : listing.value().profiles)
+    {
+        const aowis::config::Result<aowis::config::WireGuardProfile> read = this->profile_store->read(summary.info.id);
+        if (!read)
+        {
+            ++unreadable;
+            continue;
+        }
+        Profile profile;
+        profile.id = QString::fromStdString(read.value().summary.info.id.value());
+        profile.revision = QString::fromStdString(read.value().summary.info.revision);
+        profile.name = QString::fromStdString(read.value().summary.name);
+        profile.description = QString::fromStdString(read.value().summary.description);
+        profile.text = QString::fromStdString(read.value().configuration);
+        this->stored.append(profile);
+    }
+    this->storage_problem = unreadable > 0
+        ? tr("%1 stored WireGuard profiles are damaged and cannot be read.").arg(unreadable)
+        : QString();
+}
+
+QString WireGuardVpnSettings::storageErrorText(const aowis::config::Error &error) const
+{
+    using Code = aowis::config::ErrorCode;
+    switch (error.code)
+    {
+    case Code::conflict: return tr("The profile was changed elsewhere; open it again and retry.");
+    case Code::not_found: return tr("Profile not found.");
+    case Code::invalid_wireguard_profile: return tr("The name or configuration cannot be stored (too long, line breaks in the name, or not UTF-8).");
+    case Code::profile_in_use: return tr("An AOWIS connection uses this profile; choose another profile there first.");
+    case Code::reference_unavailable: return tr("Could not check which connections use this profile.");
+    case Code::lock_timeout: return tr("The configuration storage is busy; try again.");
+    case Code::permission_denied:
+    case Code::unsafe_path: return tr("The configuration directory is not private to AOWIS.");
+    default: break;
+    }
+    // CONFIG messages are contextual labels without secrets.
+    return QString::fromStdString(error.message);
 }
 
 bool WireGuardVpnSettings::engineAvailable() const
@@ -242,66 +341,68 @@ bool WireGuardVpnSettings::validateProfile(const QString &name, const QString &t
     return true;
 }
 
-bool WireGuardVpnSettings::persist()
+namespace {
+
+// No AOWIS connection references a WireGuard profile yet: deletion is never
+// blocked. The map server connection will count its references here.
+aowis::config::Result<std::size_t> noReferences(const aowis::config::OwnerSession &, const aowis::config::ObjectId &)
 {
-    this->settings->remove(QStringLiteral("wireguard/profiles"));
-    this->settings->beginWriteArray(QStringLiteral("wireguard/profiles"), static_cast<int>(this->stored.size()));
-    for (int i = 0; i < this->stored.size(); ++i)
-    {
-        this->settings->setArrayIndex(i);
-        this->settings->setValue(QStringLiteral("id"), this->stored.at(i).id);
-        this->settings->setValue(QStringLiteral("name"), this->stored.at(i).name);
-        this->settings->setValue(QStringLiteral("conf"), this->stored.at(i).text);
-    }
-    this->settings->endArray();
-    this->settings->sync();
-    if (this->settings->status() != QSettings::NoError)
-    {
-        this->setError(tr("Could not save WireGuard profiles to local storage."));
-        return false;
-    }
-    return true;
+    return aowis::config::Result<std::size_t>::success(0);
 }
 
-QString WireGuardVpnSettings::addProfile(const QString &name, const QString &text)
+} // namespace
+
+QString WireGuardVpnSettings::addProfile(const QString &name, const QString &description, const QString &text)
 {
     if (!this->validateProfile(name, text, QString()))
         return QString();
-    Profile profile;
-    profile.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    profile.name = name.trimmed();
-    profile.text = text;
-    this->stored.append(profile);
-    if (!this->persist())
+    if (!this->openStorage())
     {
-        this->stored.removeLast();
+        this->setError(this->storage_problem);
         return QString();
     }
+    const aowis::config::WireGuardProfileInput input{
+        name.trimmed().toStdString(), description.trimmed().toStdString(), text.toStdString()};
+    const aowis::config::Result<aowis::config::WireGuardProfile> imported = this->profile_store->importText(input);
+    if (!imported)
+    {
+        this->setError(this->storageErrorText(imported.error()));
+        return QString();
+    }
+    const QString id = QString::fromStdString(imported.value().summary.info.id.value());
+    this->reload();
     this->setError(QString());
     emit profilesChanged();
-    return profile.id;
+    return id;
 }
 
-bool WireGuardVpnSettings::updateProfile(const QString &id, const QString &name, const QString &text)
+bool WireGuardVpnSettings::updateProfile(const QString &id, const QString &name,
+                                         const QString &description, const QString &text)
 {
     const int index = this->indexOf(id);
-    if (index < 0)
+    const aowis::config::Result<aowis::config::ObjectId> object_id = aowis::config::ObjectId::parse(id.toStdString());
+    if (index < 0 || !object_id || !this->profile_store)
     {
         this->setError(tr("Profile not found."));
         return false;
     }
     if (!this->validateProfile(name, text, id))
         return false;
-    const Profile previous = this->stored.at(index);
-    this->stored[index].name = name.trimmed();
-    this->stored[index].text = text;
-    if (!this->persist())
+    const bool text_changed = this->stored.at(index).text != text;
+    const aowis::config::WireGuardProfileInput input{
+        name.trimmed().toStdString(), description.trimmed().toStdString(), text.toStdString()};
+    const aowis::config::Result<aowis::config::WireGuardProfile> updated = this->profile_store->update(
+        object_id.value(), this->stored.at(index).revision.toStdString(), input);
+    if (!updated)
     {
-        this->stored[index] = previous;
+        this->setError(this->storageErrorText(updated.error()));
+        this->reload();
+        emit profilesChanged();
         return false;
     }
-    if (previous.text != text)
+    if (text_changed)
         this->discardTunnel(id);
+    this->reload();
     this->setError(QString());
     emit profilesChanged();
     return true;
@@ -310,19 +411,23 @@ bool WireGuardVpnSettings::updateProfile(const QString &id, const QString &name,
 bool WireGuardVpnSettings::removeProfile(const QString &id)
 {
     const int index = this->indexOf(id);
-    if (index < 0)
+    const aowis::config::Result<aowis::config::ObjectId> object_id = aowis::config::ObjectId::parse(id.toStdString());
+    if (index < 0 || !object_id || !this->profile_store)
     {
         this->setError(tr("Profile not found."));
         return false;
     }
-    const Profile previous = this->stored.at(index);
-    this->stored.removeAt(index);
-    if (!this->persist())
+    const aowis::config::Result<bool> erased = this->profile_store->erase(
+        object_id.value(), this->stored.at(index).revision.toStdString(), noReferences);
+    if (!erased)
     {
-        this->stored.insert(index, previous);
+        this->setError(this->storageErrorText(erased.error()));
+        this->reload();
+        emit profilesChanged();
         return false;
     }
     this->discardTunnel(id);
+    this->reload();
     this->setError(QString());
     emit profilesChanged();
     return true;
@@ -332,6 +437,12 @@ QString WireGuardVpnSettings::profileName(const QString &id) const
 {
     const int index = this->indexOf(id);
     return index < 0 ? QString() : this->stored.at(index).name;
+}
+
+QString WireGuardVpnSettings::profileDescription(const QString &id) const
+{
+    const int index = this->indexOf(id);
+    return index < 0 ? QString() : this->stored.at(index).description;
 }
 
 QString WireGuardVpnSettings::profileText(const QString &id) const

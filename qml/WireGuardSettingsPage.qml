@@ -109,6 +109,14 @@ Rectangle {
                     font.pixelSize: 19
                 }
                 Label {
+                    visible: wireguardVpnSettings.storageProblem !== ""
+                    Layout.fillWidth: true
+                    text: wireguardVpnSettings.storageProblem
+                    color: page.errorColor
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 13
+                }
+                Label {
                     visible: page.profileList.length === 0
                     Layout.fillWidth: true
                     text: qsTr("No profiles yet. Add one by pasting a WireGuard configuration or importing a .conf file.")
@@ -149,6 +157,16 @@ Rectangle {
                             }
                             Label {
                                 Layout.fillWidth: true
+                                visible: row.modelData.description !== ""
+                                text: row.modelData.description
+                                color: row.selected ? page.selectedTextColor : page.mutedColor
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                            }
+                            Label {
+                                Layout.fillWidth: true
                                 visible: row.modelData.endpoint !== undefined && row.modelData.endpoint !== ""
                                 // Host:port is technical text; keep it left-to-right.
                                 LayoutMirroring.enabled: false
@@ -178,7 +196,7 @@ Rectangle {
                     spacing: 8
                     PageButton {
                         text: qsTr("Add profile")
-                        onClicked: editor.openFor("", "", "")
+                        onClicked: editor.openFor("", "", "", "")
                     }
                     PageButton {
                         text: qsTr("Import .conf file…")
@@ -287,6 +305,7 @@ Rectangle {
                             text: qsTr("Edit")
                             onClicked: editor.openFor(page.selectedId,
                                                       wireguardVpnSettings.profileName(page.selectedId),
+                                                      wireguardVpnSettings.profileDescription(page.selectedId),
                                                       wireguardVpnSettings.profileText(page.selectedId))
                         }
                         PageButton {
@@ -315,7 +334,7 @@ Rectangle {
         onAccepted: {
             const text = wireguardVpnSettings.readConfFile(selectedFile)
             if (text !== "")
-                editor.openFor("", wireguardVpnSettings.suggestedName(selectedFile), text)
+                editor.openFor("", wireguardVpnSettings.suggestedName(selectedFile), "", text)
         }
     }
 
@@ -334,10 +353,11 @@ Rectangle {
         palette.windowText: page.textColor
         background: Rectangle { color: page.surfaceColor; radius: 12; border.color: page.borderColor }
 
-        function openFor(id, name, text) {
+        function openFor(id, name, description, text) {
             profileId = id
             saveError = ""
             profileName.text = name
+            profileDescription.text = description
             confText.text = text
             open()
         }
@@ -360,6 +380,23 @@ Rectangle {
                     radius: 9
                     color: page.inputColor
                     border.color: profileName.activeFocus ? page.accentColor : page.borderColor
+                }
+            }
+            TextField {
+                id: profileDescription
+                Layout.fillWidth: true
+                color: page.textColor
+                placeholderText: qsTr("Description (optional)")
+                placeholderTextColor: page.placeholderColor
+                selectionColor: page.selectedColor
+                selectedTextColor: page.selectedTextColor
+                selectByMouse: true
+                onTextEdited: editor.saveError = ""
+                background: Rectangle {
+                    implicitHeight: 44
+                    radius: 9
+                    color: page.inputColor
+                    border.color: profileDescription.activeFocus ? page.accentColor : page.borderColor
                 }
             }
             Label {
@@ -448,13 +485,14 @@ Rectangle {
                     enabled: profileName.text.trim().length > 0 && editor.checked.ok
                     onClicked: {
                         if (editor.profileId === "") {
-                            const id = wireguardVpnSettings.addProfile(profileName.text, confText.text)
+                            const id = wireguardVpnSettings.addProfile(profileName.text, profileDescription.text, confText.text)
                             if (id === "") {
                                 editor.saveError = wireguardVpnSettings.error
                                 return
                             }
                             page.selectedId = id
-                        } else if (!wireguardVpnSettings.updateProfile(editor.profileId, profileName.text, confText.text)) {
+                        } else if (!wireguardVpnSettings.updateProfile(editor.profileId, profileName.text,
+                                                                     profileDescription.text, confText.text)) {
                             editor.saveError = wireguardVpnSettings.error
                             return
                         }

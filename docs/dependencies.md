@@ -9,6 +9,7 @@ relative and independent of the checkout directory name.
 | `external/AOWIS-GUI-Render` | `https://github.com/aowis-org/AOWIS-GUI-Render.git` | The AOWIS map (2D/globe, imagery, terrain, HUD, map server client) and its nested pinned bgfx/bx/bimg |
 | `external/GeographicLib` | `https://github.com/geographiclib/geographiclib.git` | Render's geodesy; built by Render from this checkout (`AOWIS_RENDER_GEOGRAPHICLIB_SOURCE_DIR`) |
 | `external/AOWIS-SERVER-DVMDB` | `https://github.com/aowis-org/AOWIS-SERVER-DVMDB.git` | Pinned source dependency for future native personal repository; not compiled, linked or started yet |
+| `external/AOWIS-CONFIG` | `https://github.com/aowis-org/AOWIS-CONFIG.git` | `aowis::config`: configuration storage (owner root `gui-mobile`), currently the WireGuard profiles |
 | `external/AOWIS-NETWORK` | `https://github.com/aowis-org/AOWIS-NETWORK.git` | `AOWIS::Network` / `AOWIS::NetworkQt`: embedded userspace WireGuard engine (Go) behind a loopback SOCKS5 proxy |
 
 The GeographicLib path and URL match those used in Desktop AOWIS-GUI. Git
@@ -28,7 +29,8 @@ and does not update existing pins. The existing MODEL registration remains
 `./tools/init_model.sh` (once if its gitlink does not exist); NETWORK is
 registered once with `./tools/init_network.sh`, initialized with
 `./git_submodule_init.sh --network` and advanced deliberately with
-`./git_submodule_update.sh --network` (also part of `--all`).
+`./git_submodule_update.sh --network` (also part of `--all`); CONFIG the same
+way with `./tools/init_config.sh` and `--config`.
 
 After the gitlinks are committed, future clones use:
 
@@ -51,7 +53,7 @@ resolve that nested URL explicitly when the embedded DVMDB build is needed.
 
 ## Build boundary
 
-Mobile builds its Qt Quick app with `AOWIS::Model`, Render's map stack,
+Mobile builds its Qt Quick app with `AOWIS::Model`, `aowis::config`, Render's map stack,
 GeographicLib (through Render) and AOWIS-NETWORK's WireGuard engine
 (`AOWIS_MOBILE_WITH_WIREGUARD`, default ON). The engine is Go code: Linux
 builds compile it with the host Go during the CMake build; the Android

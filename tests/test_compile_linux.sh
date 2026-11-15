@@ -63,6 +63,17 @@ touch "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
       "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
 printf 'PASS: MODEL is required for baseline and bgfx builds\n'
 
+# Configuration storage (CONFIG submodule) is part of every build.
+: > "$AOWIS_LINUX_TEST_LOG"
+if "$TMP_DIR/repo/compile_linux.sh" --baseline --build-only > "$TMP_DIR/error.log" 2>&1; then
+    echo 'Expected failure for missing CONFIG submodule' >&2; exit 1
+fi
+grep -F 'tools/init_config.sh' "$TMP_DIR/error.log" >/dev/null
+[[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
+mkdir -p "$TMP_DIR/repo/external/AOWIS-CONFIG"
+touch "$TMP_DIR/repo/external/AOWIS-CONFIG/CMakeLists.txt"
+printf 'PASS: CONFIG is required for baseline and bgfx builds\n'
+
 # The embedded WireGuard engine (NETWORK submodule) is part of every build.
 : > "$AOWIS_LINUX_TEST_LOG"
 if "$TMP_DIR/repo/compile_linux.sh" --baseline --build-only > "$TMP_DIR/error.log" 2>&1; then

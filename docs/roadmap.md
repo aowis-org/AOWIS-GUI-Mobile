@@ -45,7 +45,8 @@ no Android `VpnService`, no system VPN, nothing else on the phone is routed.
    packaged into the APK; Linux builds it with the host Go.
 2. **Settings → WireGuard VPN (source done, build/device check pending):**
    profile list, import (`.conf` file or pasted text) with live
-   diagnostics, edit, delete, status with Start/Stop, translated. See
+   diagnostics, edit, delete, status with Start/Stop, translated; stored
+   with AOWIS-CONFIG (owner `gui-mobile`). See
    [WireGuard VPN](wireguard-vpn.md).
 3. **Map server through a profile:** the map server setting selects an
    optional WireGuard profile; tiles and terrain then use only that tunnel

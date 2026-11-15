@@ -8,8 +8,8 @@ system VPN icon, and nothing else on the phone is routed through a tunnel.
 
 ## Profiles
 
-- **Add profile** opens the editor: a name and the configuration text
-  (wg-quick `.conf`, pasted). **Import .conf file…** opens the system file
+- **Add profile** opens the editor: a name, an optional description and the
+  configuration text (wg-quick `.conf`, pasted). **Import .conf file…** opens the system file
   picker and puts the file into the same editor for review before saving.
 - The editor checks the text live with AOWIS-NETWORK's parser, the same one
   the desktop GUI and the engine use: errors and warnings are shown with
@@ -18,10 +18,19 @@ system VPN icon, and nothing else on the phone is routed through a tunnel.
   (PublicKey, PresharedKey, Endpoint, AllowedIPs, PersistentKeepalive).
   `PostUp`/`PreDown` and similar hooks are ignored with a warning and never
   run.
-- Profiles are stored verbatim in the app's private settings
-  (`wireguard/profiles` in `AOWIS-GUI-Mobile` QSettings; on Android inside
-  the app's data directory). **The private key is stored unencrypted there**,
-  as on the desktop; Android Keystore encryption is not implemented yet.
+- Profiles are stored with **AOWIS-CONFIG** (`WireGuardProfiles`, collection
+  `wireguard`) in the owner root `gui-mobile`, like the desktop GUI's `gui`
+  root: on Android below the app's private configuration directory
+  (`QStandardPaths::AppConfigLocation`/aowis/gui-mobile, as CONFIG requires
+  there), on desktop Linux `~/.config/aowis/gui-mobile`. CONFIG keeps the
+  exact text plus name and description, revision-checks every update and
+  delete (a change from elsewhere is a conflict, never overwritten), and
+  reports damaged records instead of failing the whole list. **The private
+  key is stored unencrypted there**, as on the desktop; Android Keystore
+  encryption is not implemented yet.
+- Deletion goes through CONFIG's reference guard. No connection references a
+  profile yet; the map server connection will, and then blocks deleting the
+  profile it uses.
 - Saving a changed configuration stops that profile's running tunnel.
   Deleting a profile stops its tunnel and removes its keys from the device.
 

@@ -9,7 +9,7 @@ trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx" \
     "$work/repo/external/GeographicLib" \
     "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units" \
-    "$work/repo/external/AOWIS-NETWORK/tools" "$work/bin" "$work/cache"
+    "$work/repo/external/AOWIS-NETWORK/tools" "$work/repo/external/AOWIS-CONFIG" "$work/bin" "$work/cache"
 cp "$root/compile_android.sh" "$root/prepare_android_docker.sh" "$work/repo/"
 cp "$root/tools/qt-android/"*.sh "$work/repo/tools/qt-android/"
 cp "$root/tools/launch_android_app.sh" "$work/repo/tools/"
@@ -19,6 +19,7 @@ touch "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx/bgfx.h" \
     "$work/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
     "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h" \
     "$work/repo/external/AOWIS-NETWORK/CMakeLists.txt" \
+    "$work/repo/external/AOWIS-CONFIG/CMakeLists.txt" \
     "$work/repo/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh"
 cat > "$work/bin/docker" <<'MOCK_DOCKER'
 #!/usr/bin/env bash
@@ -236,6 +237,14 @@ rm -f "$model_header"
 if ./compile_android.sh --build-only --baseline > "$work/output.log" 2>&1; then fail 'missing MODEL accepted'; fi
 assert_not_log 'docker run '
 touch "$model_header"
+
+# CONFIG (configuration storage) must be initialized before Docker runs.
+rm -f "$work/repo/external/AOWIS-CONFIG/CMakeLists.txt"
+: > "$MOCK_LOG"
+if ./compile_android.sh --build-only --baseline > "$work/output.log" 2>&1; then fail 'missing CONFIG accepted'; fi
+grep -Fq 'tools/init_config.sh' "$work/output.log" || fail 'missing CONFIG diagnostics'
+assert_not_log 'docker run '
+touch "$work/repo/external/AOWIS-CONFIG/CMakeLists.txt"
 
 # NETWORK (embedded WireGuard engine) must be initialized before Docker runs.
 network_script="$work/repo/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh"

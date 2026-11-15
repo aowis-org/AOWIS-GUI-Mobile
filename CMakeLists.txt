@@ -88,6 +88,22 @@ add_subdirectory("${AOWIS_MODEL_SOURCE_DIR}"
     "${CMAKE_BINARY_DIR}/aowis-model" EXCLUDE_FROM_ALL)
 target_link_libraries(aowis-mobile PRIVATE AOWIS::Model)
 
+# Configuration storage (AOWIS-CONFIG), owner root "gui-mobile": native POSIX
+# files (Android: the app's private configuration directory). Its own tests
+# are built only in its repository (AOWIS_CONFIG_BUILD_TESTS defaults to
+# top-level only).
+set(AOWIS_CONFIG_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-CONFIG")
+if(NOT EXISTS "${AOWIS_CONFIG_SOURCE_DIR}/CMakeLists.txt" OR
+   NOT EXISTS "${AOWIS_CONFIG_SOURCE_DIR}/include/aowis/config/wireguard_profiles.h")
+    message(FATAL_ERROR
+        "AOWIS-CONFIG submodule is missing. Run ./tools/init_config.sh once, or "
+        "./git_submodule_init.sh --config if the gitlink is already registered.")
+endif()
+if(NOT TARGET aowis::config)
+    add_subdirectory("${AOWIS_CONFIG_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-config" EXCLUDE_FROM_ALL)
+endif()
+target_link_libraries(aowis-mobile PRIVATE aowis::config)
+
 # Embedded userspace WireGuard (wireguard-go + gVisor netstack behind a
 # loopback SOCKS5 proxy): no OS VPN, no VpnService, no root. Desktop builds
 # compile the Go engine here (needs Go); the Android build passes the engine
@@ -387,7 +403,7 @@ if(BUILD_TESTING)
         add_executable(aowis-mobile-wireguard-settings-tests
             tests/wireguard_vpn_settings_tests.cpp src/wireguard_vpn_settings.cpp src/wireguard_vpn_settings.h)
         target_include_directories(aowis-mobile-wireguard-settings-tests PRIVATE src)
-        target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core AOWIS::Network)
+        target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core AOWIS::Network aowis::config)
         target_compile_definitions(aowis-mobile-wireguard-settings-tests PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=1)
         add_test(NAME aowis-mobile-wireguard-settings COMMAND aowis-mobile-wireguard-settings-tests)
     endif()

@@ -29,6 +29,7 @@ render_upstream="$tmp_dir/render upstream"
 vendor_upstream="$tmp_dir/bgfx vendor"
 model_upstream="$tmp_dir/model upstream"
 network_upstream="$tmp_dir/network upstream"
+config_upstream="$tmp_dir/config upstream"
 mobile_upstream="$tmp_dir/mobile upstream"
 mobile_checkout="$tmp_dir/mobile checkout with spaces"
 selective_checkout="$tmp_dir/selective checkout"
@@ -50,11 +51,16 @@ git_init "$network_upstream"
 printf 'NETWORK initial\n' > "$network_upstream/network.txt"
 git_commit "$network_upstream" 'NETWORK initial'
 
+git_init "$config_upstream"
+printf 'CONFIG initial\n' > "$config_upstream/config.txt"
+git_commit "$config_upstream" 'CONFIG initial'
+
 git_init "$mobile_upstream"
 cp "$source_dir/git_submodule_init.sh" "$source_dir/git_submodule_update.sh" "$mobile_upstream/"
 git -C "$mobile_upstream" submodule add -q "$render_upstream" external/AOWIS-GUI-Render
 git -C "$mobile_upstream" submodule add -q "$model_upstream" external/AOWIS-SERVER-MODEL
 git -C "$mobile_upstream" submodule add -q "$network_upstream" external/AOWIS-NETWORK
+git -C "$mobile_upstream" submodule add -q "$config_upstream" external/AOWIS-CONFIG
 git_commit "$mobile_upstream" 'Mobile pinned submodules'
 
 git clone -q "$mobile_upstream" "$mobile_checkout"
@@ -87,12 +93,16 @@ new_model="$(git -C "$model_upstream" rev-parse HEAD)"
 printf 'NETWORK newer\n' >> "$network_upstream/network.txt"
 git_commit "$network_upstream" 'NETWORK newer'
 new_network="$(git -C "$network_upstream" rev-parse HEAD)"
+printf 'CONFIG newer\n' >> "$config_upstream/config.txt"
+git_commit "$config_upstream" 'CONFIG newer'
+new_config="$(git -C "$config_upstream" rev-parse HEAD)"
 "$mobile_checkout/git_submodule_update.sh" --all >/dev/null
 [[ "$(git -C "$mobile_checkout/external/AOWIS-GUI-Render" rev-parse HEAD)" == "$new_render" ]]
 [[ "$(git -C "$mobile_checkout/external/AOWIS-SERVER-MODEL" rev-parse HEAD)" == "$new_model" ]]
 [[ "$(git -C "$mobile_checkout/external/AOWIS-NETWORK" rev-parse HEAD)" == "$new_network" ]]
+[[ "$(git -C "$mobile_checkout/external/AOWIS-CONFIG" rev-parse HEAD)" == "$new_config" ]]
 [[ "$(git -C "$mobile_checkout/external/AOWIS-GUI-Render/external/bgfx" rev-parse HEAD)" == "$initial_bgfx" ]]
-printf 'PASS: --render restores pinned Render and --all advances Render, MODEL and NETWORK only\n'
+printf 'PASS: --render restores pinned Render and --all advances Render, MODEL, NETWORK and CONFIG only\n'
 
 # Selective init should not initialize the other direct submodule.
 git clone -q "$mobile_upstream" "$selective_checkout"
@@ -109,6 +119,11 @@ pinned_network="$(git -C "$selective_checkout" ls-files --stage -- external/AOWI
 "$selective_checkout/git_submodule_update.sh" --network >/dev/null
 [[ "$(git -C "$selective_checkout/external/AOWIS-NETWORK" rev-parse HEAD)" == "$new_network" ]]
 [[ "$(git -C "$selective_checkout/external/AOWIS-GUI-Render" rev-parse HEAD)" == "$initial_render" ]]
+[[ ! -f "$selective_checkout/external/AOWIS-CONFIG/config.txt" ]]
+"$selective_checkout/git_submodule_init.sh" --config >/dev/null
+[[ -f "$selective_checkout/external/AOWIS-CONFIG/config.txt" ]]
+"$selective_checkout/git_submodule_update.sh" --config >/dev/null
+[[ "$(git -C "$selective_checkout/external/AOWIS-CONFIG" rev-parse HEAD)" == "$new_config" ]]
 if "$selective_checkout/git_submodule_init.sh" --bgfx >/dev/null 2>&1; then
     printf 'FAIL: the removed bgfx.cmake option is still accepted\n' >&2
     exit 1

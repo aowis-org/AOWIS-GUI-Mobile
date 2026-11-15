@@ -10,18 +10,19 @@ cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --network | --all | --help]
+Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --network | --config | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
   --render     Same as the default; leave MODEL untouched.
   --model      Advance only AOWIS-SERVER-MODEL to its tracked remote branch.
   --dvmdb      Deliberately advance only the DVMDB gitlink, without nested modules.
   --network    Advance only AOWIS-NETWORK to its tracked remote branch.
-  --all        Advance Render, MODEL and NETWORK. Render's nested third-party
+  --config     Advance only AOWIS-CONFIG to its tracked remote branch.
+  --all        Advance Render, MODEL, NETWORK and CONFIG. Render's nested third-party
                submodules stay at the commits that Render revision records.
   --help       Show this help.
 
-Review and commit any changed Render/MODEL/DVMDB/NETWORK gitlinks explicitly.
+Review and commit any changed Render/MODEL/DVMDB/NETWORK/CONFIG gitlinks explicitly.
 GeographicLib always stays pinned; choose a tested release before changing it.
 bgfx is pinned by Render (the GUI pins the same revisions).
 HELP
@@ -38,6 +39,7 @@ die() {
 update_model=false
 update_dvmdb=false
 update_network=false
+update_config=false
 update_render=true
 case "${1:-}" in
     '')
@@ -61,10 +63,16 @@ case "${1:-}" in
         update_render=false
         update_network=true
         ;;
+    --config)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        update_render=false
+        update_config=true
+        ;;
     --all)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         update_model=true
         update_network=true
+        update_config=true
         ;;
     --help|-h)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -115,4 +123,13 @@ if "$update_network"; then
     git submodule update --init --remote --checkout -- "$network_path"
     printf 'Updated %s to %s. Review and commit the gitlink.\n' \
         "$network_path" "$(git -C "$network_path" rev-parse --short HEAD)"
+fi
+
+if "$update_config"; then
+    config_path='external/AOWIS-CONFIG'
+    [[ "$(git ls-files --stage -- "$config_path")" == '160000 '* ]] ||
+        die 'CONFIG gitlink missing. Run ./tools/init_config.sh once.'
+    git submodule update --init --remote --checkout -- "$config_path"
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$config_path" "$(git -C "$config_path" rev-parse --short HEAD)"
 fi
