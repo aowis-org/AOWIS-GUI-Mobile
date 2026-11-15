@@ -28,6 +28,7 @@ docker build --network="$network" --pull \
     --build-arg "ANDROID_NDK_VERSION=$AOWIS_ANDROID_NDK_VERSION" \
     --build-arg "CMDLINE_TOOLS_ID=$AOWIS_ANDROID_CMDLINE_TOOLS_ID" \
     --build-arg "CMDLINE_TOOLS_SHA256=$AOWIS_ANDROID_CMDLINE_TOOLS_SHA256" \
+    --build-arg "AOWIS_GO_VERSION=$AOWIS_ANDROID_GO_VERSION" \
     -f "$project_dir/tools/qt-android/Dockerfile" \
     -t "$AOWIS_ANDROID_IMAGE" \
     "$project_dir/tools/qt-android"

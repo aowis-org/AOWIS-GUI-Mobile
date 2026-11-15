@@ -10,17 +10,18 @@ cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --all | --help]
+Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --network | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
   --render     Same as the default; leave MODEL untouched.
   --model      Advance only AOWIS-SERVER-MODEL to its tracked remote branch.
   --dvmdb      Deliberately advance only the DVMDB gitlink, without nested modules.
-  --all        Advance Render and MODEL. Render's nested third-party
+  --network    Advance only AOWIS-NETWORK to its tracked remote branch.
+  --all        Advance Render, MODEL and NETWORK. Render's nested third-party
                submodules stay at the commits that Render revision records.
   --help       Show this help.
 
-Review and commit any changed Render/MODEL/DVMDB gitlinks explicitly.
+Review and commit any changed Render/MODEL/DVMDB/NETWORK gitlinks explicitly.
 GeographicLib always stays pinned; choose a tested release before changing it.
 bgfx is pinned by Render (the GUI pins the same revisions).
 HELP
@@ -36,6 +37,7 @@ die() {
 
 update_model=false
 update_dvmdb=false
+update_network=false
 update_render=true
 case "${1:-}" in
     '')
@@ -54,9 +56,15 @@ case "${1:-}" in
         update_render=false
         update_dvmdb=true
         ;;
+    --network)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        update_render=false
+        update_network=true
+        ;;
     --all)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         update_model=true
+        update_network=true
         ;;
     --help|-h)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -98,4 +106,13 @@ if "$update_dvmdb"; then
     git submodule update --init --remote --checkout -- "$dvmdb_path"
     printf 'Updated %s to %s. Review and commit the gitlink.\n' \
         "$dvmdb_path" "$(git -C "$dvmdb_path" rev-parse --short HEAD)"
+fi
+
+if "$update_network"; then
+    network_path='external/AOWIS-NETWORK'
+    [[ "$(git ls-files --stage -- "$network_path")" == '160000 '* ]] ||
+        die 'NETWORK gitlink missing. Run ./tools/init_network.sh once.'
+    git submodule update --init --remote --checkout -- "$network_path"
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$network_path" "$(git -C "$network_path" rev-parse --short HEAD)"
 fi

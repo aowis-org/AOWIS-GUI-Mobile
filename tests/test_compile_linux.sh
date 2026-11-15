@@ -27,7 +27,11 @@ cat > "$TMP_DIR/mockbin/ctest" <<'STUB'
 #!/usr/bin/env bash
 printf 'ctest %s\n' "$*" >> "$AOWIS_LINUX_TEST_LOG"
 STUB
-chmod +x "$TMP_DIR/mockbin/cmake" "$TMP_DIR/mockbin/ctest"
+cat > "$TMP_DIR/mockbin/go" <<'STUB'
+#!/usr/bin/env bash
+printf 'go %s\n' "$*" >> "$AOWIS_LINUX_TEST_LOG"
+STUB
+chmod +x "$TMP_DIR/mockbin/cmake" "$TMP_DIR/mockbin/ctest" "$TMP_DIR/mockbin/go"
 export PATH="$TMP_DIR/mockbin:$PATH"
 export AOWIS_LINUX_TEST_LOG="$TMP_DIR/build.log"
 export AOWIS_LINUX_JOBS=3
@@ -58,6 +62,17 @@ mkdir -p "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units"
 touch "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
       "$TMP_DIR/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
 printf 'PASS: MODEL is required for baseline and bgfx builds\n'
+
+# The embedded WireGuard engine (NETWORK submodule) is part of every build.
+: > "$AOWIS_LINUX_TEST_LOG"
+if "$TMP_DIR/repo/compile_linux.sh" --baseline --build-only > "$TMP_DIR/error.log" 2>&1; then
+    echo 'Expected failure for missing NETWORK submodule' >&2; exit 1
+fi
+grep -F 'tools/init_network.sh' "$TMP_DIR/error.log" >/dev/null
+[[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
+mkdir -p "$TMP_DIR/repo/external/AOWIS-NETWORK"
+touch "$TMP_DIR/repo/external/AOWIS-NETWORK/CMakeLists.txt"
+printf 'PASS: NETWORK is required for baseline and bgfx builds\n'
 
 # Baseline must work without any bgfx sources.
 : > "$AOWIS_LINUX_TEST_LOG"
@@ -101,8 +116,8 @@ printf 'PASS: targeted optimized map build and launch\n'
 AOWIS_BUILD_TYPE=Debug "$TMP_DIR/repo/compile_linux.sh" --build-only --tests
 assert_contains '-DCMAKE_BUILD_TYPE=Debug'
 assert_contains '-DBUILD_TESTING=ON'
-assert_contains '--target aowis-mobile-map-math-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel 3'
-assert_contains '^aowis-mobile-(map-math|lifecycle|map-server-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|gradienter-math|plumb-bob-math|flashlight)$'
+assert_contains '--target aowis-mobile-map-math-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-look-around-engine-tests aowis-mobile-look-around-field-tests aowis-mobile-look-around-vision-tests aowis-mobile-look-around-direct-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel 3'
+assert_contains '^aowis-mobile-(map-math|lifecycle|map-server-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|look-around-engine|look-around-field|look-around-vision|look-around-direct|gradienter-math|plumb-bob-math|flashlight)$'
 assert_contains 'ctest --test-dir '
 assert_not_contains 'run '
 printf 'PASS: optional map-math, settings and lifecycle tests and build type override\n'

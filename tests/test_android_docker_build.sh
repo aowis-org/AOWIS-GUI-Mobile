@@ -8,7 +8,8 @@ work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/repo/tools/qt-android" "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx" \
     "$work/repo/external/GeographicLib" \
-    "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units" "$work/bin" "$work/cache"
+    "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units" \
+    "$work/repo/external/AOWIS-NETWORK/tools" "$work/bin" "$work/cache"
 cp "$root/compile_android.sh" "$root/prepare_android_docker.sh" "$work/repo/"
 cp "$root/tools/qt-android/"*.sh "$work/repo/tools/qt-android/"
 cp "$root/tools/launch_android_app.sh" "$work/repo/tools/"
@@ -16,7 +17,9 @@ touch "$work/repo/external/AOWIS-GUI-Render/external/bgfx/include/bgfx/bgfx.h" \
     "$work/repo/external/GeographicLib/CMakeLists.txt" \
     "$work/repo/external/AOWIS-GUI-Render/CMakeLists.txt" \
     "$work/repo/external/AOWIS-SERVER-MODEL/CMakeLists.txt" \
-    "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h"
+    "$work/repo/external/AOWIS-SERVER-MODEL/include/aowis/model/units/unit_profile.h" \
+    "$work/repo/external/AOWIS-NETWORK/CMakeLists.txt" \
+    "$work/repo/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh"
 cat > "$work/bin/docker" <<'MOCK_DOCKER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -119,6 +122,11 @@ assert_not_log 'adb -s '
 assert_log "$work/data/aowis-gui-mobile/android-debug-signing:/tmp/.android"
 assert_log '-e ANDROID_USER_HOME=/tmp/.android'
 assert_log '-e AOWIS_ANDROID_BUILD_TOOLS_VERSION=36.0.0'
+# The WireGuard engine's Go caches persist outside the repository.
+assert_log "$work/cache/aowis-mobile/go:/go-cache"
+assert_log '-e GOMODCACHE=/go-cache/mod -e GOCACHE=/go-cache/build'
+assert_log '-e AOWIS_ANDROID_ENGINE_API=28'
+assert_log '--build-arg AOWIS_GO_VERSION=1.27.3'
 
 # Cached image, explicit build-only, with device: must not deploy.
 export FAKE_IMAGE_EXISTS=1 FAKE_DEVICE_COUNT=1
@@ -229,6 +237,15 @@ if ./compile_android.sh --build-only --baseline > "$work/output.log" 2>&1; then 
 assert_not_log 'docker run '
 touch "$model_header"
 
+# NETWORK (embedded WireGuard engine) must be initialized before Docker runs.
+network_script="$work/repo/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh"
+rm -f "$network_script"
+: > "$MOCK_LOG"
+if ./compile_android.sh --build-only --baseline > "$work/output.log" 2>&1; then fail 'missing NETWORK accepted'; fi
+grep -Fq 'tools/init_network.sh' "$work/output.log" || fail 'missing NETWORK diagnostics'
+assert_not_log 'docker run '
+touch "$network_script"
+
 # Never regenerate a previously provisioned but missing keystore. This check
 # must fail on the host BEFORE starting a disposable Docker container.
 signing_dir="$work/data/aowis-gui-mobile/android-debug-signing"
@@ -274,6 +291,13 @@ grep -Fq 'QT_ANDROID_APP_NAME "AOWIS"' "$root/CMakeLists.txt" || fail 'Android l
 grep -Fq 'QT_ANDROID_PACKAGE_NAME "org.aowis.mobile"' "$root/CMakeLists.txt" || fail 'Android package identity changed'
 grep -Fq 'qt_policy(SET QTP0002 NEW)' "$root/CMakeLists.txt" || fail 'Qt Android QTP0002 policy warning not addressed'
 grep -Fq 'export LC_ALL=C.UTF-8' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'Qt host tools do not run in UTF-8 locale'
+# Embedded WireGuard engine: Go in the image, NDK cross-build as a 16 KiB
+# aligned shared library, passed to CMake and packaged into the APK.
+grep -Fq 'https://dl.google.com/go/$archive.sha256' "$root/tools/qt-android/Dockerfile" || fail 'Go archive is not checksum-verified'
+grep -Fq 'GOOS=android GOARCH=arm64 CC="$engine_cc"' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'engine not cross-built for android/arm64'
+grep -Fq -- '-DAOWIS_NETWORK_WIREGUARD_ARCHIVE="$engine_library"' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'engine not passed to CMake'
+grep -Fq 'not 16 KiB aligned' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'engine page alignment not verified'
+grep -Fq 'QT_ANDROID_EXTRA_LIBS "${AOWIS_NETWORK_WIREGUARD_ARCHIVE}"' "$root/CMakeLists.txt" || fail 'engine not packaged into the APK'
 
 grep -Fq 'keytool -genkeypair -noprompt' "$root/tools/qt-android/prepare_debug_signing.sh" || fail 'persistent debug certificate creation missing'
 grep -Fq 'APK signature DOES NOT match' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'APK certificate comparison missing'

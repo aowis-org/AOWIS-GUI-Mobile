@@ -23,6 +23,7 @@ Requires CMake, Ninja, and host Qt 6 (Core, Gui, Qml, Quick, QuickControls2, Pos
 On Arch: sudo pacman -S --needed cmake ninja qt6-base qt6-declarative qt6-positioning qt6-sensors
 For the map (AOWIS-GUI-Render with its pinned bgfx) and GeographicLib: ./git_submodule_init.sh.
 For MODEL registration (once): ./tools/init_model.sh.
+For the embedded WireGuard engine: ./tools/init_network.sh (once) and Go (Arch: go).
 HELP
 }
 
@@ -59,6 +60,15 @@ if [[ ! -f "$PROJECT_DIR/external/AOWIS-SERVER-MODEL/CMakeLists.txt" ||
     printf 'AOWIS Mobile Linux: MODEL submodule missing. Run ./tools/init_model.sh once.\n' >&2
     exit 1
 fi
+
+if [[ ! -f "$PROJECT_DIR/external/AOWIS-NETWORK/CMakeLists.txt" ]]; then
+    printf 'AOWIS Mobile Linux: NETWORK submodule missing. Run ./tools/init_network.sh once.\n' >&2
+    exit 1
+fi
+command -v go >/dev/null 2>&1 || {
+    printf 'AOWIS Mobile Linux: Go is required for the embedded WireGuard engine (Arch: sudo pacman -S go).\n' >&2
+    exit 1
+}
 
 BUILD_DIR="$PROJECT_DIR/build-linux-bgfx"
 BGFX=ON

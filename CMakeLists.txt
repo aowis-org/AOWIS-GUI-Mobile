@@ -17,6 +17,7 @@ endif()
 qt_standard_project_setup(REQUIRES 6.5)
 
 option(AOWIS_MOBILE_WITH_BGFX "Build the AOWIS map (bgfx in Qt Quick); OFF: QML-only baseline" ON)
+option(AOWIS_MOBILE_WITH_WIREGUARD "Embed the userspace WireGuard engine (AOWIS-NETWORK)" ON)
 
 # Keep application artwork shared across build targets; platform-specific
 # launcher/file icons are derived from assets/icons/aowis-source.png.
@@ -84,6 +85,48 @@ endif()
 add_subdirectory("${AOWIS_MODEL_SOURCE_DIR}"
     "${CMAKE_BINARY_DIR}/aowis-model" EXCLUDE_FROM_ALL)
 target_link_libraries(aowis-mobile PRIVATE AOWIS::Model)
+
+# Embedded userspace WireGuard (wireguard-go + gVisor netstack behind a
+# loopback SOCKS5 proxy): no OS VPN, no VpnService, no root. Desktop builds
+# compile the Go engine here (needs Go); the Android build passes the engine
+# prebuilt for the NDK as a shared library (AOWIS_NETWORK_WIREGUARD_ARCHIVE,
+# see tools/qt-android/build_android_inside_container.sh), packaged into the
+# APK next to the app.
+if(AOWIS_MOBILE_WITH_WIREGUARD)
+    set(AOWIS_NETWORK_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-NETWORK")
+    if(NOT EXISTS "${AOWIS_NETWORK_SOURCE_DIR}/CMakeLists.txt" OR
+       NOT EXISTS "${AOWIS_NETWORK_SOURCE_DIR}/include/aowis/network/wireguard_client.h")
+        message(FATAL_ERROR
+            "AOWIS-NETWORK submodule is missing. Run ./tools/init_network.sh once, or "
+            "./git_submodule_init.sh --network if the gitlink is already registered "
+            "(or configure with -DAOWIS_MOBILE_WITH_WIREGUARD=OFF).")
+    endif()
+    if(ANDROID AND NOT AOWIS_NETWORK_WIREGUARD_ARCHIVE)
+        message(FATAL_ERROR "Android needs the prebuilt WireGuard engine: build with "
+            "./compile_android.sh, or pass -DAOWIS_NETWORK_WIREGUARD_ARCHIVE=<libaowis_wireguard.so>.")
+    endif()
+    set(AOWIS_NETWORK_WITH_WIREGUARD ON CACHE BOOL "" FORCE)
+    set(AOWIS_NETWORK_WITH_QT ON CACHE STRING "" FORCE)
+    # NETWORK's own tests (Go e2e, Qt e2e) run in its repository, not here;
+    # the function scope keeps BUILD_TESTING OFF local to it.
+    function(aowis_mobile_add_network)
+        set(BUILD_TESTING OFF)
+        add_subdirectory("${AOWIS_NETWORK_SOURCE_DIR}"
+            "${CMAKE_BINARY_DIR}/aowis-network" EXCLUDE_FROM_ALL)
+    endfunction()
+    aowis_mobile_add_network()
+    if(NOT TARGET AOWIS::NetworkQt)
+        message(FATAL_ERROR "AOWIS-NETWORK's Qt adapter (AOWIS::NetworkQt) was not built.")
+    endif()
+    target_link_libraries(aowis-mobile PRIVATE AOWIS::Network AOWIS::NetworkQt)
+    target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=1)
+    if(ANDROID)
+        set_property(TARGET aowis-mobile APPEND PROPERTY
+            QT_ANDROID_EXTRA_LIBS "${AOWIS_NETWORK_WIREGUARD_ARCHIVE}")
+    endif()
+else()
+    target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=0)
+endif()
 
 # Package the editable UTF-8 translation catalog directly. This does not
 # require Qt LinguistTools in the cross-compilation toolchain.

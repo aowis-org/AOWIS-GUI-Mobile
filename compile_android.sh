@@ -222,6 +222,9 @@ if [[ "$bgfx" == ON ]]; then
     renderer_host="$(realpath -- "$renderer_host")"
     renderer_mount=(-v "$renderer_host:/aowis-render:ro")
 fi
+[[ -f "$project_dir/external/AOWIS-NETWORK/CMakeLists.txt" &&
+   -f "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" ]] ||
+    die 'AOWIS-NETWORK missing: run ./tools/init_network.sh once (or ./git_submodule_init.sh --network).'
 jobs="${AOWIS_ANDROID_JOBS:-8}"
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || die 'AOWIS_ANDROID_JOBS must be a positive integer.'
 
@@ -234,6 +237,8 @@ if ! docker image inspect "$AOWIS_ANDROID_IMAGE" >/dev/null 2>&1; then
 fi
 
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/aowis-mobile/gradle"
+# Go modules and build cache of the WireGuard engine: downloaded once.
+go_cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/aowis-mobile/go"
 # Android's debug APK is signed by Gradle with debug.keystore. A disposable
 # Docker HOME must never produce a new signing identity on every build.
 # Persist that keystore OUTSIDE the repository/build tree so cleans, renames,
@@ -242,7 +247,7 @@ data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
 signing_dir="${AOWIS_ANDROID_DEBUG_SIGNING_DIR:-$data_home/aowis-gui-mobile/android-debug-signing}"
 [[ "$signing_dir" == /* ]] || die 'AOWIS_ANDROID_DEBUG_SIGNING_DIR must be an absolute path.'
 umask 077
-mkdir -p -- "$cache_root" "$signing_dir"
+mkdir -p -- "$cache_root" "$go_cache_root" "$signing_dir"
 chmod 700 -- "$signing_dir"
 if [[ -e "$signing_dir/.aowis-debug-keystore-created" && ! -s "$signing_dir/debug.keystore" ]]; then
     die "Previously provisioned Android debug keystore is missing: $signing_dir/debug.keystore. Restore it from backup; refusing to silently change the APK signing identity."
@@ -254,12 +259,15 @@ docker run --rm --network="${AOWIS_DOCKER_RUN_NETWORK:-host}" \
     -v "$project_dir:/project" -w /project \
     "${renderer_mount[@]}" \
     -v "$cache_root:/gradle-cache" \
+    -v "$go_cache_root:/go-cache" \
     -v "$signing_dir:/tmp/.android" \
     -e HOME=/tmp \
     -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
 \
     -e ANDROID_USER_HOME=/tmp/.android \
     -e GRADLE_USER_HOME=/gradle-cache \
+    -e GOPATH=/go-cache/path -e GOMODCACHE=/go-cache/mod -e GOCACHE=/go-cache/build \
+    -e "AOWIS_ANDROID_ENGINE_API=$AOWIS_ANDROID_ENGINE_API" \
     -e "AOWIS_QT_ANDROID_VERSION=$AOWIS_QT_ANDROID_VERSION" \
     -e "AOWIS_ANDROID_NDK_VERSION=$AOWIS_ANDROID_NDK_VERSION" \
     -e "AOWIS_ANDROID_BUILD_TOOLS_VERSION=$AOWIS_ANDROID_BUILD_TOOLS_VERSION" \

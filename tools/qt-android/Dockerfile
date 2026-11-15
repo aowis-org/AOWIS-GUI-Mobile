@@ -121,5 +121,23 @@ RUN set -eu; \
     done; \
     "/opt/qt/${QT_VERSION}/gcc_64/bin/qmake" -query QT_VERSION
 
-ENV PATH="/opt/android-sdk/platform-tools:/opt/android-sdk/cmdline-tools/latest/bin:${JAVA_HOME}/bin:${PATH}"
+# Go cross-builds the embedded WireGuard engine (AOWIS-NETWORK) for the NDK:
+# GOOS=android with the NDK's clang as cgo compiler. The official Linux
+# release archive is verified against Google's published SHA-256. Appended
+# last so the expensive Qt/SDK layers stay cached. Module and build caches
+# are mounted by compile_android.sh (GOMODCACHE/GOCACHE), not baked in.
+ARG AOWIS_GO_VERSION=1.27.3
+RUN set -eux; \
+    archive="go${AOWIS_GO_VERSION}.linux-amd64.tar.gz"; \
+    curl --fail --location --retry 4 --retry-delay 5 --silent --show-error \
+        -o "/tmp/$archive" "https://dl.google.com/go/$archive"; \
+    curl --fail --location --retry 4 --retry-delay 5 --silent --show-error \
+        -o "/tmp/$archive.sha256" "https://dl.google.com/go/$archive.sha256"; \
+    echo "$(tr -d ' \n' < "/tmp/$archive.sha256")  /tmp/$archive" | sha256sum -c -; \
+    tar -C /usr/local -xzf "/tmp/$archive"; \
+    rm -f "/tmp/$archive" "/tmp/$archive.sha256"; \
+    /usr/local/go/bin/go version
+
+ENV PATH="/usr/local/go/bin:/opt/android-sdk/platform-tools:/opt/android-sdk/cmdline-tools/latest/bin:${JAVA_HOME}/bin:${PATH}" \
+    GOTOOLCHAIN=local
 WORKDIR /project

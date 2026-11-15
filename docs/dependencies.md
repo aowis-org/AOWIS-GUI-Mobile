@@ -9,6 +9,7 @@ relative and independent of the checkout directory name.
 | `external/AOWIS-GUI-Render` | `https://github.com/aowis-org/AOWIS-GUI-Render.git` | The AOWIS map (2D/globe, imagery, terrain, HUD, map server client) and its nested pinned bgfx/bx/bimg |
 | `external/GeographicLib` | `https://github.com/geographiclib/geographiclib.git` | Render's geodesy; built by Render from this checkout (`AOWIS_RENDER_GEOGRAPHICLIB_SOURCE_DIR`) |
 | `external/AOWIS-SERVER-DVMDB` | `https://github.com/aowis-org/AOWIS-SERVER-DVMDB.git` | Pinned source dependency for future native personal repository; not compiled, linked or started yet |
+| `external/AOWIS-NETWORK` | `https://github.com/aowis-org/AOWIS-NETWORK.git` | `AOWIS::Network` / `AOWIS::NetworkQt`: embedded userspace WireGuard engine (Go) behind a loopback SOCKS5 proxy |
 
 The GeographicLib path and URL match those used in Desktop AOWIS-GUI. Git
 records each dependency's exact commit as a *gitlink*, not as copied source.
@@ -24,7 +25,10 @@ For a **new** dependency after applying a source patch, in the actual Mobile Git
 This uses `git submodule add`, creating `.gitmodules` entries and real gitlinks.
 Do not manually create the `external/` directories first. It is safe to repeat
 and does not update existing pins. The existing MODEL registration remains
-`./tools/init_model.sh` (once if its gitlink does not exist).
+`./tools/init_model.sh` (once if its gitlink does not exist); NETWORK is
+registered once with `./tools/init_network.sh`, initialized with
+`./git_submodule_init.sh --network` and advanced deliberately with
+`./git_submodule_update.sh --network` (also part of `--all`).
 
 After the gitlinks are committed, future clones use:
 
@@ -47,8 +51,17 @@ resolve that nested URL explicitly when the embedded DVMDB build is needed.
 
 ## Build boundary
 
-Mobile builds its Qt Quick app with `AOWIS::Model`, Render's map stack and
-GeographicLib (through Render). It does not compile DVMDB just because its
+Mobile builds its Qt Quick app with `AOWIS::Model`, Render's map stack,
+GeographicLib (through Render) and AOWIS-NETWORK's WireGuard engine
+(`AOWIS_MOBILE_WITH_WIREGUARD`, default ON). The engine is Go code: Linux
+builds compile it with the host Go during the CMake build; the Android
+Docker build cross-compiles it first (`GOOS=android GOARCH=arm64`, the NDK's
+`aarch64-linux-android28-clang`, `-buildmode=c-shared`, 16 KiB pages) with
+NETWORK's `tools/build_wireguard_engine.sh` and passes the result as
+`AOWIS_NETWORK_WIREGUARD_ARCHIVE`; CMake packages it into the APK through
+`QT_ANDROID_EXTRA_LIBS`. A Go c-archive cannot be used on Android: it uses
+local-exec TLS, which cannot be linked into the app's shared library. Go
+module and build caches persist in `$XDG_CACHE_HOME/aowis-mobile/go`. It does not compile DVMDB just because its
 source is present.
 Linking DVMDB now would introduce native-store, filesystem and nested MODEL
 requirements before the mobile working-copy design is implemented. Adding the

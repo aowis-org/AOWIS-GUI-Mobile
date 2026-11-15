@@ -29,6 +29,14 @@ android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
     echo 'AOWIS-SERVER-MODEL submodule missing in Docker /project. Run ./tools/init_model.sh on the host.' >&2
     exit 1
 }
+[[ -f "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" ]] || {
+    echo 'AOWIS-NETWORK submodule missing in Docker /project. Run ./tools/init_network.sh on the host.' >&2
+    exit 1
+}
+command -v go >/dev/null 2>&1 || {
+    echo 'Go is missing from the Android image; rebuild it with ./prepare_android_docker.sh.' >&2
+    exit 1
+}
 render_cmake_args=()
 if [[ "$bgfx" == ON ]]; then
     [[ -f "${AOWIS_ANDROID_RENDER_SOURCE_DIR:-}/CMakeLists.txt" ]] || {
@@ -60,6 +68,30 @@ signing_key="$signing_home/debug.keystore"
 # Keep all outputs in the host repository, as with GUI WASM and Standalone.
 # Only build the APK target, never the CTest programs, bgfx tools or examples.
 build_dir="$project_dir/$build_name"
+
+# Embedded WireGuard engine: Go cross-build for android/arm64 with the NDK's
+# clang (API level = lowest supported), as a shared library packaged into
+# the APK. Rebuilt every time: Go's build cache makes unchanged runs fast.
+engine_api="${AOWIS_ANDROID_ENGINE_API:-28}"
+[[ "$engine_api" =~ ^[0-9]+$ ]] || { echo 'Invalid AOWIS_ANDROID_ENGINE_API.' >&2; exit 2; }
+ndk_bin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+engine_cc="$ndk_bin/aarch64-linux-android${engine_api}-clang"
+[[ -x "$engine_cc" ]] || { echo "NDK compiler missing: $engine_cc" >&2; exit 1; }
+engine_dir="$build_dir/aowis-wireguard-engine"
+echo "=== Building WireGuard engine for android/arm64 (API $engine_api) ==="
+GOOS=android GOARCH=arm64 CC="$engine_cc" \
+    "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" "$engine_dir"
+engine_library="$engine_dir/libaowis_wireguard.so"
+# The app's loader resolves it by SONAME; Android 15+ needs 16 KiB pages.
+"$ndk_bin/llvm-readelf" -d "$engine_library" | grep -q 'SONAME.*\[libaowis_wireguard\.so\]' || {
+    echo "Engine library lacks SONAME libaowis_wireguard.so: $engine_library" >&2
+    exit 1
+}
+"$ndk_bin/llvm-readelf" -lW "$engine_library" | awk '$1 == "LOAD" && $NF != "0x4000" && $NF != "0x10000" { bad = 1 } END { exit bad }' || {
+    echo "Engine library LOAD segments are not 16 KiB aligned: $engine_library" >&2
+    exit 1
+}
+
 echo "=== Building AOWIS Mobile Android ARM64 ($bgfx) inside Docker ==="
 echo "Qt:    $qt_version"
 echo "NDK:   $ndk_version"
@@ -71,6 +103,7 @@ echo "Build: $build_dir"
     -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" \
     -DANDROID_NDK_ROOT="$ndk" \
     -DAOWIS_MOBILE_WITH_BGFX="$bgfx" \
+    -DAOWIS_NETWORK_WIREGUARD_ARCHIVE="$engine_library" \
     "${render_cmake_args[@]}"
 cmake --build "$build_dir" --target aowis-mobile_make_apk --parallel "$jobs"
 

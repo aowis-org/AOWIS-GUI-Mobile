@@ -3,23 +3,26 @@ set -euo pipefail
 
 # Initialize exactly the Git commits recorded by Mobile. Registration of new
 # dependencies is separate: see tools/init_model.sh and
-# tools/init_geographiclib_dvmdb.sh. Never follow upstream branches here.
+# tools/init_geographiclib_dvmdb.sh and tools/init_network.sh. Never follow
+# upstream branches here.
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_init.sh [--render | --model | --geographiclib | --dvmdb | --help]
+Usage: ./git_submodule_init.sh [--render | --model | --geographiclib | --dvmdb | --network | --help]
 
-  (no option)      Initialize MODEL, Render, GeographicLib and DVMDB.
+  (no option)      Initialize MODEL, Render, GeographicLib, DVMDB and NETWORK.
   --render         Initialize pinned Render and its nested pinned dependencies
                    (bgfx, bx, bimg: the map's GPU library).
   --model          Initialize pinned MODEL.
   --geographiclib  Initialize pinned GeographicLib.
   --dvmdb          Initialize pinned DVMDB without its nested submodules.
+  --network        Initialize pinned AOWIS-NETWORK (embedded WireGuard engine).
   --help           Show this help.
 
-First-time registration: tools/init_model.sh or tools/init_geographiclib_dvmdb.sh.
+First-time registration: tools/init_model.sh, tools/init_geographiclib_dvmdb.sh
+or tools/init_network.sh.
 DVMDB's nested MODEL is deliberately not initialized until native storage
 integration requires it (its upstream .gitmodules may use a private SSH alias).
 This command never advances any dependency beyond its recorded Git commit.
@@ -34,15 +37,17 @@ render_path='external/AOWIS-GUI-Render'
 model_path='external/AOWIS-SERVER-MODEL'
 geo_path='external/GeographicLib'
 dvmdb_path='external/AOWIS-SERVER-DVMDB'
+network_path='external/AOWIS-NETWORK'
 paths=()
 case "${1:-}" in
     '')
         [[ $# -eq 0 ]] || { usage >&2; exit 2; }
-        paths=("$model_path" "$render_path" "$geo_path" "$dvmdb_path") ;;
+        paths=("$model_path" "$render_path" "$geo_path" "$dvmdb_path" "$network_path") ;;
     --render) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$render_path") ;;
     --model) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$model_path") ;;
     --geographiclib) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$geo_path") ;;
     --dvmdb) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$dvmdb_path") ;;
+    --network) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$network_path") ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
@@ -50,7 +55,7 @@ esac
 # A .gitmodules entry without the index gitlink is not a registered submodule.
 for path in "${paths[@]}"; do
     [[ "$(git ls-files --stage -- "$path")" == '160000 '* ]] ||
-        die "Missing Git submodule gitlink for $path. Use tools/init_model.sh or tools/init_geographiclib_dvmdb.sh to register new dependencies."
+        die "Missing Git submodule gitlink for $path. Use tools/init_model.sh, tools/init_geographiclib_dvmdb.sh or tools/init_network.sh to register new dependencies."
 done
 
 # DVMDB may contain a private-address nested MODEL gitlink. Deliberately do
