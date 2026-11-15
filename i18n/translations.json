@@ -419,7 +419,8 @@
     "No map server configured. Tap to set one up.": "لم يُعدّ خادم خرائط. اضغط لإعداد واحد.",
     "Back to Map server": "العودة إلى خادم الخرائط",
     "Access to the configuration directory was denied: %1": "تم رفض الوصول إلى مجلد الإعدادات: %1",
-    "Could not read the selected file: %1": "تعذّرت قراءة الملف المحدد: %1"
+    "Could not read the selected file: %1": "تعذّرت قراءة الملف المحدد: %1",
+    "The file picker did not return a file.": "لم يُرجع منتقي الملفات أي ملف."
   },
   "de": {
     "%1 (custom)": "%1 (benutzerdefiniert)",
@@ -841,7 +842,8 @@
     "No map server configured. Tap to set one up.": "Kein Kartenserver eingerichtet. Tippen, um einen einzurichten.",
     "Back to Map server": "Zurück zum Kartenserver",
     "Access to the configuration directory was denied: %1": "Zugriff auf das Konfigurationsverzeichnis verweigert: %1",
-    "Could not read the selected file: %1": "Die ausgewählte Datei konnte nicht gelesen werden: %1"
+    "Could not read the selected file: %1": "Die ausgewählte Datei konnte nicht gelesen werden: %1",
+    "The file picker did not return a file.": "Die Dateiauswahl hat keine Datei geliefert."
   },
   "es": {
     "%1 (custom)": "%1 (personalizado)",
@@ -1263,7 +1265,8 @@
     "No map server configured. Tap to set one up.": "No hay ningún servidor de mapas configurado. Toque para configurar uno.",
     "Back to Map server": "Volver al servidor de mapas",
     "Access to the configuration directory was denied: %1": "Acceso denegado a la carpeta de configuración: %1",
-    "Could not read the selected file: %1": "No se pudo leer el archivo seleccionado: %1"
+    "Could not read the selected file: %1": "No se pudo leer el archivo seleccionado: %1",
+    "The file picker did not return a file.": "El selector de archivos no devolvió ningún archivo."
   },
   "fr": {
     "%1 (custom)": "%1 (personnalisé)",
@@ -1685,6 +1688,7 @@
     "No map server configured. Tap to set one up.": "Aucun serveur de cartes configuré. Touchez pour en configurer un.",
     "Back to Map server": "Retour au serveur de cartes",
     "Access to the configuration directory was denied: %1": "Accès au dossier de configuration refusé : %1",
-    "Could not read the selected file: %1": "Impossible de lire le fichier sélectionné : %1"
+    "Could not read the selected file: %1": "Impossible de lire le fichier sélectionné : %1",
+    "The file picker did not return a file.": "Le sélecteur de fichiers n’a renvoyé aucun fichier."
   }
 }

@@ -336,10 +336,20 @@ Rectangle {
         fileMode: FileDialog.OpenFile
         // No name filter: Android's picker filters by MIME type and has none
         // for .conf, which would grey out exactly the files wanted.
+        // Android's native picker may leave selectedFile empty and report the
+        // document only in selectedFiles (or currentFile): take the first set.
+        function pickedFile() {
+            if (selectedFile.toString() !== "")
+                return selectedFile
+            if (selectedFiles.length > 0 && selectedFiles[0].toString() !== "")
+                return selectedFiles[0]
+            return currentFile
+        }
         onAccepted: {
-            const text = wireguardVpnSettings.readConfFile(selectedFile)
+            const file = pickedFile()
+            const text = wireguardVpnSettings.readConfFile(file)
             if (text !== "")
-                editor.openFor("", wireguardVpnSettings.suggestedName(selectedFile), "", text)
+                editor.openFor("", wireguardVpnSettings.suggestedName(file), "", text)
         }
     }
 

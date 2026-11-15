@@ -9,6 +9,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QNetworkProxy>
@@ -529,9 +530,17 @@ QString WireGuardVpnSettings::profileText(const QString &id) const
 
 QString WireGuardVpnSettings::readConfFile(const QUrl &url)
 {
+    if (url.isEmpty())
+    {
+        this->setError(tr("The file picker did not return a file."));
+        return QString();
+    }
     // Qt for Android opens content:// URIs from the system file picker; they
     // must stay percent-encoded (document ids like "primary%3ADownload%2F…").
-    QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
+    const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded);
+    // Diagnostics (logcat / terminal): scheme and authority only, no path.
+    qInfo().noquote() << "WireGuard import: opening" << url.scheme() + QStringLiteral("://") + url.host() << "document";
+    QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
     {
         this->setError(tr("Could not read the selected file: %1").arg(file.errorString()));
