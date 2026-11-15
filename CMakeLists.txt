@@ -36,6 +36,8 @@ qt_add_executable(aowis-mobile
     src/wireguard_key_sealing.h
     src/android_keystore_sealer.cpp
     src/android_keystore_sealer.h
+    src/android_document_picker.cpp
+    src/android_document_picker.h
     src/appearance_settings.cpp
     src/appearance_settings.h
     src/language_settings.cpp
@@ -225,6 +227,10 @@ if(ANDROID)
     # NDK ASensorManager / ALooper for the compass (no Qt Sensors involved),
     # NDK Camera2 + AImageReader for Look around's camera stabilization.
     target_link_libraries(aowis-mobile PRIVATE android camera2ndk mediandk)
+    # QtAndroidPrivate::startActivity() for the system document picker
+    # (src/android_document_picker.cpp).
+    find_package(Qt6 REQUIRED COMPONENTS CorePrivate)
+    target_link_libraries(aowis-mobile PRIVATE Qt6::CorePrivate)
 endif()
 
 if(AOWIS_MOBILE_WITH_BGFX)
@@ -408,7 +414,8 @@ if(BUILD_TESTING)
         add_executable(aowis-mobile-wireguard-settings-tests
             tests/wireguard_vpn_settings_tests.cpp src/wireguard_vpn_settings.cpp src/wireguard_vpn_settings.h
             src/wireguard_key_sealing.cpp src/wireguard_key_sealing.h
-            src/android_keystore_sealer.cpp src/android_keystore_sealer.h)
+            src/android_keystore_sealer.cpp src/android_keystore_sealer.h
+            src/android_document_picker.cpp src/android_document_picker.h)
         target_include_directories(aowis-mobile-wireguard-settings-tests PRIVATE src)
         target_link_libraries(aowis-mobile-wireguard-settings-tests PRIVATE Qt6::Core Qt6::Network AOWIS::Network aowis::config)
         target_compile_definitions(aowis-mobile-wireguard-settings-tests PRIVATE AOWIS_MOBILE_WITH_WIREGUARD=1)

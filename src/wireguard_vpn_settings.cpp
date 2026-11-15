@@ -1,5 +1,6 @@
 #include "wireguard_vpn_settings.h"
 
+#include "android_document_picker.h"
 #include "android_keystore_sealer.h"
 
 #include <aowis/config/config_root.h>
@@ -554,6 +555,36 @@ QString WireGuardVpnSettings::readConfFile(const QUrl &url)
     }
     this->setError(QString());
     return QString::fromUtf8(data);
+}
+
+bool WireGuardVpnSettings::nativeFilePicker() const
+{
+    return AndroidDocumentPicker::available();
+}
+
+void WireGuardVpnSettings::pickConfFile()
+{
+    this->setError(QString());
+    AndroidDocumentPicker::pickText(this, static_cast<int>(max_conf_bytes),
+        [this](AndroidDocumentPicker::Outcome outcome, const QString &name, const QString &text) {
+            switch (outcome)
+            {
+            case AndroidDocumentPicker::Outcome::Picked:
+                emit confFilePicked(this->suggestedName(QUrl(QStringLiteral("picked:") + name)), text);
+                return;
+            case AndroidDocumentPicker::Outcome::Cancelled:
+                return;
+            case AndroidDocumentPicker::Outcome::TooLarge:
+                this->setError(tr("The selected file is larger than 2 MiB."));
+                return;
+            case AndroidDocumentPicker::Outcome::Unreadable:
+                this->setError(tr("Could not read the selected file: %1").arg(tr("Android denied access to it.")));
+                return;
+            case AndroidDocumentPicker::Outcome::Unavailable:
+                this->setError(tr("The file picker did not return a file."));
+                return;
+            }
+        });
 }
 
 QString WireGuardVpnSettings::suggestedName(const QUrl &url) const

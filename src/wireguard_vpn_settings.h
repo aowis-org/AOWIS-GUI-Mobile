@@ -50,6 +50,9 @@ class WireGuardVpnSettings final : public QObject
     // records); empty when everything is readable.
     Q_PROPERTY(QString storageProblem READ storageProblem NOTIFY profilesChanged)
     Q_PROPERTY(bool engineAvailable READ engineAvailable CONSTANT)
+    // Android: import through the system document picker (pickConfFile()),
+    // not Qt Quick's FileDialog, which drops content:// selections there.
+    Q_PROPERTY(bool nativeFilePicker READ nativeFilePicker CONSTANT)
 
 public:
     // namespaceRoot: absolute path of an "aowis" configuration directory
@@ -63,6 +66,7 @@ public:
     QString error() const;
     QString storageProblem() const;
     bool engineAvailable() const;
+    bool nativeFilePicker() const;
 
     // {ok: bool, messages: [{error: bool, text: string}]}, translated, never
     // quoting keys or values from the text.
@@ -83,6 +87,9 @@ public:
     // error() set when it cannot be read.
     Q_INVOKABLE QString readConfFile(const QUrl &url);
     Q_INVOKABLE QString suggestedName(const QUrl &url) const;
+    // Android: opens the system picker; confFilePicked(name, text) follows,
+    // or error() is set. Cancelling does nothing.
+    Q_INVOKABLE void pickConfFile();
 
     // The user's Start/Stop. A stopped tunnel stays stopped, also for the
     // connections that require it (they fail with a pointer to Settings),
@@ -120,6 +127,8 @@ signals:
     void profilesChanged();
     void statusRevisionChanged();
     void errorChanged();
+    // A .conf picked with pickConfFile(): suggested profile name and text.
+    void confFilePicked(const QString &name, const QString &text);
     // The tunnel of profile_id started, failed, stopped or was replaced:
     // consumers ask proxyFor() again and rebuild their connections.
     void tunnelAvailabilityChanged(const QString &profile_id);

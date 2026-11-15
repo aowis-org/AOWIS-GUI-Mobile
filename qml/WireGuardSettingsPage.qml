@@ -201,7 +201,14 @@ Rectangle {
                     }
                     PageButton {
                         text: qsTr("Import .conf file…")
-                        onClicked: confFileDialog.open()
+                        // Android: the system picker (Qt Quick's FileDialog drops
+                        // content:// selections there); elsewhere Qt's dialog.
+                        onClicked: {
+                            if (wireguardVpnSettings.nativeFilePicker)
+                                wireguardVpnSettings.pickConfFile()
+                            else
+                                confFileDialog.open()
+                        }
                     }
                 }
                 Label {
@@ -327,6 +334,13 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    Connections {
+        target: wireguardVpnSettings
+        function onConfFilePicked(name, text) {
+            editor.openFor("", name, "", text)
         }
     }
 
