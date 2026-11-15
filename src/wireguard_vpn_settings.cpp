@@ -321,6 +321,8 @@ QString WireGuardVpnSettings::storageErrorText(const aowis::config::Error &error
     case Code::reference_unavailable: return tr("Could not check which connections use this profile.");
     case Code::lock_timeout: return tr("The configuration storage is busy; try again.");
     case Code::permission_denied:
+        // CONFIG messages are contextual labels (operation, errno), no secrets.
+        return tr("Access to the configuration directory was denied: %1").arg(QString::fromStdString(error.message));
     case Code::unsafe_path: return tr("The configuration directory is not private to AOWIS.");
     default: break;
     }
@@ -527,11 +529,12 @@ QString WireGuardVpnSettings::profileText(const QString &id) const
 
 QString WireGuardVpnSettings::readConfFile(const QUrl &url)
 {
-    // Qt for Android opens content:// URIs from the system file picker.
-    QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString());
+    // Qt for Android opens content:// URIs from the system file picker; they
+    // must stay percent-encoded (document ids like "primary%3ADownload%2F…").
+    QFile file(url.isLocalFile() ? url.toLocalFile() : url.toString(QUrl::FullyEncoded));
     if (!file.open(QIODevice::ReadOnly))
     {
-        this->setError(tr("Could not read the selected file."));
+        this->setError(tr("Could not read the selected file: %1").arg(file.errorString()));
         return QString();
     }
     const QByteArray data = file.read(max_conf_bytes + 1);

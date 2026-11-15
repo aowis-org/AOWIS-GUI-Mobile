@@ -320,7 +320,6 @@
     "Configuration (wg-quick .conf)": "الإعداد (ملف ‎.conf لـ wg-quick)",
     "Configuration is valid.": "الإعداد صالح.",
     "Connected": "متصل",
-    "Could not read the selected file.": "تعذّرت قراءة الملف المحدد.",
     "Could not start: %1": "تعذّر البدء: %1",
     "DNS search domains are ignored.": "يتم تجاهل نطاقات بحث DNS.",
     "Delete WireGuard profile": "حذف ملف WireGuard الشخصي",
@@ -418,7 +417,9 @@
     "Manage WireGuard profiles…": "إدارة ملفات WireGuard الشخصية…",
     "Network & servers": "الشبكة والخوادم",
     "No map server configured. Tap to set one up.": "لم يُعدّ خادم خرائط. اضغط لإعداد واحد.",
-    "Back to Map server": "العودة إلى خادم الخرائط"
+    "Back to Map server": "العودة إلى خادم الخرائط",
+    "Access to the configuration directory was denied: %1": "تم رفض الوصول إلى مجلد الإعدادات: %1",
+    "Could not read the selected file: %1": "تعذّرت قراءة الملف المحدد: %1"
   },
   "de": {
     "%1 (custom)": "%1 (benutzerdefiniert)",
@@ -741,7 +742,6 @@
     "Configuration (wg-quick .conf)": "Konfiguration (wg-quick .conf)",
     "Configuration is valid.": "Die Konfiguration ist gültig.",
     "Connected": "Verbunden",
-    "Could not read the selected file.": "Die ausgewählte Datei konnte nicht gelesen werden.",
     "Could not start: %1": "Start fehlgeschlagen: %1",
     "DNS search domains are ignored.": "DNS-Suchdomänen werden ignoriert.",
     "Delete WireGuard profile": "WireGuard-Profil löschen",
@@ -839,7 +839,9 @@
     "Manage WireGuard profiles…": "WireGuard-Profile verwalten…",
     "Network & servers": "Netzwerk & Server",
     "No map server configured. Tap to set one up.": "Kein Kartenserver eingerichtet. Tippen, um einen einzurichten.",
-    "Back to Map server": "Zurück zum Kartenserver"
+    "Back to Map server": "Zurück zum Kartenserver",
+    "Access to the configuration directory was denied: %1": "Zugriff auf das Konfigurationsverzeichnis verweigert: %1",
+    "Could not read the selected file: %1": "Die ausgewählte Datei konnte nicht gelesen werden: %1"
   },
   "es": {
     "%1 (custom)": "%1 (personalizado)",
@@ -1162,7 +1164,6 @@
     "Configuration (wg-quick .conf)": "Configuración (.conf de wg-quick)",
     "Configuration is valid.": "La configuración es válida.",
     "Connected": "Conectado",
-    "Could not read the selected file.": "No se pudo leer el archivo seleccionado.",
     "Could not start: %1": "No se pudo iniciar: %1",
     "DNS search domains are ignored.": "Los dominios de búsqueda DNS se ignoran.",
     "Delete WireGuard profile": "Eliminar perfil de WireGuard",
@@ -1260,7 +1261,9 @@
     "Manage WireGuard profiles…": "Gestionar perfiles de WireGuard…",
     "Network & servers": "Red y servidores",
     "No map server configured. Tap to set one up.": "No hay ningún servidor de mapas configurado. Toque para configurar uno.",
-    "Back to Map server": "Volver al servidor de mapas"
+    "Back to Map server": "Volver al servidor de mapas",
+    "Access to the configuration directory was denied: %1": "Acceso denegado a la carpeta de configuración: %1",
+    "Could not read the selected file: %1": "No se pudo leer el archivo seleccionado: %1"
   },
   "fr": {
     "%1 (custom)": "%1 (personnalisé)",
@@ -1583,7 +1586,6 @@
     "Configuration (wg-quick .conf)": "Configuration (.conf wg-quick)",
     "Configuration is valid.": "La configuration est valide.",
     "Connected": "Connecté",
-    "Could not read the selected file.": "Impossible de lire le fichier sélectionné.",
     "Could not start: %1": "Démarrage impossible : %1",
     "DNS search domains are ignored.": "Les domaines de recherche DNS sont ignorés.",
     "Delete WireGuard profile": "Supprimer le profil WireGuard",
@@ -1681,6 +1683,8 @@
     "Manage WireGuard profiles…": "Gérer les profils WireGuard…",
     "Network & servers": "Réseau et serveurs",
     "No map server configured. Tap to set one up.": "Aucun serveur de cartes configuré. Touchez pour en configurer un.",
-    "Back to Map server": "Retour au serveur de cartes"
+    "Back to Map server": "Retour au serveur de cartes",
+    "Access to the configuration directory was denied: %1": "Accès au dossier de configuration refusé : %1",
+    "Could not read the selected file: %1": "Impossible de lire le fichier sélectionné : %1"
   }
 }
