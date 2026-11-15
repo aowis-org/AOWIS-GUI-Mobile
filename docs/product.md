@@ -97,7 +97,7 @@ palette so text remains legible in both themes. The bgfx map renderer keeps its
 own graphics palette; changing the interface theme does not recolor hydraulic
 network geometry.
 
-**Settings → Map server** provides two fields: HTTP(S) server URL (without a
+**Settings → Network & servers → Map server** provides two fields: HTTP(S) server URL (without a
 port) and a numeric port (1–65535). Both values are validated in C++, saved
 through Qt's per-user settings, and restored on restart. A full endpoint URL
 is formed from those two entries. This is a *configuration-only* feature:

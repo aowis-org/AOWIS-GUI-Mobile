@@ -21,6 +21,7 @@ required = [
     "tests/map_server_settings_tests.cpp",
     "src/wireguard_vpn_settings.cpp", "src/wireguard_vpn_settings.h",
     "qml/WireGuardSettingsPage.qml", "tests/wireguard_vpn_settings_tests.cpp",
+    "qml/MapServerSettingsPage.qml",
     "tools/init_network.sh", "tools/init_config.sh", "docs/wireguard-vpn.md",
     "src/wireguard_key_sealing.cpp", "src/wireguard_key_sealing.h",
     "src/android_keystore_sealer.cpp", "src/android_keystore_sealer.h",
@@ -45,6 +46,7 @@ source = (root / "src/mobile_map_view.cpp").read_text()
 header = (root / "src/mobile_map_view.h").read_text()
 main = (root / "src/main.cpp").read_text()
 qml = (root / "qml/Main.qml").read_text()
+map_server_page = (root / "qml/MapServerSettingsPage.qml").read_text()
 
 checks = [
     ("qml-only baseline still available", "AOWIS_MOBILE_WITH_BGFX" in cmake and
@@ -118,11 +120,12 @@ checks = [
      'Qt.platform.os !== "android"' in qml),
     ("persistent map server settings", 'mapServerSettings' in main and
      'QSettings' in (root / "src/map_server_settings.cpp").read_text() and
-     'mapServerSettings.save' in qml and 'IntValidator { bottom: 1; top: 65535 }' in qml and
-     'Qt.ImhDigitsOnly' in qml),
+     'mapServerSettings.save' in map_server_page and 'IntValidator { bottom: 1; top: 65535 }' in map_server_page and
+     'Qt.ImhDigitsOnly' in map_server_page and 'MapServerSettingsPage {' in qml and
+     'root.openPage("mapserver")' in qml and 'qsTr("Network & servers")' in qml),
     ("system dark light theme and explicit field contrast", 'appearanceSettings.mode' in qml and
      'appearanceSettings.dark' in qml and 'appearanceSettings.setMode' in qml and
-     'placeholderTextColor: root.uiPlaceholder' in qml and
+     'placeholderColor: root.uiPlaceholder' in qml and
      'color: root.uiText' in qml and 'palette.buttonText: root.uiText' in qml and
      'QtQuick.Controls.Basic' in qml),
     ("persistent appearance settings and system theme", 'QSettings' in

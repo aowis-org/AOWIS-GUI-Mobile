@@ -23,6 +23,7 @@ Rectangle {
     property color successColor: "#a2ebc2"
     property color errorColor: "#ffb7ad"
     property bool rightToLeft: false
+    property string backText: qsTr("Back to Settings")
 
     property string selectedId: ""
     readonly property var profileList: wireguardVpnSettings.profiles
@@ -72,7 +73,7 @@ Rectangle {
 
         PageButton {
             Layout.fillWidth: false
-            text: qsTr("Back to Settings")
+            text: page.backText
             onClicked: page.backRequested()
         }
         Label {

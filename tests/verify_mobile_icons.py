@@ -21,8 +21,10 @@ for kind in ('plus', 'minus', 'reset'):
 # Menu, dropdown arrows and math controls must not require missing font glyphs.
 for glyph in ('☰', '▾', '−'):
     assert glyph not in qml, f'font-dependent symbol remains: {glyph}'
-# Language, unit profile, map server connection and theme selectors.
-assert qml.count('kind: "down"') == 4
+# Language, unit profile and theme selectors; the map server connection
+# selector lives on its own page.
+assert qml.count('kind: "down"') == 3
+assert (root / 'qml/MapServerSettingsPage.qml').read_text(encoding='utf-8').count('kind: "down"') == 1
 assert qml.count('kind: "menu"') == 1
 assert 'id: hamburgerButton' in qml
 assert 'anchors.right: parent.right' in qml

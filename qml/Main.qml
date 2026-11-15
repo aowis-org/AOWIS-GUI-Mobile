@@ -62,18 +62,18 @@ Window {
             }
         }
     }
-    property string saveFeedback: ""
-    property bool saveSucceeded: false
 
+    // WireGuard VPN returns to where it was opened from (Settings or Map server).
+    property string wireguardReturnPage: "settings"
     function openPage(page) {
         mapMenu.close()
         navigationDrawer.close()
-        if (page === "settings" && activePage !== "units" && activePage !== "wireguard") {
-            mapServerUrl.text = mapServerSettings.serverUrl
-            mapServerPort.text = mapServerSettings.serverPort > 0
-                               ? String(mapServerSettings.serverPort) : ""
-            saveFeedback = ""
-            mapServerTunnel.selectId(mapServerSettings.wireguardProfileId)
+        if (page === "mapserver" && activePage !== "wireguard")
+            mapServerPage.reload()
+        if (page === "wireguard")
+            wireguardReturnPage = activePage === "mapserver" ? "mapserver" : "settings"
+        if (page === "settings" && activePage !== "units" && activePage !== "wireguard"
+                && activePage !== "mapserver") {
             themeSelector.currentIndex = appearanceSettings.mode === "dark" ? 1
                                        : appearanceSettings.mode === "light" ? 2 : 0
             const languages = ["en", "fr", "ar", "de", "es"]
@@ -88,7 +88,9 @@ Window {
             mapMenu.close()
         } else if (navigationDrawer.opened) {
             navigationDrawer.close()
-        } else if (activePage === "units" || activePage === "wireguard") {
+        } else if (activePage === "wireguard") {
+            openPage(wireguardReturnPage)
+        } else if (activePage === "units" || activePage === "mapserver") {
             openPage("settings")
         } else if (activePage !== "map") {
             openPage("map")
@@ -180,9 +182,9 @@ Window {
         anchors.margins: 14
         height: 52
         z: 2
-        onClicked: root.openPage("settings")
+        onClicked: root.openPage("mapserver")
         contentItem: Text {
-            text: qsTr("No map server configured. Tap to open Settings.")
+            text: qsTr("No map server configured. Tap to set one up.")
             color: root.uiText
             font.pixelSize: 13
             wrapMode: Text.WordWrap
@@ -194,7 +196,7 @@ Window {
             color: root.uiRaised
             border.color: root.uiAccent
         }
-        Accessible.name: qsTr("No map server configured. Tap to open Settings.")
+        Accessible.name: qsTr("No map server configured. Tap to set one up.")
     }
 
     // The map server is reached only through its WireGuard tunnel, which is
@@ -744,212 +746,24 @@ Window {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {
-                        text: qsTr("Map server")
+                        text: qsTr("Network & servers")
                         color: root.uiAccent
                         font.bold: true
                         font.pixelSize: 19
                     }
-                    Label {
-                        text: qsTr("Server URL")
-                        color: root.uiText
-                        font.pixelSize: 14
-                    }
-                    TextField {
-                        id: mapServerUrl
-                        LayoutMirroring.enabled: false
-                        horizontalAlignment: TextInput.AlignLeft
-                        color: root.uiText
-                        placeholderTextColor: root.uiPlaceholder
-                        selectionColor: root.uiSelection
-                        selectedTextColor: root.uiSelectedText
-                        background: Rectangle {
-                            implicitHeight: 48
-                            radius: 10
-                            color: root.uiInput
-                            border.color: mapServerUrl.activeFocus ? root.uiAccent : root.uiBorder
-                        }
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("http://192.168.2.10")
-                        selectByMouse: true
-                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
-                        onTextEdited: root.saveFeedback = ""
-                    }
-                    Label {
-                        text: qsTr("Use http:// or https://. Enter the port separately.")
-                        color: root.uiMuted
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
-                    }
-                    Label {
-                        text: qsTr("Port")
-                        color: root.uiText
-                        font.pixelSize: 14
-                    }
-                    TextField {
-                        id: mapServerPort
-                        LayoutMirroring.enabled: false
-                        horizontalAlignment: TextInput.AlignLeft
-                        color: root.uiText
-                        placeholderTextColor: root.uiPlaceholder
-                        selectionColor: root.uiSelection
-                        selectedTextColor: root.uiSelectedText
-                        background: Rectangle {
-                            implicitHeight: 48
-                            radius: 10
-                            color: root.uiInput
-                            border.color: mapServerPort.activeFocus ? root.uiAccent : root.uiBorder
-                        }
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("e.g. 8080")
-                        selectByMouse: true
-                        maximumLength: 5
-                        inputMethodHints: Qt.ImhDigitsOnly | Qt.ImhNoPredictiveText
-                        validator: IntValidator { bottom: 1; top: 65535 }
-                        onTextEdited: root.saveFeedback = ""
-                    }
-                    Label {
-                        visible: wireguardVpnSettings.engineAvailable
-                        text: qsTr("Connection")
-                        color: root.uiText
-                        font.pixelSize: 14
-                    }
-                    ComboBox {
-                        id: mapServerTunnel
-                        visible: wireguardVpnSettings.engineAvailable
-                        Layout.fillWidth: true
-                        textRole: "label"
-                        // Direct first, then the WireGuard profiles; a saved profile
-                        // that no longer exists stays visible (and blocks the map).
-                        property string pendingId: ""
-                        readonly property var choices: {
-                            const list = [{ id: "", label: qsTr("Direct (no VPN)") }]
-                            const profiles = wireguardVpnSettings.profiles
-                            let found = pendingId === ""
-                            for (let i = 0; i < profiles.length; ++i) {
-                                list.push({ id: profiles[i].id, label: qsTr("WireGuard: %1").arg(profiles[i].name) })
-                                found = found || profiles[i].id === pendingId
-                            }
-                            if (!found)
-                                list.push({ id: pendingId, label: qsTr("Missing WireGuard profile") })
-                            return list
-                        }
-                        model: choices
-                        readonly property string selectedId: currentIndex >= 0 && currentIndex < choices.length
-                                                            ? choices[currentIndex].id : ""
-                        function selectId(id) {
-                            pendingId = id
-                            for (let i = 0; i < choices.length; ++i) {
-                                if (choices[i].id === id) {
-                                    currentIndex = i
-                                    return
-                                }
-                            }
-                            currentIndex = 0
-                        }
-                        onChoicesChanged: selectId(pendingId)
-                        onActivated: function(index) {
-                            pendingId = choices[index].id
-                            root.saveFeedback = ""
-                        }
-                        palette.text: root.uiText
-                        palette.buttonText: root.uiText
-                        palette.base: root.uiInput
-                        palette.window: root.uiInput
-                        palette.highlight: root.uiSelection
-                        palette.highlightedText: root.uiSelectedText
-                        indicator: UiIcon {
-                            kind: "down"
-                            strokeColor: root.uiText
-                            width: 22
-                            height: 22
-                            x: languageSettings.rightToLeft ? 14 : mapServerTunnel.width - width - 14
-                            y: (mapServerTunnel.height - height) / 2
-                        }
-                        contentItem: Text {
-                            text: mapServerTunnel.displayText
-                            color: root.uiText
-                            leftPadding: languageSettings.rightToLeft ? 32 : 12
-                            rightPadding: languageSettings.rightToLeft ? 12 : 32
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                        }
-                        background: Rectangle {
-                            implicitHeight: 48
-                            radius: 10
-                            color: root.uiInput
-                            border.color: mapServerTunnel.activeFocus ? root.uiAccent : root.uiBorder
-                        }
-                        delegate: ItemDelegate {
-                            width: mapServerTunnel.width
-                            text: modelData.label
-                            highlighted: mapServerTunnel.highlightedIndex === index
-                            palette.text: root.uiText
-                            palette.highlightedText: root.uiSelectedText
-                            background: Rectangle {
-                                color: parent.highlighted ? root.uiSelection : root.uiInput
-                            }
-                        }
-                        popup: Popup {
-                            y: mapServerTunnel.height - 1
-                            width: mapServerTunnel.width
-                            implicitHeight: Math.min(contentItem.implicitHeight + 4, 240)
-                            padding: 2
-                            contentItem: ListView {
-                                clip: true
-                                implicitHeight: contentHeight
-                                model: mapServerTunnel.popup.visible ? mapServerTunnel.delegateModel : null
-                                currentIndex: mapServerTunnel.highlightedIndex
-                                ScrollIndicator.vertical: ScrollIndicator { }
-                            }
-                            background: Rectangle {
-                                radius: 10
-                                color: root.uiInput
-                                border.color: root.uiBorder
-                            }
-                        }
-                    }
-                    Label {
-                        visible: wireguardVpnSettings.engineAvailable && mapServerTunnel.selectedId !== ""
-                        text: qsTr("Tiles, terrain and imagery are then loaded only through this tunnel, never directly.")
-                        color: root.uiMuted
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
-                    }
                     Button {
+                        id: mapServerButton
+                        Layout.fillWidth: true
+                        text: qsTr("Map server")
                         palette.buttonText: root.uiText
                         palette.text: root.uiText
                         background: Rectangle {
                             implicitHeight: 44
                             radius: 10
-                            color: parent.down ? root.uiPressed : root.uiRaised
-                            border.color: parent.activeFocus ? root.uiAccent : root.uiBorder
-                            opacity: parent.enabled ? 1.0 : 0.55
+                            color: mapServerButton.down ? root.uiPressed : root.uiRaised
+                            border.color: mapServerButton.activeFocus ? root.uiAccent : root.uiBorder
                         }
-                        
-                        text: qsTr("Save map server")
-                        Layout.fillWidth: true
-                        enabled: mapServerUrl.text.trim().length > 0 && mapServerPort.acceptableInput
-                        onClicked: {
-                            root.saveSucceeded = mapServerSettings.save(
-                                        mapServerUrl.text, mapServerPort.text, mapServerTunnel.selectedId)
-                            root.saveFeedback = root.saveSucceeded ? "saved" : "error"
-                            if (root.saveSucceeded) {
-                                wireguardVpnSettings.notifyUsersChanged()
-                                mapServerUrl.text = mapServerSettings.serverUrl
-                                mapServerPort.text = String(mapServerSettings.serverPort)
-                                mapServerUrl.focus = false
-                                mapServerPort.focus = false
-                            }
-                        }
-                    }
-                    Label {
-                        text: root.saveSucceeded ? qsTr("Map server saved on this device.") : mapServerSettings.error
-                        visible: root.saveFeedback !== ""
-                        color: root.saveSucceeded ? root.uiSuccess : root.uiError
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
+                        onClicked: root.openPage("mapserver")
                     }
                     Label {
                         text: !mapServerSettings.configured
@@ -960,25 +774,9 @@ Window {
                                       .arg(wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId) !== ""
                                            ? wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId)
                                            : qsTr("Missing WireGuard profile"))
-                        color: root.uiText
-                        font.pixelSize: 13
+                        color: root.uiMuted
+                        font.pixelSize: 12
                         wrapMode: Text.WrapAnywhere
-                        Layout.fillWidth: true
-                    }
-                    Label {
-                        text: qsTr("Map tiles, terrain and imagery providers are loaded from this aowis-server-map.")
-                        color: root.uiMuted
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
-                    }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
-                    Label {
-                        visible: wireguardVpnSettings.engineAvailable
-                        text: qsTr("Encrypted WireGuard tunnels for servers that are only reachable over a VPN. They run inside AOWIS only.")
-                        color: root.uiMuted
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
                     Button {
@@ -996,10 +794,15 @@ Window {
                         }
                         onClicked: root.openPage("wireguard")
                     }
-                    Rectangle {
+                    Label {
                         visible: wireguardVpnSettings.engineAvailable
-                        Layout.fillWidth: true; height: 1; color: root.uiBorder
+                        text: qsTr("Encrypted WireGuard tunnels for servers that are only reachable over a VPN. They run inside AOWIS only.")
+                        color: root.uiMuted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
                     }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
                     Label {
                         text: qsTr("Appearance")
                         color: root.uiAccent
@@ -1099,6 +902,28 @@ Window {
         onBackRequested: root.openPage("settings")
     }
 
+    MapServerSettingsPage {
+        id: mapServerPage
+        anchors.fill: parent
+        visible: root.activePage === "mapserver"
+        surfaceColor: root.uiSurface
+        raisedColor: root.uiRaised
+        pressedColor: root.uiPressed
+        inputColor: root.uiInput
+        textColor: root.uiText
+        mutedColor: root.uiMuted
+        placeholderColor: root.uiPlaceholder
+        accentColor: root.uiAccent
+        borderColor: root.uiBorder
+        selectedColor: root.uiSelection
+        selectedTextColor: root.uiSelectedText
+        successColor: root.uiSuccess
+        errorColor: root.uiError
+        rightToLeft: languageSettings.rightToLeft
+        onBackRequested: root.openPage("settings")
+        onWireguardRequested: root.openPage("wireguard")
+    }
+
     WireGuardSettingsPage {
         id: wireguardPage
         anchors.fill: parent
@@ -1117,7 +942,8 @@ Window {
         successColor: root.uiSuccess
         errorColor: root.uiError
         rightToLeft: languageSettings.rightToLeft
-        onBackRequested: root.openPage("settings")
+        backText: root.wireguardReturnPage === "mapserver" ? qsTr("Back to Map server") : qsTr("Back to Settings")
+        onBackRequested: root.openPage(root.wireguardReturnPage)
     }
 
     // Separate instrument page. Qt Sensors supplies magnetic bearing; do not

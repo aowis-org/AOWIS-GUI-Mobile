@@ -18,13 +18,13 @@ on the globe, turn and tilt; the mouse wheel zooms and the right button
 orbits the globe on desktop.
 
 Imagery tiles, terrain and the imagery provider catalog come from the
-**aowis-server-map** configured under **Settings → Map server** (HTTP/HTTPS
+**aowis-server-map** configured under **Settings → Network & servers → Map server** (HTTP/HTTPS
 URL and port); changing it reconnects at once. The top-left map menu controls GPS acquisition and optional auto-pan.
 The location button re-centres the map on demand. See [the map](docs/map.md).
 
 The hamburger menu opens **Settings → Appearance** (system/dark/light theme),
 **Settings → Language** (English, Français, العربية, Deutsch, Español; live
-change without restart), **Settings → Map server**, the instruments (compass,
+change without restart), **Settings → Network & servers → Map server**, the instruments (compass,
 gradienter, plumb bob, flashlight) and **Diagnostics** (map renderer state,
 map server status, lifecycle recovery counters, map server reload).
 The Android APK builds in a pinned Docker toolchain on Arch Linux.

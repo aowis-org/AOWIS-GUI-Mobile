@@ -182,7 +182,6 @@
     "No location provider available; check location services": "لا يوجد مزوّد موقع؛ تحقق من خدمات الموقع",
     "No map server configured": "لم يتم إعداد خادم خرائط",
     "No map server configured yet.": "لم يتم إعداد خادم خرائط بعد.",
-    "No map server configured. Tap to open Settings.": "لم يتم إعداد خادم خرائط. انقر لفتح الإعدادات.",
     "No provider available": "لا يتوفر مزوّد",
     "Not enough frames captured; no report saved": "لم تُسجّل إطارات كافية؛ لم يُحفظ التقرير",
     "Open Compass to read heading": "افتح البوصلة لقراءة الاتجاه",
@@ -407,7 +406,7 @@
     "Starting the WireGuard tunnel “%1”…": "جارٍ بدء نفق WireGuard “%1”…",
     "The WireGuard profile of this connection no longer exists. Choose another one in Settings.": "لم يعد ملف WireGuard الشخصي لهذا الاتصال موجودًا. اختر ملفًا آخر في الإعدادات.",
     "The WireGuard tunnel “%1” could not start (retrying): %2": "تعذّر بدء نفق WireGuard “%1” (تُعاد المحاولة): %2",
-    "The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.": "نفق WireGuard “%1” متوقف. شغّله من الإعدادات ← شبكة WireGuard الخاصة.",
+    "The WireGuard tunnel “%1” is stopped. Start it in Settings → Network & servers → WireGuard VPN.": "نفق WireGuard “%1” متوقف. شغّله من الإعدادات ← الشبكة والخوادم ← شبكة WireGuard الخاصة.",
     "The map server is configured for WireGuard, which is not available.": "خادم الخرائط مُعدّ لاستخدام WireGuard، وهو غير متوفر.",
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "تُحمَّل المربعات والتضاريس والصور عندئذٍ عبر هذا النفق فقط، وليس مباشرة أبدًا.",
     "Used by: %1. Change its connection in Settings first.": "يستخدمه: %1. غيّر اتصاله في الإعدادات أولًا.",
@@ -415,7 +414,11 @@
     "WireGuard: %1": "WireGuard: %1",
     "The keys could not be protected with the Android Keystore, so the profile was not saved.": "تعذّرت حماية المفاتيح باستخدام Android Keystore، لذا لم يُحفظ الملف الشخصي.",
     "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "لا يمكن فك تشفير مفاتيح %1 من ملفات WireGuard الشخصية على هذا الجهاز (مثلًا بعد إعادة التثبيت أو استعادة نسخة احتياطية على هاتف آخر). الصق المفاتيح مجددًا أو استورد تلك الملفات مرة أخرى.",
-    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "لا يمكن فك تشفير مفاتيح “%1” على هذا الجهاز. عدّل الملف الشخصي والصق مفاتيحه مجددًا، أو استورده مرة أخرى."
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "لا يمكن فك تشفير مفاتيح “%1” على هذا الجهاز. عدّل الملف الشخصي والصق مفاتيحه مجددًا، أو استورده مرة أخرى.",
+    "Manage WireGuard profiles…": "إدارة ملفات WireGuard الشخصية…",
+    "Network & servers": "الشبكة والخوادم",
+    "No map server configured. Tap to set one up.": "لم يُعدّ خادم خرائط. اضغط لإعداد واحد.",
+    "Back to Map server": "العودة إلى خادم الخرائط"
   },
   "de": {
     "%1 (custom)": "%1 (benutzerdefiniert)",
@@ -600,7 +603,6 @@
     "No location provider available; check location services": "Kein Standortanbieter verfügbar; Standortdienste prüfen",
     "No map server configured": "Kein Kartenserver eingerichtet",
     "No map server configured yet.": "Noch kein Kartenserver eingerichtet.",
-    "No map server configured. Tap to open Settings.": "Kein Kartenserver eingerichtet. Tippen, um die Einstellungen zu öffnen.",
     "No provider available": "Kein Anbieter verfügbar",
     "Not enough frames captured; no report saved": "Zu wenige Frames erfasst; kein Bericht gespeichert",
     "Open Compass to read heading": "Kompass öffnen, um die Richtung abzulesen",
@@ -825,7 +827,7 @@
     "Starting the WireGuard tunnel “%1”…": "WireGuard-Tunnel „%1“ wird gestartet…",
     "The WireGuard profile of this connection no longer exists. Choose another one in Settings.": "Das WireGuard-Profil dieser Verbindung existiert nicht mehr. Wählen Sie in den Einstellungen ein anderes.",
     "The WireGuard tunnel “%1” could not start (retrying): %2": "Der WireGuard-Tunnel „%1“ konnte nicht starten (neuer Versuch folgt): %2",
-    "The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.": "Der WireGuard-Tunnel „%1“ ist gestoppt. Starten Sie ihn unter Einstellungen → WireGuard VPN.",
+    "The WireGuard tunnel “%1” is stopped. Start it in Settings → Network & servers → WireGuard VPN.": "Der WireGuard-Tunnel „%1“ ist gestoppt. Starten Sie ihn unter Einstellungen → Netzwerk & Server → WireGuard VPN.",
     "The map server is configured for WireGuard, which is not available.": "Der Kartenserver ist für WireGuard konfiguriert, das nicht verfügbar ist.",
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "Kacheln, Gelände und Bilder werden dann nur über diesen Tunnel geladen, nie direkt.",
     "Used by: %1. Change its connection in Settings first.": "Genutzt von: %1. Ändern Sie zuerst dessen Verbindung in den Einstellungen.",
@@ -833,7 +835,11 @@
     "WireGuard: %1": "WireGuard: %1",
     "The keys could not be protected with the Android Keystore, so the profile was not saved.": "Die Schlüssel konnten nicht mit dem Android Keystore geschützt werden, daher wurde das Profil nicht gespeichert.",
     "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "Die Schlüssel von %1 WireGuard-Profilen können auf diesem Gerät nicht entschlüsselt werden (zum Beispiel nach einer Neuinstallation oder einer auf ein anderes Telefon zurückgespielten Sicherung). Fügen Sie die Schlüssel erneut ein oder importieren Sie diese Profile erneut.",
-    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Die Schlüssel von „%1“ können auf diesem Gerät nicht entschlüsselt werden. Bearbeiten Sie das Profil und fügen Sie seine Schlüssel erneut ein, oder importieren Sie es erneut."
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Die Schlüssel von „%1“ können auf diesem Gerät nicht entschlüsselt werden. Bearbeiten Sie das Profil und fügen Sie seine Schlüssel erneut ein, oder importieren Sie es erneut.",
+    "Manage WireGuard profiles…": "WireGuard-Profile verwalten…",
+    "Network & servers": "Netzwerk & Server",
+    "No map server configured. Tap to set one up.": "Kein Kartenserver eingerichtet. Tippen, um einen einzurichten.",
+    "Back to Map server": "Zurück zum Kartenserver"
   },
   "es": {
     "%1 (custom)": "%1 (personalizado)",
@@ -1018,7 +1024,6 @@
     "No location provider available; check location services": "No hay proveedor de ubicación; compruebe los servicios de ubicación",
     "No map server configured": "No hay ningún servidor de mapas configurado",
     "No map server configured yet.": "Aún no se ha configurado un servidor de mapas.",
-    "No map server configured. Tap to open Settings.": "No hay ningún servidor de mapas configurado. Toque para abrir los ajustes.",
     "No provider available": "Ningún proveedor disponible",
     "Not enough frames captured; no report saved": "No se capturaron suficientes fotogramas; no se guardó el informe",
     "Open Compass to read heading": "Abra la brújula para leer el rumbo",
@@ -1243,7 +1248,7 @@
     "Starting the WireGuard tunnel “%1”…": "Iniciando el túnel WireGuard «%1»…",
     "The WireGuard profile of this connection no longer exists. Choose another one in Settings.": "El perfil de WireGuard de esta conexión ya no existe. Elija otro en Configuración.",
     "The WireGuard tunnel “%1” could not start (retrying): %2": "El túnel WireGuard «%1» no pudo iniciarse (reintentando): %2",
-    "The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.": "El túnel WireGuard «%1» está detenido. Inícielo en Configuración → WireGuard VPN.",
+    "The WireGuard tunnel “%1” is stopped. Start it in Settings → Network & servers → WireGuard VPN.": "El túnel WireGuard «%1» está detenido. Inícielo en Configuración → Red y servidores → WireGuard VPN.",
     "The map server is configured for WireGuard, which is not available.": "El servidor de mapas está configurado para WireGuard, que no está disponible.",
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "Los mosaicos, el relieve y las imágenes se cargan entonces solo a través de este túnel, nunca directamente.",
     "Used by: %1. Change its connection in Settings first.": "Usado por: %1. Cambie primero su conexión en Configuración.",
@@ -1251,7 +1256,11 @@
     "WireGuard: %1": "WireGuard: %1",
     "The keys could not be protected with the Android Keystore, so the profile was not saved.": "No se pudieron proteger las claves con el Android Keystore, así que el perfil no se guardó.",
     "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "Las claves de %1 perfiles de WireGuard no se pueden descifrar en este dispositivo (por ejemplo, tras una reinstalación o una copia de seguridad restaurada en otro teléfono). Vuelva a pegar las claves o importe de nuevo esos perfiles.",
-    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Las claves de «%1» no se pueden descifrar en este dispositivo. Edite el perfil y vuelva a pegar sus claves, o impórtelo de nuevo."
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Las claves de «%1» no se pueden descifrar en este dispositivo. Edite el perfil y vuelva a pegar sus claves, o impórtelo de nuevo.",
+    "Manage WireGuard profiles…": "Gestionar perfiles de WireGuard…",
+    "Network & servers": "Red y servidores",
+    "No map server configured. Tap to set one up.": "No hay ningún servidor de mapas configurado. Toque para configurar uno.",
+    "Back to Map server": "Volver al servidor de mapas"
   },
   "fr": {
     "%1 (custom)": "%1 (personnalisé)",
@@ -1436,7 +1445,6 @@
     "No location provider available; check location services": "Aucun fournisseur de localisation ; vérifiez les services de localisation",
     "No map server configured": "Aucun serveur de carte configuré",
     "No map server configured yet.": "Aucun serveur cartographique configuré.",
-    "No map server configured. Tap to open Settings.": "Aucun serveur de carte configuré. Touchez pour ouvrir les paramètres.",
     "No provider available": "Aucun fournisseur disponible",
     "Not enough frames captured; no report saved": "Pas assez d'images enregistrées ; aucun rapport sauvegardé",
     "Open Compass to read heading": "Ouvrez la boussole pour lire le cap",
@@ -1661,7 +1669,7 @@
     "Starting the WireGuard tunnel “%1”…": "Démarrage du tunnel WireGuard « %1 »…",
     "The WireGuard profile of this connection no longer exists. Choose another one in Settings.": "Le profil WireGuard de cette connexion n’existe plus. Choisissez-en un autre dans les paramètres.",
     "The WireGuard tunnel “%1” could not start (retrying): %2": "Le tunnel WireGuard « %1 » n’a pas pu démarrer (nouvel essai) : %2",
-    "The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.": "Le tunnel WireGuard « %1 » est arrêté. Démarrez-le dans Paramètres → WireGuard VPN.",
+    "The WireGuard tunnel “%1” is stopped. Start it in Settings → Network & servers → WireGuard VPN.": "Le tunnel WireGuard « %1 » est arrêté. Démarrez-le dans Paramètres → Réseau et serveurs → WireGuard VPN.",
     "The map server is configured for WireGuard, which is not available.": "Le serveur de cartes est configuré pour WireGuard, qui n’est pas disponible.",
     "Tiles, terrain and imagery are then loaded only through this tunnel, never directly.": "Les tuiles, le relief et l’imagerie sont alors chargés uniquement via ce tunnel, jamais directement.",
     "Used by: %1. Change its connection in Settings first.": "Utilisé par : %1. Modifiez d’abord sa connexion dans les paramètres.",
@@ -1669,6 +1677,10 @@
     "WireGuard: %1": "WireGuard : %1",
     "The keys could not be protected with the Android Keystore, so the profile was not saved.": "Les clés n’ont pas pu être protégées par l’Android Keystore ; le profil n’a donc pas été enregistré.",
     "The keys of %1 WireGuard profiles cannot be decrypted on this device (for example after a reinstall or a backup restored to another phone). Paste the keys again or import those profiles again.": "Les clés de %1 profils WireGuard ne peuvent pas être déchiffrées sur cet appareil (par exemple après une réinstallation ou une sauvegarde restaurée sur un autre téléphone). Collez à nouveau les clés ou réimportez ces profils.",
-    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Les clés de « %1 » ne peuvent pas être déchiffrées sur cet appareil. Modifiez le profil et collez à nouveau ses clés, ou réimportez-le."
+    "The keys of “%1” cannot be decrypted on this device. Edit the profile and paste its keys again, or import it again.": "Les clés de « %1 » ne peuvent pas être déchiffrées sur cet appareil. Modifiez le profil et collez à nouveau ses clés, ou réimportez-le.",
+    "Manage WireGuard profiles…": "Gérer les profils WireGuard…",
+    "Network & servers": "Réseau et serveurs",
+    "No map server configured. Tap to set one up.": "Aucun serveur de cartes configuré. Touchez pour en configurer un.",
+    "Back to Map server": "Retour au serveur de cartes"
   }
 }

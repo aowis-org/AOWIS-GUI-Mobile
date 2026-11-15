@@ -189,10 +189,11 @@ set_source_files_properties(qml/PlumbBobInstrument.qml PROPERTIES QT_RESOURCE_AL
 set_source_files_properties(qml/ToolMenuButton.qml PROPERTIES QT_RESOURCE_ALIAS ToolMenuButton.qml)
 set_source_files_properties(qml/UnitSettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS UnitSettingsPage.qml)
 set_source_files_properties(qml/WireGuardSettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS WireGuardSettingsPage.qml)
+set_source_files_properties(qml/MapServerSettingsPage.qml PROPERTIES QT_RESOURCE_ALIAS MapServerSettingsPage.qml)
 qt_add_qml_module(aowis-mobile
     URI AOWIS.Mobile
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml qml/UnitSettingsPage.qml qml/WireGuardSettingsPage.qml
+    QML_FILES qml/Main.qml qml/UiIcon.qml qml/CompassRose.qml qml/GradienterVial.qml qml/PlumbBobInstrument.qml qml/ToolMenuButton.qml qml/UnitSettingsPage.qml qml/WireGuardSettingsPage.qml qml/MapServerSettingsPage.qml
 )
 
 # Qt generates the Android Manifest and deployment metadata. Keep its stock

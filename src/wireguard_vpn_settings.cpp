@@ -792,7 +792,7 @@ bool WireGuardVpnSettings::proxyFor(const QString &profile_id, QNetworkProxy *pr
     }
     if (this->user_stopped.contains(profile_id))
     {
-        *reason = tr("The WireGuard tunnel “%1” is stopped. Start it in Settings → WireGuard VPN.").arg(name);
+        *reason = tr("The WireGuard tunnel “%1” is stopped. Start it in Settings → Network & servers → WireGuard VPN.").arg(name);
         return false;
     }
     const QHash<QString, Tunnel>::const_iterator it = this->tunnels.constFind(profile_id);

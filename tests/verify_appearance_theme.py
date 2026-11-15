@@ -5,6 +5,7 @@ import re
 
 root = Path(__file__).resolve().parents[1]
 qml = (root / 'qml/Main.qml').read_text()
+map_server_page = (root / 'qml/MapServerSettingsPage.qml').read_text()
 settings = (root / 'src/appearance_settings.cpp').read_text()
 
 
@@ -38,16 +39,18 @@ for mode in (0, 1):
         ratio = contrast(palette(foreground)[mode], palette(background)[mode])
         assert ratio >= min_ratio, f'{foreground} / {background} ({mode}): {ratio:.2f}'
 
+# The map server fields (own page) get the theme colors from Main.qml.
 for field in ('mapServerUrl', 'mapServerPort'):
-    assert re.search(r'id: ' + field + r'\b(?:(?!\n\s*}\n).){0,800}color: root.uiText',
-                     qml, re.S), field
-assert qml.count('placeholderTextColor: root.uiPlaceholder') == 2
+    assert re.search(r'id: ' + field + r'\b(?:(?!\n\s*}\n).){0,800}color: page.textColor',
+                     map_server_page, re.S), field
+assert map_server_page.count('placeholderTextColor: page.placeholderColor') == 2
+assert 'placeholderColor: root.uiPlaceholder' in qml and 'textColor: root.uiText' in qml
 assert qml.count('palette.buttonText: root.uiText') >= 8
 assert qml.count('palette.highlightedText: root.uiSelectedText') >= 5
 assert 'appearanceSettings.setMode' in qml
 assert 'appearanceSettings.dark' in qml
 assert 'colorSchemeChanged' in settings
 assert 'appearance/theme' in settings
-assert 'mapServerSettings.save' in qml
+assert 'mapServerSettings.save' in map_server_page
 assert 'root.navigateBack()' in qml
 print('Appearance palette contrast/source tests passed for dark and light themes.')

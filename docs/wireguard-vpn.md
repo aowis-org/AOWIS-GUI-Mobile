@@ -64,7 +64,7 @@ exits.
 
 ## Map server through WireGuard
 
-Settings → Map server → **Connection**: *Direct (no VPN)* or one of the
+Settings → Network & servers → Map server → **Connection**: *Direct (no VPN)* or one of the
 WireGuard profiles (saved with the map server's URL and port, as
 `mapServer/wireguardProfile`). With a profile:
 
