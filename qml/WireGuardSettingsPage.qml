@@ -333,11 +333,16 @@ Rectangle {
     FileDialog {
         id: confFileDialog
         title: qsTr("Import WireGuard configuration")
-        fileMode: FileDialog.OpenFile
+        // Android's picker returns content:// URIs. In OpenFile mode Qt Quick
+        // Dialogs checks each selected file with QFileInfo::exists(), which
+        // fails for content URIs, so the selection is dropped ("Cannot set …
+        // as a selected file because it doesn't exist") and selectedFile stays
+        // empty. OpenUrl skips that check for non-file schemes (see
+        // QQuickFileDialog::setSelectedFiles()); QFile then opens the content
+        // URI. Older Qt without OpenUrl keeps OpenFile.
+        fileMode: FileDialog.OpenUrl !== undefined ? FileDialog.OpenUrl : FileDialog.OpenFile
         // No name filter: Android's picker filters by MIME type and has none
         // for .conf, which would grey out exactly the files wanted.
-        // Android's native picker may leave selectedFile empty and report the
-        // document only in selectedFiles (or currentFile): take the first set.
         function pickedFile() {
             if (selectedFile.toString() !== "")
                 return selectedFile
