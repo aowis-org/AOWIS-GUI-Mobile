@@ -9,6 +9,7 @@ relative and independent of the checkout directory name.
 | `external/AOWIS-GUI-Render` | `https://github.com/aowis-org/AOWIS-GUI-Render.git` | The AOWIS map (2D/globe, imagery, terrain, HUD, map server client) and its nested pinned bgfx/bx/bimg |
 | `external/GeographicLib` | `https://github.com/geographiclib/geographiclib.git` | Render's geodesy; built by Render from this checkout (`AOWIS_RENDER_GEOGRAPHICLIB_SOURCE_DIR`) |
 | `external/AOWIS-SERVER-DVMDB` | `https://github.com/aowis-org/AOWIS-SERVER-DVMDB.git` | Pinned source dependency for future native personal repository; not compiled, linked or started yet |
+| `external/AOWIS-SERVER-EPANET` | `https://github.com/aowis-org/AOWIS-SERVER-EPANET.git` | Pinned source dependency for future hydraulic simulation; not compiled or linked yet |
 | `external/AOWIS-CONFIG` | `https://github.com/aowis-org/AOWIS-CONFIG.git` | `aowis::config`: configuration storage (owner root `gui-mobile`), currently the WireGuard profiles |
 | `external/AOWIS-NETWORK` | `https://github.com/aowis-org/AOWIS-NETWORK.git` | `AOWIS::Network` / `AOWIS::NetworkQt`: embedded userspace WireGuard engine (Go) behind a loopback SOCKS5 proxy |
 
@@ -26,8 +27,11 @@ For a **new** dependency after applying a source patch, in the actual Mobile Git
 This uses `git submodule add`, creating `.gitmodules` entries and real gitlinks.
 Do not manually create the `external/` directories first. It is safe to repeat
 and does not update existing pins. The existing MODEL registration remains
-`./tools/init_model.sh` (once if its gitlink does not exist); NETWORK is
-registered once with `./tools/init_network.sh`, initialized with
+`./tools/init_model.sh` (once if its gitlink does not exist). EPANET is
+registered once with `./tools/init_epanet.sh`, initialized with
+`./git_submodule_init.sh --epanet`, and deliberately advanced with
+`./git_submodule_update.sh --epanet` (excluded from `--all`, just like DVMDB).
+NETWORK is registered once with `./tools/init_network.sh`, initialized with
 `./git_submodule_init.sh --network` and advanced deliberately with
 `./git_submodule_update.sh --network` (also part of `--all`); CONFIG the same
 way with `./tools/init_config.sh` and `--config`.
@@ -38,18 +42,17 @@ After the gitlinks are committed, future clones use:
 ./git_submodule_init.sh
 ```
 
-To initialize either new dependency alone, use `--geographiclib` or `--dvmdb`.
+To initialize individual source dependencies, use `--geographiclib`, `--dvmdb` or `--epanet`.
 `git_submodule_update.sh --dvmdb` intentionally changes the DVMDB pin to its
 remote branch; avoid that unless reviewing/testing an update. GeographicLib
 should be advanced deliberately to a tested release, not upstream development
 HEAD. Always commit `.gitmodules` and all new/changed gitlinks together.
 
-**DVMDB nested dependency note:** The DVMDB repository itself contains a
-MODEL submodule whose upstream URL may use a machine-specific Git SSH alias.
-Mobile currently only initializes DVMDB's top-level gitlink, not that nested
-copy. This is intentional until its native storage library is integrated.
-Do not blindly invoke `git submodule update --init --recursive` for DVMDB;
-resolve that nested URL explicitly when the embedded DVMDB build is needed.
+**Nested dependency note:** DVMDB and EPANET are currently initialized only
+at their top-level gitlinks, not recursively. DVMDB has a nested MODEL submodule
+whose upstream URL may use a machine-specific Git SSH alias; resolve that
+before integrating its native library. Do not blindly run recursive updates
+on source-only dependencies.
 
 ## Build boundary
 
@@ -63,12 +66,13 @@ NETWORK's `tools/build_wireguard_engine.sh` and passes the result as
 `AOWIS_NETWORK_WIREGUARD_ARCHIVE`; CMake packages it into the APK through
 `QT_ANDROID_EXTRA_LIBS`. A Go c-archive cannot be used on Android: it uses
 local-exec TLS, which cannot be linked into the app's shared library. Go
-module and build caches persist in `$XDG_CACHE_HOME/aowis-mobile/go`. It does not compile DVMDB just because its
-source is present.
+module and build caches persist in `$XDG_CACHE_HOME/aowis-mobile/go`. It does not compile DVMDB or EPANET just because their
+sources are present.
 Linking DVMDB now would introduce native-store, filesystem and nested MODEL
-requirements before the mobile working-copy design is implemented. Adding the
-submodules early establishes a reproducible pin without doing that premature
-integration.
+requirements before the mobile working-copy design is implemented. EPANET's
+solver integration is likewise postponed until local simulation is implemented.
+Adding these source-only submodules establishes reproducible pins without
+premature build or runtime dependencies.
 
 `tools/zip_mobile_project.sh` exports Mobile's own files and dependency metadata,
 not source trees owned by Git submodules. The resulting `mobile.zip` is a source

@@ -10,19 +10,20 @@ cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --network | --config | --all | --help]
+Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --epanet | --network | --config | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
   --render     Same as the default; leave MODEL untouched.
   --model      Advance only AOWIS-SERVER-MODEL to its tracked remote branch.
   --dvmdb      Deliberately advance only the DVMDB gitlink, without nested modules.
+  --epanet     Deliberately advance only the EPANET gitlink, without nested modules.
   --network    Advance only AOWIS-NETWORK to its tracked remote branch.
   --config     Advance only AOWIS-CONFIG to its tracked remote branch.
-  --all        Advance Render, MODEL, NETWORK and CONFIG. Render's nested third-party
-               submodules stay at the commits that Render revision records.
+  --all        Advance Render, MODEL, NETWORK and CONFIG. DVMDB and EPANET
+               are opt-in only. Nested modules stay at recorded commits.
   --help       Show this help.
 
-Review and commit any changed Render/MODEL/DVMDB/NETWORK/CONFIG gitlinks explicitly.
+Review and commit any changed Render/MODEL/DVMDB/EPANET/NETWORK/CONFIG gitlinks explicitly.
 GeographicLib always stays pinned; choose a tested release before changing it.
 bgfx is pinned by Render (the GUI pins the same revisions).
 HELP
@@ -38,6 +39,7 @@ die() {
 
 update_model=false
 update_dvmdb=false
+update_epanet=false
 update_network=false
 update_config=false
 update_render=true
@@ -57,6 +59,11 @@ case "${1:-}" in
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         update_render=false
         update_dvmdb=true
+        ;;
+    --epanet)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        update_render=false
+        update_epanet=true
         ;;
     --network)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
@@ -114,6 +121,15 @@ if "$update_dvmdb"; then
     git submodule update --init --remote --checkout -- "$dvmdb_path"
     printf 'Updated %s to %s. Review and commit the gitlink.\n' \
         "$dvmdb_path" "$(git -C "$dvmdb_path" rev-parse --short HEAD)"
+fi
+
+if "$update_epanet"; then
+    epanet_path='external/AOWIS-SERVER-EPANET'
+    [[ "$(git ls-files --stage -- "$epanet_path")" == '160000 '* ]] ||
+        die 'EPANET gitlink missing. Run ./tools/init_epanet.sh once.'
+    git submodule update --init --remote --checkout -- "$epanet_path"
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$epanet_path" "$(git -C "$epanet_path" rev-parse --short HEAD)"
 fi
 
 if "$update_network"; then

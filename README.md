@@ -57,6 +57,10 @@ creates both `.gitmodules` metadata and the Git submodule gitlink):
 ./tools/init_model.sh
 ```
 
+To register the source-only EPANET dependency in an existing Git checkout,
+run `./tools/init_epanet.sh` once, then commit its Git gitlink together with
+`.gitmodules`. EPANET is not yet built or linked by Mobile.
+
 For new clones, initialize all pinned submodules, including Render's nested
 bgfx/bx/bimg revisions (the same ones the desktop GUI builds):
 
@@ -76,7 +80,9 @@ git add external/AOWIS-GUI-Render
 The updater never advances Render's nested third-party repositories beyond
 the commits the new Render revision records. `./git_submodule_update.sh --all`
 also advances MODEL. `./git_submodule_init.sh --render`, `--model`,
-`--geographiclib` and `--dvmdb` permit selective initialization.
+`--geographiclib`, `--dvmdb` and `--epanet` permit selective initialization.
+Use `./git_submodule_update.sh --epanet` only when deliberately advancing the
+pinned EPANET revision; `--all` does not advance it.
 
 A `.gitmodules` entry is not enough: the repository must also track a gitlink
 (mode `160000`) for each submodule. The initialization/update scripts reject missing gitlinks

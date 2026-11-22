@@ -3,30 +3,30 @@ set -euo pipefail
 
 # Initialize exactly the Git commits recorded by Mobile. Registration of new
 # dependencies is separate: see tools/init_model.sh and
-# tools/init_geographiclib_dvmdb.sh, tools/init_network.sh and
-# tools/init_config.sh. Never follow
-# upstream branches here.
+# tools/init_geographiclib_dvmdb.sh, tools/init_epanet.sh,
+# tools/init_network.sh and tools/init_config.sh. Never follow upstream branches here.
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_init.sh [--render | --model | --geographiclib | --dvmdb | --network | --config | --help]
+Usage: ./git_submodule_init.sh [--render | --model | --geographiclib | --dvmdb | --epanet | --network | --config | --help]
 
-  (no option)      Initialize MODEL, Render, GeographicLib, DVMDB, NETWORK and CONFIG.
+  (no option)      Initialize MODEL, Render, GeographicLib, DVMDB, EPANET, NETWORK and CONFIG.
   --render         Initialize pinned Render and its nested pinned dependencies
                    (bgfx, bx, bimg: the map's GPU library).
   --model          Initialize pinned MODEL.
   --geographiclib  Initialize pinned GeographicLib.
   --dvmdb          Initialize pinned DVMDB without its nested submodules.
+  --epanet         Initialize pinned EPANET without its nested submodules.
   --network        Initialize pinned AOWIS-NETWORK (embedded WireGuard engine).
   --config         Initialize pinned AOWIS-CONFIG (configuration storage).
   --help           Show this help.
 
 First-time registration: tools/init_model.sh, tools/init_geographiclib_dvmdb.sh
-tools/init_network.sh or tools/init_config.sh.
-DVMDB's nested MODEL is deliberately not initialized until native storage
-integration requires it (its upstream .gitmodules may use a private SSH alias).
+tools/init_epanet.sh, tools/init_network.sh or tools/init_config.sh.
+DVMDB and EPANET are source-only dependencies in Mobile. Nested submodules
+are not initialized until integration requires them.
 This command never advances any dependency beyond its recorded Git commit.
 HELP
 }
@@ -39,17 +39,19 @@ render_path='external/AOWIS-GUI-Render'
 model_path='external/AOWIS-SERVER-MODEL'
 geo_path='external/GeographicLib'
 dvmdb_path='external/AOWIS-SERVER-DVMDB'
+epanet_path='external/AOWIS-SERVER-EPANET'
 network_path='external/AOWIS-NETWORK'
 config_path='external/AOWIS-CONFIG'
 paths=()
 case "${1:-}" in
     '')
         [[ $# -eq 0 ]] || { usage >&2; exit 2; }
-        paths=("$model_path" "$render_path" "$geo_path" "$dvmdb_path" "$network_path" "$config_path") ;;
+        paths=("$model_path" "$render_path" "$geo_path" "$dvmdb_path" "$epanet_path" "$network_path" "$config_path") ;;
     --render) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$render_path") ;;
     --model) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$model_path") ;;
     --geographiclib) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$geo_path") ;;
     --dvmdb) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$dvmdb_path") ;;
+    --epanet) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$epanet_path") ;;
     --network) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$network_path") ;;
     --config) [[ $# -eq 1 ]] || { usage >&2; exit 2; }; paths=("$config_path") ;;
     --help|-h) usage; exit 0 ;;
@@ -59,11 +61,11 @@ esac
 # A .gitmodules entry without the index gitlink is not a registered submodule.
 for path in "${paths[@]}"; do
     [[ "$(git ls-files --stage -- "$path")" == '160000 '* ]] ||
-        die "Missing Git submodule gitlink for $path. Use tools/init_model.sh, tools/init_geographiclib_dvmdb.sh, tools/init_network.sh or tools/init_config.sh to register new dependencies."
+        die "Missing Git submodule gitlink for $path. Register new dependencies with the matching tools/init_*.sh script first."
 done
 
-# DVMDB may contain a private-address nested MODEL gitlink. Deliberately do
-# not recurse into it, as its MODEL copy is not yet needed by Mobile.
+# DVMDB and EPANET are currently source-only: deliberately do not recurse
+# into their nested modules; initialization is only needed upon integration.
 git submodule sync -- "${paths[@]}"
 git submodule update --init --checkout -- "${paths[@]}"
 for path in "${paths[@]}"; do

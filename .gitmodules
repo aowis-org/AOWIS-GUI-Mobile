@@ -10,6 +10,9 @@
 [submodule "external/AOWIS-SERVER-DVMDB"]
 	path = external/AOWIS-SERVER-DVMDB
 	url = https://github.com/aowis-org/AOWIS-SERVER-DVMDB.git
+[submodule "external/AOWIS-SERVER-EPANET"]
+	path = external/AOWIS-SERVER-EPANET
+	url = https://github.com/aowis-org/AOWIS-SERVER-EPANET.git
 [submodule "external/AOWIS-NETWORK"]
 	path = external/AOWIS-NETWORK
 	url = https://github.com/aowis-org/AOWIS-NETWORK.git
