@@ -577,7 +577,13 @@ void WireGuardVpnSettings::pickConfFile()
             case AndroidDocumentPicker::Outcome::TooLarge:
                 this->setError(tr("The selected file is larger than 2 MiB."));
                 return;
+            case AndroidDocumentPicker::Outcome::NotFound:
+                this->setError(tr("The document provider could not open the selected file."));
+                return;
             case AndroidDocumentPicker::Outcome::Unreadable:
+                this->setError(tr("Could not read the selected file: %1").arg(text));
+                return;
+            case AndroidDocumentPicker::Outcome::Denied:
                 this->setError(tr("Could not read the selected file: %1").arg(tr("Android denied access to it.")));
                 return;
             case AndroidDocumentPicker::Outcome::Unavailable:

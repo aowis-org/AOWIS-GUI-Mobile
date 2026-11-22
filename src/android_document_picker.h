@@ -13,13 +13,14 @@
 namespace AndroidDocumentPicker
 {
 
-enum class Outcome { Picked, Cancelled, Unreadable, TooLarge, Unavailable };
+enum class Outcome { Picked, Cancelled, Unreadable, Denied, NotFound, TooLarge, Unavailable };
 
 // True on Android; elsewhere pickText() reports Unavailable.
 bool available();
 
 // Opens the picker; done(outcome, display name, UTF-8 text) runs later on
 // context's thread, never after context is destroyed. At most max_bytes.
+// For Unreadable, text contains a diagnostic without document contents.
 void pickText(QObject *context, int max_bytes,
               std::function<void(Outcome, const QString &name, const QString &text)> done);
 

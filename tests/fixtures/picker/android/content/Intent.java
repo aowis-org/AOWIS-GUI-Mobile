@@ -10,5 +10,10 @@ public class Intent {
     public Intent addCategory(String category) { this.category = category; return this; }
     public Intent setType(String type) { this.type = type; return this; }
     public Intent putExtra(String name, boolean value) { this.multiple = value; return this; }
+    public static final int FLAG_GRANT_READ_URI_PERMISSION = 1;
+    public int flags;
+    public ClipData clip;
+    public Intent addFlags(int flags) { this.flags |= flags; return this; }
+    public ClipData getClipData() { return clip; }
     public Uri getData() { return data; }
 }

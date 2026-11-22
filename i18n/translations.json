@@ -421,7 +421,9 @@
     "Access to the configuration directory was denied: %1": "تم رفض الوصول إلى مجلد الإعدادات: %1",
     "Could not read the selected file: %1": "تعذّرت قراءة الملف المحدد: %1",
     "The file picker did not return a file.": "لم يُرجع منتقي الملفات أي ملف.",
-    "Android denied access to it.": "رفض Android الوصول إليه."
+    "Android denied access to it.": "رفض Android الوصول إليه.",
+    "The document provider could not open the selected file.": "تعذّر على موفّر المستندات فتح الملف المحدد.",
+    "Reading the selected document failed.": "تعذّرت قراءة المستند المحدد."
   },
   "de": {
     "%1 (custom)": "%1 (benutzerdefiniert)",
@@ -845,7 +847,9 @@
     "Access to the configuration directory was denied: %1": "Zugriff auf das Konfigurationsverzeichnis verweigert: %1",
     "Could not read the selected file: %1": "Die ausgewählte Datei konnte nicht gelesen werden: %1",
     "The file picker did not return a file.": "Die Dateiauswahl hat keine Datei geliefert.",
-    "Android denied access to it.": "Android hat den Zugriff verweigert."
+    "Android denied access to it.": "Android hat den Zugriff verweigert.",
+    "The document provider could not open the selected file.": "Der Dokumentanbieter konnte die ausgewählte Datei nicht öffnen.",
+    "Reading the selected document failed.": "Das ausgewählte Dokument konnte nicht gelesen werden."
   },
   "es": {
     "%1 (custom)": "%1 (personalizado)",
@@ -1269,7 +1273,9 @@
     "Access to the configuration directory was denied: %1": "Acceso denegado a la carpeta de configuración: %1",
     "Could not read the selected file: %1": "No se pudo leer el archivo seleccionado: %1",
     "The file picker did not return a file.": "El selector de archivos no devolvió ningún archivo.",
-    "Android denied access to it.": "Android denegó el acceso."
+    "Android denied access to it.": "Android denegó el acceso.",
+    "The document provider could not open the selected file.": "El proveedor de documentos no pudo abrir el archivo seleccionado.",
+    "Reading the selected document failed.": "No se pudo leer el documento seleccionado."
   },
   "fr": {
     "%1 (custom)": "%1 (personnalisé)",
@@ -1693,6 +1699,8 @@
     "Access to the configuration directory was denied: %1": "Accès au dossier de configuration refusé : %1",
     "Could not read the selected file: %1": "Impossible de lire le fichier sélectionné : %1",
     "The file picker did not return a file.": "Le sélecteur de fichiers n’a renvoyé aucun fichier.",
-    "Android denied access to it.": "Android en a refusé l’accès."
+    "Android denied access to it.": "Android en a refusé l’accès.",
+    "The document provider could not open the selected file.": "Le fournisseur de documents n’a pas pu ouvrir le fichier sélectionné.",
+    "Reading the selected document failed.": "La lecture du document sélectionné a échoué."
   }
 }
