@@ -123,7 +123,7 @@ Window {
             mapModeMenu.close()
         } else if (mapMenu.visible) {
             mapMenu.close()
-        } else if (navigationDrawer.opened) {
+        } else if (navigationDrawer.visible) {
             navigationDrawer.close()
         } else if (activePage === "wireguard") {
             openPage(wireguardReturnPage)
@@ -138,18 +138,21 @@ Window {
         }
     }
 
-    // Qt 6.12 sends an unhandled Android Back to the background. A window-
-    // level Shortcut works even when a Settings TextField owns keyboard focus.
+    // The focused drawer handles Back/Escape using its native popup close policy.
+    // Keep page shortcuts inactive while it is visible, including transitions.
+    // A window-level shortcut handles secondary pages even with a focused TextField.
     Shortcut {
         sequences: ["Back"]
         enabled: Qt.platform.os === "android" &&
-                 (mapMenu.visible || mapModeMenu.visible || navigationDrawer.opened || root.activePage !== "map")
+                 !navigationDrawer.visible &&
+                 (mapMenu.visible || mapModeMenu.visible || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
     Shortcut {
         sequence: "Escape"
         enabled: Qt.platform.os !== "android" &&
-                 (mapMenu.visible || mapModeMenu.visible || navigationDrawer.opened || root.activePage !== "map")
+                 !navigationDrawer.visible &&
+                 (mapMenu.visible || mapModeMenu.visible || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
     function updateLocation() {
@@ -1770,8 +1773,9 @@ Window {
         height: root.height
         edge: Qt.RightEdge
         modal: true
-        // Back/Escape go through navigateBack(), in the same order everywhere.
-        closePolicy: Popup.CloseOnReleaseOutside
+        // Give the modal drawer focus so Qt handles Android Back and Escape.
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnReleaseOutside
         background: Rectangle {
             color: root.uiSurface
             border.color: root.uiBorder

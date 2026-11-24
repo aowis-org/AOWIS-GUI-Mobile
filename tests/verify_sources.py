@@ -141,7 +141,7 @@ checks = [
      'root.openPage("diagnostics")' in qml),
     ("right-side mobile navigation", 'id: hamburgerButton' in qml and
      'anchors.right: parent.right' in qml and 'edge: Qt.RightEdge' in qml and
-     'closePolicy: Popup.CloseOnReleaseOutside' in qml),
+     'closePolicy: Popup.CloseOnEscape | Popup.CloseOnReleaseOutside' in qml),
     ("top-left combined Map/workspace mode button", 'id: mapControlGroup' in qml and
      'anchors.top: hamburgerButton.top' in qml and 'width: 105' in qml and
      qml.index('id: mapMenuButton') < qml.index('id: mapModeButton') < qml.index('id: mapMenu\n') and
@@ -159,7 +159,7 @@ checks = [
      'root.distributionMapMode = modelData.mode' in qml and
      'root.distributionMapMode === modelData.mode' in qml and
      'if (mapModeMenu.visible)' in qml and
-     'mapMenu.visible || mapModeMenu.visible || navigationDrawer.opened' in qml and
+     'mapMenu.visible || mapModeMenu.visible || root.activePage !== "map"' in qml and
      re.findall(r'\{ mode: "([^"\n]+)", title: qsTr\("([^"\n]+)"\), icon: "([^"\n]+)" \}', qml) == [
          ('monitor', 'Distribution Map Monitor', 'distributionMonitor'),
          ('editor', 'Distribution Map Editor', 'distributionEditor')] and
@@ -194,11 +194,16 @@ checks = [
      'readonly property bool selected: index === root.mainTabIndex' in nav_qml),
     ("Android Back returns from secondary pages", 'sequences: ["Back"]' in qml and
      'Qt.platform.os === "android"' in qml and
-     'navigationDrawer.opened || root.activePage !== "map"' in qml and
+     '(mapMenu.visible || mapModeMenu.visible || root.activePage !== "map")' in qml and
      'onActivated: root.navigateBack()' in qml and
      'function navigateBack()' in qml and
      'navigationDrawer.close()' in qml and
      'openPage("map")' in qml),
+    ("hamburger drawer handles Back/Escape before page navigation",
+     'focus: true' in qml.split('id: navigationDrawer', 1)[1].split('background: Rectangle', 1)[0] and
+     'closePolicy: Popup.CloseOnEscape | Popup.CloseOnReleaseOutside' in qml.split('id: navigationDrawer', 1)[1] and
+     qml.count('!navigationDrawer.visible &&\n                 (mapMenu.visible || mapModeMenu.visible || root.activePage !== "map")') == 2 and
+     'else if (navigationDrawer.visible) {\n            navigationDrawer.close()' in qml),
     ("desktop Escape returns to map", 'sequence: "Escape"' in qml and
      'Qt.platform.os !== "android"' in qml),
     ("MAP-owned provider and upstream settings", 'mobileMapSettings' in main and
