@@ -44,16 +44,34 @@ Persistent data is stored under the app-private data location in `map/raster`,
 `map/terrain` and `map/provider-catalogs`. MAP owns the storage and provider
 settings (AOWIS-CONFIG owner `mobile-map`).
 
-Settings → Network & servers → Map server configures an optional upstream
-(default port **8122**). When configured, the single upstream is authoritative:
-missing data must use it, never a direct origin. A WireGuard upstream is skipped
-if its SOCKS5 tunnel is unavailable; validated provider snapshots and cached
-tiles can still be used. Without an upstream, MAP's local acquisition policy
-applies. Settings failures disable remote fetching. Changing the connection
-updates the existing backend rather than recreating the renderer repositories.
-Diagnostics → **Reload map server** reapplies the configuration.
+**Settings → Network & servers → Map settings** manages local and inherited
+imagery providers and an ordered list of upstream MAP servers. The default
+upstream port is **8122**; another port may be specified in the URL.
 
-The multiple-upstream and provider editing UI will be added separately.
+- Provider definitions, zoom range, availability, remote downloads and lossy
+  transfer are editable for local providers. Inherited definitions are read-only;
+  local availability and acquisition/routing policy can be changed.
+- Upstreams have a stable unique name, URL, optional API key and optional
+  WireGuard profile. Global order and explicit per-provider order are editable.
+  An empty provider route uses global order; use the reset action after removing
+  obsolete upstream names from a route.
+- Adding the first upstream disables direct provider downloads. The direct
+  download switch explicitly permits origin downloads. Poor Internet mode
+  and JPEG quality use MAP's existing cascade settings.
+- Existing entries autosave on completed field edits or toggles; new entries
+  are created with Add. Validation errors are shown without writing invalid settings.
+- The first startup with a legacy endpoint migrates it into MAP's cascade
+  repository, preserving its port and WireGuard profile. Removing the upstream
+  does not resurrect it on later startups.
+
+Each WireGuard upstream is skipped unless its own SOCKS5 tunnel is available;
+validated provider snapshots and cached tiles remain usable. Settings failures
+block remote fetching. Changes update the existing backend rather than
+recreating renderer repositories. Diagnostics → **Reload map server** reapplies
+runtime configuration. The GUI never reads MAP's configuration files directly.
+
+Personal renderer fallback chains and offline area download/storage management
+are separate future tasks.
 
 ## Input
 

@@ -16,11 +16,9 @@ class QWheelEvent;
 // terrain) inside the Qt Quick scene. The map is drawn underneath the QML
 // scene into Qt Quick's own OpenGL / OpenGL ES context (the view's host
 // context mode): this item must fill the window and stay below the QML
-// controls. Tiles, terrain and the imagery providers come from the
-// aowis-server-map at serverUrl; with wireguardProfileId set only through that
-// WireGuard profile's tunnel (from 'wireguard', the WireGuardVpnSettings):
-// while the tunnel is not running nothing is requested (serverBlocked, the
-// reason in serverStatus), never directly.
+// controls. Tiles and terrain use the embedded MAP library. Its configured
+// upstreams are contacted only through their selected transports; cached data
+// remains available when those transports are offline.
 //
 // Input: one finger (or the left mouse button) pans, two fingers pinch-zoom
 // and, on the globe, turn (rotate) and tilt (move up/down); the wheel zooms,
@@ -32,10 +30,8 @@ class QWheelEvent;
 class MobileMapView : public QQuickItem
 {
     Q_OBJECT
-    Q_PROPERTY(QString serverUrl READ serverUrl WRITE setServerUrl NOTIFY serverUrlChanged)
+    Q_PROPERTY(QObject *mapSettings READ mapSettings WRITE setMapSettings NOTIFY mapSettingsChanged)
     Q_PROPERTY(QObject *wireguard READ wireguard WRITE setWireguard NOTIFY wireguardChanged)
-    Q_PROPERTY(QString wireguardProfileId READ wireguardProfileId WRITE setWireguardProfileId
-               NOTIFY wireguardChanged)
     Q_PROPERTY(bool serverBlocked READ serverBlocked NOTIFY statusChanged)
     Q_PROPERTY(bool darkTheme READ darkTheme WRITE setDarkTheme NOTIFY darkThemeChanged)
     Q_PROPERTY(bool rendererAvailable READ rendererAvailable CONSTANT)
@@ -77,12 +73,10 @@ public:
     explicit MobileMapView(QQuickItem *parent = nullptr);
     ~MobileMapView() override;
 
-    QString serverUrl() const;
-    void setServerUrl(const QString &url);
+    QObject *mapSettings() const;
+    void setMapSettings(QObject *settings);
     QObject *wireguard() const;
     void setWireguard(QObject *settings);
-    QString wireguardProfileId() const;
-    void setWireguardProfileId(const QString &id);
     bool serverBlocked() const;
     bool darkTheme() const;
     void setDarkTheme(bool dark);
@@ -136,7 +130,7 @@ public:
     Q_INVOKABLE void reloadServer();
 
 signals:
-    void serverUrlChanged();
+    void mapSettingsChanged();
     void wireguardChanged();
     void darkThemeChanged();
     void cameraChanged();

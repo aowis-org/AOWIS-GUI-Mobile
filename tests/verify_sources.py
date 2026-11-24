@@ -87,17 +87,17 @@ checks = [
     ("embedded MAP catalog and persistent storage without loopback", all(
         token in (root / "src/mobile_embedded_map_backend.cpp").read_text()
         for token in ("QStandardPaths::AppDataLocation", "QStringLiteral(\"raster\")",
-                      "QStringLiteral(\"terrain\")", "SettingsRepository::openForCurrentUser",
+                      "QStringLiteral(\"terrain\")", "MobileMapSettings::openRepository",
                       "this->provider_catalog->available()", "cascade.allow_direct_fetch = false")) and
      all(token not in (root / "src/mobile_embedded_map_backend.cpp").read_text() +
          (root / "src/mobile_embedded_map_backend.h").read_text()
          for token in ("QTcpServer", "QTcpSocket", "catalogServer", "127.0.0.1")) and
      "MapImageryProviderDirectory" in (root / "src/mobile_map_provider_directory.h").read_text() and
      "InterfaceServerMapREST" not in source and
-     "hasWireGuardTransport(upstream)" in source and
+     "cascadeUpstreamUsable(upstream)" in source and
      "No map server configured. Tap to set one up." not in qml and
      "aowis-mobile-embedded-map-runtime" in cmake),
-    ("map server from the settings", "serverUrl: mapServerSettings.endpointUrl" in qml and
+    ("map server from the settings", "mapSettings: mobileMapSettings" in qml and
      "MobileEmbeddedMapTransport(*backend, parent)" in source and "catalog.replace(this->backend->availableProviders())" in source),
     ("map gestures and Qt Quick HUD", "void touchEvent(QTouchEvent *event) override;" in header and
      "mapViewHudEnabled() const override { return false; }" in source and
@@ -188,11 +188,15 @@ checks = [
      'openPage("map")' in qml),
     ("desktop Escape returns to map", 'sequence: "Escape"' in qml and
      'Qt.platform.os !== "android"' in qml),
-    ("persistent map server settings", 'mapServerSettings' in main and
-     'QSettings' in (root / "src/map_server_settings.cpp").read_text() and
-     'mapServerSettings.save' in map_server_page and 'IntValidator { bottom: 1; top: 65535 }' in map_server_page and
-     'Qt.ImhDigitsOnly' in map_server_page and 'MapServerSettingsPage {' in qml and
-     'root.openPage("mapserver")' in qml and 'qsTr("Network & servers")' in qml),
+    ("MAP-owned provider and upstream settings", 'mobileMapSettings' in main and
+     'MapServerSettings mapServerSettings; // Legacy endpoint migration only.' in main and
+     all(token in map_server_page for token in ('mobileMapSettings.addProvider', 'mobileMapSettings.addUpstream',
+         'mobileMapSettings.setProviderField', 'mobileMapSettings.setUpstreamField',
+         'mobileMapSettings.setRoutes', 'mobileMapSettings.setAcquisition', 'mobileMapSettings.moveUpstream',
+         'default AOWIS MAP server port is 8122', 'onEditingFinished', 'TextInput.Password')) and
+     'MapServerSettingsPage {' in qml and 'root.openPage("mapserver")' in qml and
+     'qsTr("Network & servers")' in qml and 'mapServerSettings.save' not in map_server_page and
+     'map-upstream/' in source),
     ("system dark light theme and explicit field contrast", 'appearanceSettings.mode' in qml and
      'appearanceSettings.dark' in qml and 'appearanceSettings.setMode' in qml and
      'placeholderColor: root.uiPlaceholder' in qml and

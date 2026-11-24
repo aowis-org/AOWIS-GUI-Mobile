@@ -15,7 +15,7 @@ public:
     explicit MobileEmbeddedMapBackend(QObject *parent = nullptr,
                                       const QString &data_root = {},
                                       const QString &settings_root = {});
-    void configure(const Aowis::Map::MapCascadeUpstream &upstream);
+    void configure(const Aowis::Map::MapCascadeConfig &runtime_cascade, bool settings_ready = true);
     QVector<Aowis::Map::AvailableMapProvider> availableProviders() const;
     MapTiles *tiles() const { return this->map_tiles.get(); }
     Aowis::Map::TerrainData *terrain() const { return this->terrain_data.get(); }

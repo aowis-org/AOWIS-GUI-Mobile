@@ -149,7 +149,8 @@ if(ANDROID)
     # static TIFF archive's private zlib dependency.
     target_link_libraries(aowis-server-map-core PRIVATE ZLIB::ZLIB)
 endif()
-target_sources(aowis-mobile PRIVATE src/embedded_map_check.cpp src/embedded_map_check.h)
+target_sources(aowis-mobile PRIVATE src/embedded_map_check.cpp src/embedded_map_check.h
+    src/mobile_map_settings.cpp src/mobile_map_settings.h)
 target_link_libraries(aowis-mobile PRIVATE AOWIS::ServerMap)
 
 # Embedded userspace WireGuard (wireguard-go + gVisor netstack behind a
@@ -384,6 +385,7 @@ if(BUILD_TESTING)
     if(AOWIS_MOBILE_WITH_BGFX)
         add_executable(aowis-mobile-embedded-map-runtime-tests
             tests/embedded_map_runtime_tests.cpp
+            src/mobile_map_settings.cpp src/mobile_map_settings.h
             src/mobile_embedded_map_backend.cpp src/mobile_embedded_map_backend.h
             src/mobile_embedded_map_transport.cpp src/mobile_embedded_map_transport.h
             src/mobile_map_provider_directory.cpp src/mobile_map_provider_directory.h)

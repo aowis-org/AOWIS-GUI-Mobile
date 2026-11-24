@@ -1,4 +1,5 @@
 #include "mobile_embedded_map_backend.h"
+#include "mobile_map_settings.h"
 #include "mobile_map_provider_directory.h"
 #include "mobile_embedded_map_transport.h"
 #include <aowis/map/settings_repository.h>
@@ -10,12 +11,75 @@
 #include <QTimer>
 #include <QTemporaryDir>
 
+static bool checkSettings(const QString &root)
+{
+    const QString old_url = QStringLiteral("http://192.0.2.1:8122");
+    const QString profile = QStringLiteral("0199cc11-0000-7000-8000-000000000001");
+    QString provider;
+    Aowis::Map::AvailableMapProvider inherited;
+    inherited.inherited = true;
+    inherited.provider.id = QStringLiteral("0199cc11-0000-7000-8000-000000000002");
+    inherited.provider.name = QStringLiteral("Inherited imagery");
+    inherited.provider.url_template = QStringLiteral("https://example.org/{z}/{x}/{y}.png");
+    {
+        MobileMapSettings settings(old_url, profile, nullptr, root);
+        if (!settings.ready() || settings.upstreams().size() != 1 || settings.allowDirectFetch() ||
+            settings.profileUsers(profile).size() != 1) return false;
+        if (!settings.addUpstream(QStringLiteral("second"), QStringLiteral("https://192.0.2.2"), profile, {}) ||
+            settings.cascadeConfig().upstreams.last().url.port() != 8122 ||
+            !settings.moveUpstream(QStringLiteral("second"), -1) ||
+            settings.cascadeConfig().upstreams.first().name != QStringLiteral("second") ||
+            settings.profileUsers(profile).size() != 2) return false;
+        if (settings.addUpstream(QStringLiteral("duplicate"), QStringLiteral("https://192.0.2.2:8122"), {}, {})) return false;
+        settings.setAvailable({inherited});
+        if (!settings.setProviderField(inherited.provider.id, QStringLiteral("enabled"), false) ||
+            settings.setProviderField(inherited.provider.id, QStringLiteral("name"), QStringLiteral("Forbidden")) ||
+            settings.setAcquisition(inherited.provider.id, QStringLiteral("direct"))) return false;
+        provider = settings.addProvider(QStringLiteral("Test imagery"), QStringLiteral("https://example.org/{z}/{x}/{y}.png"));
+        if (provider.isEmpty() || settings.addProvider(QStringLiteral("Invalid"), QStringLiteral("not-a-template")) != QString() ||
+            !settings.setProviderField(provider, QStringLiteral("maxZoom"), 16) ||
+            settings.setProviderField(provider, QStringLiteral("minZoom"), 17) ||
+            !settings.setProviderField(provider, QStringLiteral("enabled"), false) ||
+            !settings.setAcquisition(provider, QStringLiteral("cascade")) ||
+            settings.setAcquisition(provider, QStringLiteral("direct")) ||
+            !settings.setRoutes(provider, {QStringLiteral("second"), QStringLiteral("mobile-upstream")}) ||
+            !settings.setPoorInternet(true) || !settings.setJpegQuality(65)) return false;
+    }
+    {
+        MobileMapSettings settings(old_url, profile, nullptr, root);
+        if (!settings.ready() || settings.upstreams().size() != 2 || settings.jpegQuality() != 65 || !settings.poorInternet()) return false;
+        settings.setAvailable({inherited});
+        bool found = false;
+        bool inherited_disabled = false;
+        for (const QVariant &value : settings.providers())
+        {
+            const QVariantMap p = value.toMap();
+            if (p.value(QStringLiteral("id")).toString() == inherited.provider.id)
+                inherited_disabled = p.value(QStringLiteral("inherited")).toBool() &&
+                    !p.value(QStringLiteral("enabled")).toBool();
+            if (p.value(QStringLiteral("id")).toString() != provider) continue;
+            found = p.value(QStringLiteral("maxZoom")).toInt() == 16 &&
+                !p.value(QStringLiteral("enabled")).toBool() &&
+                p.value(QStringLiteral("mode")).toString() == QStringLiteral("cascade") &&
+                p.value(QStringLiteral("routes")).toStringList().size() == 2;
+        }
+        if (!found || !inherited_disabled || !settings.removeUpstream(QStringLiteral("second")) ||
+            !settings.removeUpstream(QStringLiteral("mobile-upstream")) || settings.allowDirectFetch() ||
+            !settings.profileUsers(profile).isEmpty()) return false;
+    }
+    MobileMapSettings restarted(old_url, profile, nullptr, root);
+    return restarted.ready() && restarted.upstreams().isEmpty() && !restarted.allowDirectFetch() &&
+        restarted.removeProvider(provider);
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     QTemporaryDir temporary;
     if (!temporary.isValid()) return 1;
     const QDir root(temporary.path());
+    if (!checkSettings(root.filePath(QStringLiteral("settings-ui"))))
+    { qCritical() << "MAP settings migration/persistence failed"; return 1; }
     const QString settings = root.filePath(QStringLiteral("settings"));
     const QString data = root.filePath(QStringLiteral("data"));
     QString error;
@@ -34,13 +98,14 @@ int main(int argc, char **argv)
     upstream.name = QStringLiteral("mobile-upstream");
     upstream.url = QUrl(QStringLiteral("http://192.0.2.1:8122"));
     upstream.wireguard_profile_id = QStringLiteral("unavailable-test-tunnel");
+    cascade.upstreams.append(upstream);
     QString provider;
     // Valid tiny PNG; renderer transports cached data without modifying it.
     const QByteArray png = QByteArray::fromBase64(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aA9sAAAAASUVORK5CYII=");
     {
         MobileEmbeddedMapBackend backend(nullptr, data, settings);
-        backend.configure(upstream);
+        backend.configure(cascade);
         if (!backend.settingsError().isEmpty() || !backend.terrainReady()) return 1;
         MobileMapProviderDirectory directory;
         directory.replace(backend.availableProviders());
@@ -62,7 +127,7 @@ int main(int argc, char **argv)
     }
     // A new backend, no in-memory tile cache, same on-disk storage.
     MobileEmbeddedMapBackend restarted(nullptr, data, settings);
-    restarted.configure(upstream);
+    restarted.configure(cascade);
     if (!restarted.settingsError().isEmpty() || !restarted.terrainReady()) return 1;
     MobileMapProviderDirectory directory;
     directory.replace(restarted.availableProviders());

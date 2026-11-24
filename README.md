@@ -18,13 +18,13 @@ on the globe, turn and tilt; the mouse wheel zooms and the right button
 orbits the globe on desktop.
 
 The embedded MAP library loads and persistently caches imagery and terrain.
-**Settings → Network & servers → Map server** configures an optional upstream
-(HTTP/HTTPS, default port 8122). The top-left map menu controls GPS acquisition and optional auto-pan.
+**Settings → Network & servers → Map settings** manages imagery providers,
+ordered upstreams (HTTP/HTTPS, default port 8122), WireGuard and acquisition policy. The top-left map menu controls GPS acquisition and optional auto-pan.
 The location button re-centres the map on demand. See [the map](docs/map.md).
 
 The hamburger menu opens **Settings → Appearance** (system/dark/light theme),
 **Settings → Language** (English, Français, العربية, Deutsch, Español; live
-change without restart), **Settings → Network & servers → Map server**, the instruments (compass,
+change without restart), **Settings → Network & servers → Map settings**, the instruments (compass,
 gradienter, plumb bob, flashlight) and **Diagnostics** (map renderer state,
 map server status, lifecycle recovery counters, map server reload).
 The Android APK builds in a pinned Docker toolchain on Arch Linux.

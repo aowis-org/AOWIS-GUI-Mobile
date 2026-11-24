@@ -118,7 +118,9 @@ Window {
             navigationDrawer.close()
         } else if (activePage === "wireguard") {
             openPage(wireguardReturnPage)
-        } else if (activePage === "units" || activePage === "mapserver") {
+        } else if (activePage === "mapserver") {
+            mapServerPage.goBack()
+        } else if (activePage === "units") {
             openPage("settings")
         } else if (activePage !== "map") {
             openPage("map")
@@ -160,9 +162,8 @@ Window {
         anchors.fill: parent
         visible: root.activePage === "map"
         enabled: root.activePage === "map" && !navigationDrawer.opened
-        serverUrl: mapServerSettings.endpointUrl
+        mapSettings: mobileMapSettings
         wireguard: wireguardVpnSettings
-        wireguardProfileId: mapServerSettings.wireguardProfileId
         darkTheme: root.darkTheme
     }
 
@@ -205,7 +206,7 @@ Window {
     // The map server is reached only through its WireGuard tunnel, which is
     // not running: say why, over the map, and where to fix it.
     Button {
-        visible: root.activePage === "map" && mapServerSettings.configured && mapView.serverBlocked
+        visible: root.activePage === "map" && mapView.serverBlocked
         anchors.top: parent.top
         anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left
         anchors.right: hamburgerButton.left
@@ -907,7 +908,7 @@ Window {
                     Button {
                         id: mapServerButton
                         Layout.fillWidth: true
-                        text: qsTr("Map server")
+                        text: qsTr("Map settings")
                         palette.buttonText: root.uiText
                         palette.text: root.uiText
                         background: Rectangle {
@@ -919,14 +920,9 @@ Window {
                         onClicked: root.openPage("mapserver")
                     }
                     Label {
-                        text: !mapServerSettings.configured
+                        text: mobileMapSettings.upstreams.length === 0
                               ? qsTr("No upstream configured. Local map acquisition policy applies.")
-                              : mapServerSettings.wireguardProfileId === ""
-                                ? qsTr("Saved endpoint: %1").arg(mapServerSettings.endpointUrl)
-                                : qsTr("Saved endpoint: %1 through WireGuard “%2”").arg(mapServerSettings.endpointUrl)
-                                      .arg(wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId) !== ""
-                                           ? wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId)
-                                           : qsTr("Missing WireGuard profile"))
+                              : qsTr("MAP upstream servers") + ": " + mobileMapSettings.upstreams.length
                         color: root.uiMuted
                         font.pixelSize: 12
                         wrapMode: Text.WrapAnywhere
@@ -1104,7 +1100,7 @@ Window {
         successColor: root.uiSuccess
         errorColor: root.uiError
         rightToLeft: languageSettings.rightToLeft
-        backText: root.wireguardReturnPage === "mapserver" ? qsTr("Back to Map server") : qsTr("Back to Settings")
+        backText: root.wireguardReturnPage === "mapserver" ? qsTr("Back to Map settings") : qsTr("Back to Settings")
         onBackRequested: root.openPage(root.wireguardReturnPage)
     }
 

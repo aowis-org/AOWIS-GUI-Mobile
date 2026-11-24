@@ -39,11 +39,12 @@ for mode in (0, 1):
         ratio = contrast(palette(foreground)[mode], palette(background)[mode])
         assert ratio >= min_ratio, f'{foreground} / {background} ({mode}): {ratio:.2f}'
 
-# The map server fields (own page) get the theme colors from Main.qml.
-for field in ('mapServerUrl', 'mapServerPort'):
-    assert re.search(r'id: ' + field + r'\b(?:(?!\n\s*}\n).){0,800}color: page.textColor',
-                     map_server_page, re.S), field
-assert map_server_page.count('placeholderTextColor: page.placeholderColor') == 2
+# All provider/upstream fields share a themed Field component.
+assert 'component Field: TextField' in map_server_page
+assert 'color: page.textColor' in map_server_page
+assert 'placeholderTextColor: page.placeholderColor' in map_server_page
+assert 'component SavedField: Field' in map_server_page
+assert 'component MapCombo: ComboBox' in map_server_page
 assert 'placeholderColor: root.uiPlaceholder' in qml and 'textColor: root.uiText' in qml
 assert qml.count('palette.buttonText: root.uiText') >= 8
 assert qml.count('palette.highlightedText: root.uiSelectedText') >= 5
@@ -51,6 +52,6 @@ assert 'appearanceSettings.setMode' in qml
 assert 'appearanceSettings.dark' in qml
 assert 'colorSchemeChanged' in settings
 assert 'appearance/theme' in settings
-assert 'mapServerSettings.save' in map_server_page
+assert 'mobileMapSettings.setUpstreamField' in map_server_page
 assert 'root.navigateBack()' in qml
 print('Appearance palette contrast/source tests passed for dark and light themes.')

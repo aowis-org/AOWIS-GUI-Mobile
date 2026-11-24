@@ -1,5 +1,6 @@
 #include "mobile_map_view.h"
 #include "map_server_settings.h"
+#include "mobile_map_settings.h"
 #include "appearance_settings.h"
 #include "language_settings.h"
 #include "unit_profile_settings.h"
@@ -60,7 +61,8 @@ int main(int argc, char *argv[])
         return checkEmbeddedMap();
 
     qmlRegisterType<MobileMapView>("AOWIS.Map", 1, 0, "MapView");
-    MapServerSettings mapServerSettings;
+    MapServerSettings mapServerSettings; // Legacy endpoint migration only.
+    MobileMapSettings mobileMapSettings(mapServerSettings.endpointUrl(), mapServerSettings.wireguardProfileId());
     AppearanceSettings appearanceSettings;
     LanguageSettings languageSettings;
     UnitProfileSettings unitProfileSettings;
@@ -72,17 +74,13 @@ int main(int argc, char *argv[])
     // Declared before the engine: QML bindings never outlive it, and its
     // tunnels stop when the application ends.
     WireGuardVpnSettings wireguardVpnSettings;
-    // The map server is the only connection that can use a WireGuard profile.
-    wireguardVpnSettings.setProfileUsers([&mapServerSettings](const QString &profile_id) {
-        QStringList users;
-        if (!profile_id.isEmpty() && mapServerSettings.wireguardProfileId() == profile_id)
-            users.append(QCoreApplication::translate("WireGuardVpnSettings", "Map server"));
-        return users;
+    wireguardVpnSettings.setProfileUsers([&mobileMapSettings](const QString &profile_id) {
+        return mobileMapSettings.profileUsers(profile_id);
     });
-    QObject::connect(&mapServerSettings, &MapServerSettings::endpointChanged,
+    QObject::connect(&mobileMapSettings, &MobileMapSettings::changed,
                      &wireguardVpnSettings, &WireGuardVpnSettings::notifyUsersChanged);
     QQmlApplicationEngine engine;
-    engine.rootContext()->setContextProperty(QStringLiteral("mapServerSettings"), &mapServerSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("mobileMapSettings"), &mobileMapSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("appearanceSettings"), &appearanceSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("languageSettings"), &languageSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("unitProfileSettings"), &unitProfileSettings);
@@ -106,8 +104,6 @@ int main(int argc, char *argv[])
                      &plumbBobService, &PlumbBobService::changed);
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
                      &flashlightService, &FlashlightService::changed);
-    QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
-                     &mapServerSettings, &MapServerSettings::errorChanged);
     // Status texts are produced in C++; re-evaluate them in the new language.
     QObject::connect(&languageSettings, &LanguageSettings::languageChanged,
                      &wireguardVpnSettings, &WireGuardVpnSettings::statusRevisionChanged);

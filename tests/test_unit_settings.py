@@ -15,7 +15,7 @@ translations = json.loads((root / 'i18n/translations.json').read_text())
 
 checks = {
     'Language precedes Units': main.index('text: qsTr("Language")') < main.index('text: qsTr("Units")'),
-    'Appearance is last settings section': main.index('text: qsTr("Appearance")') > main.index('text: qsTr("Map server")'),
+    'Appearance is last settings section': main.index('text: qsTr("Appearance")') > main.index('text: qsTr("Map settings")'),
     'Units selector and detail page': 'id: unitProfileSelector' in main and 'root.openPage("units")' in main and 'UnitSettingsPage {' in main,
     'Android Back from Units returns Settings': 'activePage === "units"' in main and 'openPage("settings")' in main,
     'Canonical MODEL submodule registration': 'https://github.com/aowis-org/AOWIS-SERVER-MODEL.git' in init and 'external/AOWIS-SERVER-MODEL' in init,

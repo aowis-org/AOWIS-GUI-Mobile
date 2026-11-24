@@ -1,4 +1,5 @@
 #include "mobile_map_view.h"
+#include "mobile_map_settings.h"
 
 #include <QPointer>
 #include <QCoreApplication>
@@ -131,7 +132,8 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     // Coalesces property changes (URL, profile, tunnel state) of one event
     // loop pass, so a URL is never used before its WireGuard profile is known.
     void scheduleRebuild();
-    void requireTunnel();
+    void requireTunnels();
+    void releaseTunnels();
     void panBy(const QPointF &delta);
     void zoomAt(double steps, const QPointF &anchor);
     void beginOrbit();
@@ -147,10 +149,11 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     void refreshStatus();
 
     MobileMapView *item = nullptr;
-    QString server_url;
+    QPointer<MobileMapSettings> map_settings;
+    QMetaObject::Connection map_settings_connection;
     QPointer<WireGuardVpnSettings> wireguard;
     QMetaObject::Connection wireguard_connection;
-    QString wireguard_profile;
+    QHash<QString, QString> required_tunnels;
     bool server_blocked = false;
     bool rebuild_pending = false;
     bool dark = false;
@@ -533,39 +536,63 @@ void MobileMapView::Impl::scheduleRebuild()
     });
 }
 
-void MobileMapView::Impl::requireTunnel()
+void MobileMapView::Impl::releaseTunnels()
 {
     if (this->wireguard)
-        this->wireguard->require(QStringLiteral("map-server"),
-                                 this->server_url.isEmpty() ? QString() : this->wireguard_profile);
+        for (const QString &consumer : this->required_tunnels.keys())
+            this->wireguard->require(consumer, QString());
+    this->required_tunnels.clear();
+}
+
+void MobileMapView::Impl::requireTunnels()
+{
+    QHash<QString, QString> desired;
+    if (this->map_settings && this->map_settings->ready())
+        for (const Aowis::Map::MapCascadeUpstream &upstream : this->map_settings->cascadeConfig().upstreams)
+            if (!upstream.wireguard_profile_id.isEmpty())
+                desired.insert(QStringLiteral("map-upstream/") + upstream.name, upstream.wireguard_profile_id);
+    if (this->wireguard)
+    {
+        // Acquire new consumers before releasing old ones sharing a profile.
+        for (QHash<QString, QString>::const_iterator it = desired.cbegin(); it != desired.cend(); ++it)
+            this->wireguard->require(it.key(), it.value());
+        for (const QString &consumer : this->required_tunnels.keys())
+            if (!desired.contains(consumer)) this->wireguard->require(consumer, QString());
+    }
+    this->required_tunnels = desired;
 }
 
 void MobileMapView::Impl::rebuildServer()
 {
     // Keep repositories and cached rendering data alive across tunnel changes.
-    // A tunnel is an upstream transport, not a prerequisite for cached tiles.
-    Aowis::Map::MapCascadeUpstream upstream;
-    upstream.name = QStringLiteral("mobile-upstream");
-    upstream.url = QUrl(this->server_url);
-    upstream.wireguard_profile_id = this->wireguard_profile;
-    this->server_blocked = false;
+    const bool ready = this->map_settings && this->map_settings->ready();
+    Aowis::Map::MapCascadeConfig cascade;
+    cascade.allow_direct_fetch = false;
+    if (ready) cascade = this->map_settings->cascadeConfig();
+    this->requireTunnels();
+    bool usable = false;
     QString reason;
-    if (!upstream.url.isEmpty() && !this->wireguard_profile.isEmpty())
+    for (Aowis::Map::MapCascadeUpstream &upstream : cascade.upstreams)
     {
-        QNetworkProxy proxy;
-        if (!this->wireguard)
-            reason = MobileMapView::tr("The map server is configured for WireGuard, which is not available.");
-        else if (this->wireguard->proxyFor(this->wireguard_profile, &proxy, &reason))
-            upstream.proxy = proxy;
-        // MAP checks the profile ID and proxy itself and skips unusable
-        // WireGuard upstreams. Never turn this into a direct connection.
-        this->server_blocked = !Aowis::Map::hasWireGuardTransport(upstream);
+        if (Aowis::Map::requiresWireGuardTransport(upstream))
+        {
+            QNetworkProxy proxy;
+            if (!this->wireguard)
+                reason = MobileMapView::tr("The map server is configured for WireGuard, which is not available.");
+            else if (this->wireguard->proxyFor(upstream.wireguard_profile_id, &proxy, &reason))
+                upstream.proxy = proxy;
+        }
+        usable = usable || Aowis::Map::cascadeUpstreamUsable(upstream);
     }
+    this->server_blocked = !cascade.upstreams.isEmpty() && !usable && !cascade.allow_direct_fetch;
     if (!this->backend)
     {
         this->backend = std::make_unique<MobileEmbeddedMapBackend>();
         QObject::connect(this->backend.get(), &MobileEmbeddedMapBackend::providersChanged,
-                         this->item, [this]() { this->catalog.replace(this->backend->availableProviders()); });
+                         this->item, [this]() {
+            this->catalog.replace(this->backend->availableProviders());
+            if (this->map_settings) this->map_settings->setAvailable(this->backend->availableProviders());
+        });
         MobileEmbeddedMapBackend *backend = this->backend.get();
         MapServerTransport transport;
         transport.create = [backend](QObject *parent) -> InterfaceServerMap *
@@ -577,7 +604,7 @@ void MobileMapView::Impl::rebuildServer()
         this->view->setTileRepository(this->tiles.get());
         this->view->setTerrainRepository(this->terrain.get());
     }
-    this->backend->configure(upstream);
+    this->backend->configure(cascade, ready);
     if (!this->backend->settingsError().isEmpty())
         this->server_status = MobileMapView::tr("Map server error: %1").arg(this->backend->settingsError());
     else if (this->server_blocked)
@@ -1021,23 +1048,21 @@ MobileMapView::MobileMapView(QQuickItem *parent)
 
 MobileMapView::~MobileMapView()
 {
-    if (this->impl->wireguard)
-        this->impl->wireguard->require(QStringLiteral("map-server"), QString());
+    this->impl->releaseTunnels();
 }
 
-QString MobileMapView::serverUrl() const
+QObject *MobileMapView::mapSettings() const { return this->impl->map_settings; }
+void MobileMapView::setMapSettings(QObject *settings)
 {
-    return this->impl->server_url;
-}
-
-void MobileMapView::setServerUrl(const QString &url)
-{
-    if (this->impl->server_url == url)
-        return;
-    this->impl->server_url = url;
-    this->impl->requireTunnel();
+    MobileMapSettings *typed = qobject_cast<MobileMapSettings *>(settings);
+    if (this->impl->map_settings == typed) return;
+    QObject::disconnect(this->impl->map_settings_connection);
+    this->impl->map_settings = typed;
+    if (typed)
+        this->impl->map_settings_connection = connect(typed, &MobileMapSettings::changed, this,
+            [this]() { this->impl->scheduleRebuild(); });
     this->impl->scheduleRebuild();
-    emit serverUrlChanged();
+    emit mapSettingsChanged();
 }
 
 QObject *MobileMapView::wireguard() const
@@ -1050,8 +1075,7 @@ void MobileMapView::setWireguard(QObject *settings)
     WireGuardVpnSettings *wireguard = qobject_cast<WireGuardVpnSettings *>(settings);
     if (this->impl->wireguard == wireguard)
         return;
-    if (this->impl->wireguard)
-        this->impl->wireguard->require(QStringLiteral("map-server"), QString());
+    this->impl->releaseTunnels();
     QObject::disconnect(this->impl->wireguard_connection);
     this->impl->wireguard = wireguard;
     if (wireguard != nullptr)
@@ -1059,26 +1083,11 @@ void MobileMapView::setWireguard(QObject *settings)
         this->impl->wireguard_connection = connect(wireguard, &WireGuardVpnSettings::tunnelAvailabilityChanged, this,
                                                    [this](const QString &profile_id)
         {
-            if (profile_id == this->impl->wireguard_profile)
+            if (this->impl->required_tunnels.values().contains(profile_id))
                 this->impl->scheduleRebuild();
         });
     }
-    this->impl->requireTunnel();
-    this->impl->scheduleRebuild();
-    emit wireguardChanged();
-}
-
-QString MobileMapView::wireguardProfileId() const
-{
-    return this->impl->wireguard_profile;
-}
-
-void MobileMapView::setWireguardProfileId(const QString &id)
-{
-    if (this->impl->wireguard_profile == id)
-        return;
-    this->impl->wireguard_profile = id;
-    this->impl->requireTunnel();
+    this->impl->requireTunnels();
     this->impl->scheduleRebuild();
     emit wireguardChanged();
 }
@@ -1976,9 +1985,8 @@ void MobileMapView::wheelEvent(QWheelEvent *event)
 // Built without the renderer: the QML API exists, nothing is drawn.
 struct MobileMapView::Impl
 {
-    QString server_url;
+    QPointer<QObject> map_settings;
     QPointer<QObject> wireguard;
-    QString wireguard_profile;
     bool dark = false;
 };
 
@@ -1997,23 +2005,14 @@ void MobileMapView::setWireguard(QObject *settings)
     this->impl->wireguard = settings;
     emit wireguardChanged();
 }
-QString MobileMapView::wireguardProfileId() const { return this->impl->wireguard_profile; }
-void MobileMapView::setWireguardProfileId(const QString &id)
+QObject *MobileMapView::mapSettings() const { return this->impl->map_settings; }
+void MobileMapView::setMapSettings(QObject *settings)
 {
-    if (this->impl->wireguard_profile == id)
-        return;
-    this->impl->wireguard_profile = id;
-    emit wireguardChanged();
+    if (this->impl->map_settings == settings) return;
+    this->impl->map_settings = settings;
+    emit mapSettingsChanged();
 }
 bool MobileMapView::serverBlocked() const { return false; }
-QString MobileMapView::serverUrl() const { return this->impl->server_url; }
-void MobileMapView::setServerUrl(const QString &url)
-{
-    if (this->impl->server_url == url)
-        return;
-    this->impl->server_url = url;
-    emit serverUrlChanged();
-}
 bool MobileMapView::darkTheme() const { return this->impl->dark; }
 void MobileMapView::setDarkTheme(bool dark)
 {

@@ -2,8 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-// Settings → Network & servers → Map server: the aowis-server-map endpoint
-// and the connection it is reached through (direct or a WireGuard profile).
+// Settings → Map settings. All changes go through the MAP-owned repository.
 Rectangle {
     id: page
     signal backRequested()
@@ -24,299 +23,465 @@ Rectangle {
     property color errorColor: "#ffb7ad"
     property bool rightToLeft: false
 
-    property string saveFeedback: ""
-    property bool saveSucceeded: false
-
+    property string section: "overview"
+    property string selectedId: ""
+    readonly property var provider: findEntry(mobileMapSettings.providers, "id", selectedId)
+    readonly property var upstream: findEntry(mobileMapSettings.upstreams, "name", selectedId)
     color: surfaceColor
     LayoutMirroring.enabled: rightToLeft
     LayoutMirroring.childrenInherit: true
 
-    // The saved values, each time the page opens (unsaved edits are dropped).
-    function reload() {
-        mapServerUrl.text = mapServerSettings.serverUrl
-        mapServerPort.text = mapServerSettings.serverPort > 0 ? String(mapServerSettings.serverPort) : ""
-        page.saveFeedback = ""
-        mapServerTunnel.selectId(mapServerSettings.wireguardProfileId)
+    function findEntry(entries, key, value) {
+        for (let i = 0; i < entries.length; ++i)
+            if (entries[i][key] === value) return entries[i]
+        return ({})
+    }
+    function showSection(next, id) {
+        page.forceActiveFocus()
+        page.selectedId = id || ""
+        page.section = next
+        if (scroll.contentItem) scroll.contentItem.contentY = 0
+    }
+    function reload() { showSection("overview", "") }
+    function goBack() {
+        if (section === "provider" || section === "addProvider") showSection("providers", "")
+        else if (section === "upstream" || section === "addUpstream") showSection("upstreams", "")
+        else if (section !== "overview") showSection("overview", "")
+        else backRequested()
+    }
+    function providerField(field, value) {
+        return mobileMapSettings.setProviderField(selectedId, field, value)
+    }
+    function upstreamField(field, value) {
+        return mobileMapSettings.setUpstreamField(selectedId, field, value)
+    }
+    function routeNames() {
+        const result = []
+        const names = provider.routes || []
+        for (let i = 0; i < names.length; ++i) result.push(names[i])
+        return result
+    }
+    function changeRoute(name, step) {
+        const names = routeNames()
+        const index = names.indexOf(name)
+        if (step === 0) {
+            if (index < 0) names.push(name)
+            else names.splice(index, 1)
+        } else if (index >= 0 && index + step >= 0 && index + step < names.length) {
+            names.splice(index, 1)
+            names.splice(index + step, 0, name)
+        }
+        mobileMapSettings.setRoutes(selectedId, names)
+    }
+
+    component Heading: Label {
+        Layout.fillWidth: true
+        color: page.textColor
+        font.bold: true
+        font.pixelSize: 16
+        wrapMode: Text.WordWrap
+    }
+    component Hint: Label {
+        Layout.fillWidth: true
+        color: page.mutedColor
+        font.pixelSize: 12
+        wrapMode: Text.WrapAnywhere
+    }
+    component Action: Button {
+        Layout.fillWidth: true
+        palette.buttonText: page.textColor
+        background: Rectangle {
+            implicitHeight: 44
+            radius: 9
+            color: parent.down ? page.pressedColor : page.raisedColor
+            border.color: parent.activeFocus ? page.accentColor : page.borderColor
+            opacity: parent.enabled ? 1 : 0.5
+        }
+    }
+    component Field: TextField {
+        Layout.fillWidth: true
+        color: page.textColor
+        placeholderTextColor: page.placeholderColor
+        selectionColor: page.selectedColor
+        selectedTextColor: page.selectedTextColor
+        selectByMouse: true
+        background: Rectangle {
+            implicitHeight: 44
+            radius: 9
+            color: page.inputColor
+            border.color: parent.activeFocus ? page.accentColor : page.borderColor
+        }
+    }
+    component SavedField: Field {
+        property string savedValue: ""
+        signal commit(string value)
+        text: savedValue
+        onSavedValueChanged: if (!activeFocus) text = savedValue
+        onEditingFinished: {
+            if (text !== savedValue) commit(text)
+            text = savedValue
+        }
+    }
+    component Toggle: CheckBox {
+        Layout.fillWidth: true
+        palette.windowText: page.textColor
+        palette.text: page.textColor
+    }
+    component MapCombo: ComboBox {
+        palette.text: page.textColor
+        palette.buttonText: page.textColor
+        palette.base: page.inputColor
+        palette.button: page.raisedColor
+        palette.window: page.inputColor
+        palette.highlight: page.selectedColor
+        palette.highlightedText: page.selectedTextColor
+    }
+    component MapSpin: SpinBox {
+        palette.text: page.textColor
+        palette.base: page.inputColor
+        palette.button: page.raisedColor
+        palette.buttonText: page.textColor
+        palette.highlight: page.selectedColor
+        palette.highlightedText: page.selectedTextColor
+    }
+    component TunnelChoice: MapCombo {
+        property string profileId: ""
+        readonly property var choices: {
+            const entries = [{id: "", label: qsTr("Direct (no VPN)")}]
+            let found = profileId === ""
+            for (const p of wireguardVpnSettings.profiles) {
+                entries.push({id: p.id, label: p.name})
+                found = found || p.id === profileId
+            }
+            if (!found) entries.push({id: profileId, label: qsTr("Missing WireGuard profile")})
+            return entries
+        }
+        Layout.fillWidth: true
+        textRole: "label"
+        valueRole: "id"
+        model: choices
+        currentIndex: {
+            for (let i = 0; i < choices.length; ++i)
+                if (choices[i].id === profileId) return i
+            return 0
+        }
+        indicator: UiIcon {
+            kind: "down"
+            strokeColor: page.textColor
+            width: 22; height: 22
+            x: page.rightToLeft ? 12 : parent.width - width - 12
+            y: (parent.height - height) / 2
+        }
+        background: Rectangle {
+            implicitHeight: 44
+            radius: 9
+            color: page.inputColor
+            border.color: page.borderColor
+        }
     }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.topMargin: 76
-        anchors.leftMargin: 18
-        anchors.rightMargin: 18
-        anchors.bottomMargin: 14
-        spacing: 10
-
-        Button {
-            id: backButton
-            text: qsTr("Back to Settings")
-            onClicked: page.backRequested()
-            palette.buttonText: page.textColor
-            background: Rectangle {
-                implicitHeight: 42
-                radius: 9
-                color: backButton.down ? page.pressedColor : page.raisedColor
-                border.color: page.borderColor
-            }
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.bottomMargin: 12
+        spacing: 8
+        Action {
+            text: page.section === "overview" ? qsTr("Back to Settings") : qsTr("Back")
+            Layout.fillWidth: false
+            onClicked: page.goBack()
+        }
+        Heading {
+            font.pixelSize: 23
+            text: page.section === "providers" ? qsTr("Imagery providers")
+                  : page.section === "provider" ? (page.provider.name || qsTr("Imagery providers"))
+                  : page.section === "upstreams" ? qsTr("MAP upstream servers")
+                  : page.section === "upstream" ? (page.upstream.name || qsTr("MAP upstream servers"))
+                  : page.section === "addProvider" ? qsTr("Add provider")
+                  : page.section === "addUpstream" ? qsTr("Add upstream") : qsTr("Map settings")
         }
         Label {
-            text: qsTr("Map server")
-            font.pixelSize: 23
-            font.bold: true
-            color: page.textColor
+            visible: mobileMapSettings.error !== ""
+            text: mobileMapSettings.error
+            color: page.errorColor
             Layout.fillWidth: true
-            elide: Text.ElideRight
+            wrapMode: Text.WrapAnywhere
         }
-
         ScrollView {
             id: scroll
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
             contentWidth: availableWidth
-
+            clip: true
             ColumnLayout {
                 width: scroll.availableWidth
-                spacing: 12
-                Label {
-                    text: qsTr("Server URL")
-                    color: page.textColor
-                    font.pixelSize: 14
-                }
-                TextField {
-                    id: mapServerUrl
-                    LayoutMirroring.enabled: false
-                    horizontalAlignment: TextInput.AlignLeft
-                    color: page.textColor
-                    placeholderTextColor: page.placeholderColor
-                    selectionColor: page.selectedColor
-                    selectedTextColor: page.selectedTextColor
-                    background: Rectangle {
-                        implicitHeight: 48
-                        radius: 10
-                        color: page.inputColor
-                        border.color: mapServerUrl.activeFocus ? page.accentColor : page.borderColor
+                spacing: 10
+                enabled: mobileMapSettings.ready
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: page.section === "overview"
+                    Action {
+                        text: qsTr("Imagery providers") + " (" + mobileMapSettings.providers.length + ")"
+                        onClicked: page.showSection("providers", "")
                     }
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("http://192.168.2.10")
-                    selectByMouse: true
-                    inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
-                    onTextEdited: page.saveFeedback = ""
-                }
-                Label {
-                    text: qsTr("Use http:// or https://. Enter the port separately. The default AOWIS MAP server port is 8122.")
-                    color: page.mutedColor
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-                Label {
-                    text: qsTr("Port")
-                    color: page.textColor
-                    font.pixelSize: 14
-                }
-                TextField {
-                    id: mapServerPort
-                    LayoutMirroring.enabled: false
-                    horizontalAlignment: TextInput.AlignLeft
-                    color: page.textColor
-                    placeholderTextColor: page.placeholderColor
-                    selectionColor: page.selectedColor
-                    selectedTextColor: page.selectedTextColor
-                    background: Rectangle {
-                        implicitHeight: 48
-                        radius: 10
-                        color: page.inputColor
-                        border.color: mapServerPort.activeFocus ? page.accentColor : page.borderColor
+                    Action {
+                        text: qsTr("MAP upstream servers") + " (" + mobileMapSettings.upstreams.length + ")"
+                        onClicked: page.showSection("upstreams", "")
                     }
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("e.g. 8122")
-                    selectByMouse: true
-                    maximumLength: 5
-                    inputMethodHints: Qt.ImhDigitsOnly | Qt.ImhNoPredictiveText
-                    validator: IntValidator { bottom: 1; top: 65535 }
-                    onTextEdited: page.saveFeedback = ""
-                }
-                Label {
-                    visible: wireguardVpnSettings.engineAvailable
-                    text: qsTr("Connection")
-                    color: page.textColor
-                    font.pixelSize: 14
-                }
-                ComboBox {
-                    id: mapServerTunnel
-                    visible: wireguardVpnSettings.engineAvailable
-                    Layout.fillWidth: true
-                    textRole: "label"
-                    // Direct first, then the WireGuard profiles; a saved profile
-                    // that no longer exists stays visible (and blocks the map).
-                    property string pendingId: ""
-                    readonly property var choices: {
-                        const list = [{ id: "", label: qsTr("Direct (no VPN)") }]
-                        const profiles = wireguardVpnSettings.profiles
-                        let found = pendingId === ""
-                        for (let i = 0; i < profiles.length; ++i) {
-                            list.push({ id: profiles[i].id, label: qsTr("WireGuard: %1").arg(profiles[i].name) })
-                            found = found || profiles[i].id === pendingId
+                    Toggle {
+                        text: qsTr("Allow direct provider downloads")
+                        checked: mobileMapSettings.allowDirectFetch
+                        onClicked: {
+                            mobileMapSettings.setAllowDirectFetch(checked)
+                            checked = Qt.binding(function() { return mobileMapSettings.allowDirectFetch })
                         }
-                        if (!found)
-                            list.push({ id: pendingId, label: qsTr("Missing WireGuard profile") })
-                        return list
                     }
-                    model: choices
-                    readonly property string selectedId: currentIndex >= 0 && currentIndex < choices.length
-                                                        ? choices[currentIndex].id : ""
-                    function selectId(id) {
-                        pendingId = id
-                        for (let i = 0; i < choices.length; ++i) {
-                            if (choices[i].id === id) {
-                                currentIndex = i
-                                return
+                    Hint { text: qsTr("Without direct downloads, missing tiles are requested only from configured MAP upstreams. Cached imagery and terrain remain available offline.") }
+                    Toggle {
+                        text: qsTr("Poor Internet mode")
+                        checked: mobileMapSettings.poorInternet
+                        onClicked: {
+                            mobileMapSettings.setPoorInternet(checked)
+                            checked = Qt.binding(function() { return mobileMapSettings.poorInternet })
+                        }
+                    }
+                    Heading { text: qsTr("JPEG quality"); visible: mobileMapSettings.poorInternet }
+                    MapSpin {
+                        Layout.fillWidth: true
+                        visible: mobileMapSettings.poorInternet
+                        from: 1; to: 100
+                        value: mobileMapSettings.jpegQuality
+                        editable: true
+                        onValueModified: mobileMapSettings.setJpegQuality(value)
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: page.section === "providers"
+                    Repeater {
+                        model: mobileMapSettings.providers
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Action {
+                                text: modelData.name + (modelData.inherited ? " · " + qsTr("Inherited") : "")
+                                onClicked: page.showSection("provider", modelData.id)
+                            }
+                            Toggle {
+                                Layout.fillWidth: false
+                                checked: modelData.enabled
+                                Accessible.name: modelData.name
+                                onClicked: mobileMapSettings.setProviderField(modelData.id, "enabled", checked)
                             }
                         }
-                        currentIndex = 0
                     }
-                    onChoicesChanged: selectId(pendingId)
-                    onActivated: function(index) {
-                        pendingId = choices[index].id
-                        page.saveFeedback = ""
-                    }
-                    palette.text: page.textColor
-                    palette.buttonText: page.textColor
-                    palette.base: page.inputColor
-                    palette.window: page.inputColor
-                    palette.highlight: page.selectedColor
-                    palette.highlightedText: page.selectedTextColor
-                    indicator: UiIcon {
-                        kind: "down"
-                        strokeColor: page.textColor
-                        width: 22
-                        height: 22
-                        x: page.rightToLeft ? 14 : mapServerTunnel.width - width - 14
-                        y: (mapServerTunnel.height - height) / 2
-                    }
-                    contentItem: Text {
-                        text: mapServerTunnel.displayText
-                        color: page.textColor
-                        leftPadding: page.rightToLeft ? 32 : 12
-                        rightPadding: page.rightToLeft ? 12 : 32
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                    background: Rectangle {
-                        implicitHeight: 48
-                        radius: 10
-                        color: page.inputColor
-                        border.color: mapServerTunnel.activeFocus ? page.accentColor : page.borderColor
-                    }
-                    delegate: ItemDelegate {
-                        width: mapServerTunnel.width
-                        text: modelData.label
-                        highlighted: mapServerTunnel.highlightedIndex === index
-                        palette.text: page.textColor
-                        palette.highlightedText: page.selectedTextColor
-                        background: Rectangle {
-                            color: parent.highlighted ? page.selectedColor : page.inputColor
-                        }
-                    }
-                    popup: Popup {
-                        y: mapServerTunnel.height - 1
-                        width: mapServerTunnel.width
-                        implicitHeight: Math.min(contentItem.implicitHeight + 4, 240)
-                        padding: 2
-                        contentItem: ListView {
-                            clip: true
-                            implicitHeight: contentHeight
-                            model: mapServerTunnel.popup.visible ? mapServerTunnel.delegateModel : null
-                            currentIndex: mapServerTunnel.highlightedIndex
-                            ScrollIndicator.vertical: ScrollIndicator { }
-                        }
-                        background: Rectangle {
-                            radius: 10
-                            color: page.inputColor
-                            border.color: page.borderColor
+                    Action {
+                        text: qsTr("Add provider")
+                        onClicked: {
+                            newProviderName.text = ""; newProviderUrl.text = ""
+                            page.showSection("addProvider", "")
                         }
                     }
                 }
-                Label {
-                    visible: wireguardVpnSettings.engineAvailable && mapServerTunnel.selectedId !== ""
-                    text: qsTr("Upstream downloads use only this tunnel. Cached map data remains available offline.")
-                    color: page.mutedColor
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
+
+                ColumnLayout {
                     Layout.fillWidth: true
-                }
-                Button {
-                    palette.buttonText: page.textColor
-                    palette.text: page.textColor
-                    background: Rectangle {
-                        implicitHeight: 44
-                        radius: 10
-                        color: parent.down ? page.pressedColor : page.raisedColor
-                        border.color: parent.activeFocus ? page.accentColor : page.borderColor
-                        opacity: parent.enabled ? 1.0 : 0.55
-                    }
-                    
-                    text: qsTr("Save map server")
-                    Layout.fillWidth: true
-                    enabled: mapServerUrl.text.trim().length > 0 && mapServerPort.acceptableInput
-                    onClicked: {
-                        page.saveSucceeded = mapServerSettings.save(
-                                    mapServerUrl.text, mapServerPort.text, mapServerTunnel.selectedId)
-                        page.saveFeedback = page.saveSucceeded ? "saved" : "error"
-                        if (page.saveSucceeded) {
-                            wireguardVpnSettings.notifyUsersChanged()
-                            mapServerUrl.text = mapServerSettings.serverUrl
-                            mapServerPort.text = String(mapServerSettings.serverPort)
-                            mapServerUrl.focus = false
-                            mapServerPort.focus = false
+                    visible: page.section === "addProvider"
+                    Heading { text: qsTr("Display name") }
+                    Field { id: newProviderName }
+                    Heading { text: qsTr("Tile URL template") }
+                    Field { id: newProviderUrl; placeholderText: qsTr("https://example.org/{z}/{x}/{y}.png"); LayoutMirroring.enabled: false; inputMethodHints: Qt.ImhUrlCharactersOnly }
+                    Action {
+                        text: qsTr("Add provider")
+                        enabled: newProviderName.text.trim() !== "" && newProviderUrl.text.trim() !== ""
+                        onClicked: {
+                            const id = mobileMapSettings.addProvider(newProviderName.text, newProviderUrl.text)
+                            if (id !== "") page.showSection("provider", id)
                         }
                     }
                 }
-                Label {
-                    text: page.saveSucceeded ? qsTr("Map server saved on this device.") : mapServerSettings.error
-                    visible: page.saveFeedback !== ""
-                    color: page.saveSucceeded ? page.successColor : page.errorColor
-                    wrapMode: Text.WordWrap
+
+                ColumnLayout {
                     Layout.fillWidth: true
-                }
-                Label {
-                    text: !mapServerSettings.configured
-                          ? qsTr("No map server configured yet.")
-                          : mapServerSettings.wireguardProfileId === ""
-                            ? qsTr("Saved endpoint: %1").arg(mapServerSettings.endpointUrl)
-                            : qsTr("Saved endpoint: %1 through WireGuard “%2”").arg(mapServerSettings.endpointUrl)
-                                  .arg(wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId) !== ""
-                                       ? wireguardVpnSettings.profileName(mapServerSettings.wireguardProfileId)
-                                       : qsTr("Missing WireGuard profile"))
-                    color: page.textColor
-                    font.pixelSize: 13
-                    wrapMode: Text.WrapAnywhere
-                    Layout.fillWidth: true
-                }
-                Label {
-                    text: qsTr("The embedded MAP caches imagery and terrain on this device. This server is an optional upstream for missing data.")
-                    color: page.mutedColor
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                }
-                Button {
-                    id: manageTunnels
-                    visible: wireguardVpnSettings.engineAvailable
-                    Layout.fillWidth: true
-                    text: qsTr("Manage WireGuard profiles…")
-                    palette.buttonText: page.textColor
-                    palette.text: page.textColor
-                    background: Rectangle {
-                        implicitHeight: 44
-                        radius: 10
-                        color: manageTunnels.down ? page.pressedColor : page.raisedColor
-                        border.color: manageTunnels.activeFocus ? page.accentColor : page.borderColor
+                    visible: page.section === "provider" && !!page.provider.id
+                    Toggle {
+                        text: qsTr("Enabled")
+                        checked: !!page.provider.enabled
+                        onClicked: { page.providerField("enabled", checked); checked = Qt.binding(function() { return !!page.provider.enabled }) }
                     }
-                    onClicked: page.wireguardRequested()
+                    Hint { visible: !!page.provider.inherited; text: qsTr("Inherited providers are defined by upstream MAP servers. Only local availability and routing can be changed here.") }
+                    ColumnLayout {
+                        visible: !page.provider.inherited
+                        Layout.fillWidth: true
+                        Heading { text: qsTr("Display name") }
+                        SavedField { savedValue: page.provider.name || ""; onCommit: function(value) { if (page.section === "provider") page.providerField("name", value) } }
+                        Heading { text: qsTr("Tile URL template") }
+                        SavedField {
+                            savedValue: page.provider.url || ""
+                            LayoutMirroring.enabled: false
+                            inputMethodHints: Qt.ImhUrlCharactersOnly
+                            onCommit: function(value) { if (page.section === "provider") page.providerField("url", value) }
+                        }
+                        Heading { text: qsTr("Minimum zoom") }
+                        MapSpin {
+                            Layout.fillWidth: true
+                            from: 0; to: page.provider.maxZoom === undefined ? 30 : page.provider.maxZoom
+                            value: page.provider.minZoom || 0
+                            editable: true
+                            onValueModified: page.providerField("minZoom", value)
+                        }
+                        Heading { text: qsTr("Maximum zoom") }
+                        MapSpin {
+                            Layout.fillWidth: true
+                            from: page.provider.minZoom || 0; to: 30
+                            value: page.provider.maxZoom === undefined ? 19 : page.provider.maxZoom
+                            editable: true
+                            onValueModified: page.providerField("maxZoom", value)
+                        }
+                        Toggle {
+                            text: qsTr("Allow remote downloads")
+                            checked: !!page.provider.remote
+                            onClicked: { page.providerField("remote", checked); checked = Qt.binding(function() { return !!page.provider.remote }) }
+                        }
+                        Toggle {
+                            text: qsTr("Allow lossy tile transfer")
+                            checked: !!page.provider.lossy
+                            onClicked: { page.providerField("lossy", checked); checked = Qt.binding(function() { return !!page.provider.lossy }) }
+                        }
+                    }
+                    Heading { text: qsTr("Acquisition mode") }
+                    MapCombo {
+                        Layout.fillWidth: true
+                        textRole: "label"; valueRole: "id"
+                        model: [{id: "automatic", label: qsTr("Automatic")},
+                                {id: "cascade", label: qsTr("Cascade only")}].concat(!page.provider.inherited && mobileMapSettings.allowDirectFetch ? [{id: "direct", label: qsTr("Direct only")}] : [])
+                        currentIndex: {
+                            const selected = page.provider.mode || "automatic"
+                            for (let i = 0; i < model.length; ++i)
+                                if (model[i].id === selected) return i
+                            return 0
+                        }
+                        onActivated: mobileMapSettings.setAcquisition(page.selectedId, currentValue)
+                    }
+                    Heading { text: qsTr("Provider upstream priority") }
+                    Hint { text: qsTr("Use global order or select upstreams in priority order. An empty selection uses the global order.") }
+                    Action {
+                        text: qsTr("Use global order")
+                        enabled: page.routeNames().length > 0
+                        onClicked: mobileMapSettings.setRoutes(page.selectedId, [])
+                    }
+                    Repeater {
+                        model: page.routeNames()
+                        delegate: RowLayout {
+                            required property string modelData
+                            required property int index
+                            Layout.fillWidth: true
+                            Hint { text: (index + 1) + ". " + modelData }
+                            Action { Layout.fillWidth: false; text: qsTr("Up"); enabled: index > 0; onClicked: page.changeRoute(modelData, -1) }
+                            Action { Layout.fillWidth: false; text: qsTr("Down"); enabled: index + 1 < page.routeNames().length; onClicked: page.changeRoute(modelData, 1) }
+                            Action { Layout.fillWidth: false; text: qsTr("Remove"); onClicked: page.changeRoute(modelData, 0) }
+                        }
+                    }
+                    Repeater {
+                        model: mobileMapSettings.upstreams
+                        delegate: Action {
+                            required property var modelData
+                            visible: page.routeNames().indexOf(modelData.name) < 0
+                            text: qsTr("Add") + " · " + modelData.name
+                            onClicked: page.changeRoute(modelData.name, 0)
+                        }
+                    }
+                    Action {
+                        visible: !page.provider.inherited
+                        text: qsTr("Remove provider")
+                        onClicked: { removeDialog.targetType = "provider"; removeDialog.targetId = page.selectedId; removeDialog.open() }
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: page.section === "upstreams"
+                    Hint { text: qsTr("Upstreams are tried in the displayed order. Each can use its own WireGuard profile.") }
+                    Repeater {
+                        model: mobileMapSettings.upstreams
+                        delegate: RowLayout {
+                            required property var modelData
+                            required property int index
+                            Layout.fillWidth: true
+                            Action { text: (index + 1) + ". " + modelData.name; onClicked: page.showSection("upstream", modelData.name) }
+                            Action { text: qsTr("Up"); Layout.fillWidth: false; enabled: index > 0; onClicked: mobileMapSettings.moveUpstream(modelData.name, -1) }
+                            Action { text: qsTr("Down"); Layout.fillWidth: false; enabled: index + 1 < mobileMapSettings.upstreams.length; onClicked: mobileMapSettings.moveUpstream(modelData.name, 1) }
+                        }
+                    }
+                    Action {
+                        text: qsTr("Add upstream")
+                        onClicked: {
+                            newUpstreamName.text = ""; newUpstreamUrl.text = ""; newUpstreamKey.text = ""; newTunnel.profileId = ""
+                            page.showSection("addUpstream", "")
+                        }
+                    }
+                    Action { text: qsTr("Manage WireGuard profiles…"); visible: wireguardVpnSettings.engineAvailable; onClicked: page.wireguardRequested() }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: page.section === "addUpstream"
+                    Heading { text: qsTr("Upstream name") }
+                    Field { id: newUpstreamName; placeholderText: qsTr("site-map"); inputMethodHints: Qt.ImhNoPredictiveText }
+                    Hint { text: qsTr("Use a unique name starting with a letter, followed by letters, digits, hyphens or underscores.") }
+                    Heading { text: qsTr("Server URL") }
+                    Field { id: newUpstreamUrl; placeholderText: qsTr("http://192.168.2.10:8122"); LayoutMirroring.enabled: false; inputMethodHints: Qt.ImhUrlCharactersOnly }
+                    Hint { text: qsTr("Use http:// or https://. The default AOWIS MAP server port is 8122; specify another port in the URL if needed.") }
+                    Heading { text: qsTr("API key") }
+                    Field { id: newUpstreamKey; echoMode: TextInput.Password }
+                    Heading { text: qsTr("Connection") }
+                    TunnelChoice { id: newTunnel; onActivated: profileId = currentValue }
+                    Action {
+                        text: qsTr("Add upstream")
+                        enabled: newUpstreamName.text.trim() !== "" && newUpstreamUrl.text.trim() !== ""
+                        onClicked: {
+                            if (mobileMapSettings.addUpstream(newUpstreamName.text, newUpstreamUrl.text, newTunnel.profileId, newUpstreamKey.text))
+                                page.showSection("upstream", newUpstreamName.text.trim())
+                        }
+                    }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: page.section === "upstream" && !!page.upstream.name
+                    Heading { text: qsTr("Server URL") }
+                    SavedField { savedValue: page.upstream.url || ""; LayoutMirroring.enabled: false; inputMethodHints: Qt.ImhUrlCharactersOnly; onCommit: function(value) { if (page.section === "upstream") page.upstreamField("url", value) } }
+                    Hint { text: qsTr("Use http:// or https://. The default AOWIS MAP server port is 8122; specify another port in the URL if needed.") }
+                    Heading { text: qsTr("API key") }
+                    SavedField { savedValue: page.upstream.key || ""; echoMode: TextInput.Password; onCommit: function(value) { if (page.section === "upstream") page.upstreamField("key", value) } }
+                    Heading { text: qsTr("Connection") }
+                    TunnelChoice { profileId: page.upstream.profile || ""; onActivated: page.upstreamField("profile", currentValue) }
+                    Hint { text: qsTr("Upstream downloads use only the selected tunnel. Cached map data remains available offline.") }
+                    Action { text: qsTr("Manage WireGuard profiles…"); visible: wireguardVpnSettings.engineAvailable; onClicked: page.wireguardRequested() }
+                    Action { text: qsTr("Remove upstream"); onClicked: { removeDialog.targetType = "upstream"; removeDialog.targetId = page.selectedId; removeDialog.open() } }
                 }
             }
+        }
+    }
+    Dialog {
+        id: removeDialog
+        property string targetType: ""
+        property string targetId: ""
+        anchors.centerIn: parent
+        width: Math.min(page.width - 32, 340)
+        modal: true
+        title: qsTr("Confirm removal")
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        contentItem: Label {
+            text: qsTr("Remove %1?").arg(removeDialog.targetType === "provider" ? (page.provider.name || "") : removeDialog.targetId)
+            color: page.textColor
+            wrapMode: Text.WrapAnywhere
+        }
+        onAccepted: {
+            if (targetType === "provider") {
+                if (mobileMapSettings.removeProvider(targetId)) page.showSection("providers", "")
+            } else if (mobileMapSettings.removeUpstream(targetId)) page.showSection("upstreams", "")
         }
     }
 }

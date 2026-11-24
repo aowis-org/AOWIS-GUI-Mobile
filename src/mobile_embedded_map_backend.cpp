@@ -1,4 +1,5 @@
 #include "mobile_embedded_map_backend.h"
+#include "mobile_map_settings.h"
 
 #include <aowis/map/settings_repository.h>
 #include <QDir>
@@ -28,58 +29,27 @@ MobileEmbeddedMapBackend::MobileEmbeddedMapBackend(QObject *parent,
             this, &MobileEmbeddedMapBackend::applyProviders);
 }
 
-void MobileEmbeddedMapBackend::configure(const Aowis::Map::MapCascadeUpstream &upstream)
+void MobileEmbeddedMapBackend::configure(const Aowis::Map::MapCascadeConfig &runtime_cascade, bool settings_ready)
 {
     this->configuring = true;
     this->settings_error.clear();
-    QString settings_path = this->settings_root;
-#if defined(Q_OS_ANDROID)
-    // Android's HOME/XDG paths are not suitable for AOWIS-CONFIG.
-    // Keep the MAP-owned records in the same private namespace as Mobile's
-    // other CONFIG owners, without interpreting or writing their schema here.
-    if (settings_path.isEmpty())
-    {
-        const QString location = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-        if (!location.isEmpty())
-            settings_path = QDir(location).filePath(QStringLiteral("aowis/mobile-map"));
-    }
-#endif
-    std::unique_ptr<Aowis::Map::SettingsRepository> repository;
-#if defined(Q_OS_ANDROID)
-    if (settings_path.isEmpty())
-        this->settings_error = QStringLiteral("No private MAP configuration directory available");
-    else
-        repository = Aowis::Map::SettingsRepository::openAtOwnerRoot(
-            QStringLiteral("mobile-map"), settings_path, &this->settings_error);
-#else
-    repository = settings_path.isEmpty()
-        ? Aowis::Map::SettingsRepository::openForCurrentUser(QStringLiteral("mobile-map"), &this->settings_error)
-        : Aowis::Map::SettingsRepository::openAtOwnerRoot(QStringLiteral("mobile-map"),
-                                                         settings_path, &this->settings_error);
-#endif
+    std::unique_ptr<Aowis::Map::SettingsRepository> repository =
+        MobileMapSettings::openRepository(this->settings_root, &this->settings_error);
     QVector<Aowis::Map::MapProvider> providers;
-    Aowis::Map::MapCascadeConfig cascade;
+    Aowis::Map::MapCascadeConfig cascade = runtime_cascade;
     QSet<QString> disabled;
     this->upstream_routes.clear();
     this->acquisition_modes.clear();
-    const bool valid = repository && repository->readProviders(&providers, nullptr, &this->settings_error) &&
-        repository->readCascade(&cascade, nullptr, &this->settings_error) &&
+    const bool valid = settings_ready && repository && repository->readProviders(&providers, nullptr, &this->settings_error) &&
         repository->readDisabledInheritedProviders(&disabled, nullptr, &this->settings_error) &&
         repository->readProviderUpstreamRoutes(&this->upstream_routes, nullptr, &this->settings_error) &&
         repository->readProviderAcquisitionModes(&this->acquisition_modes, nullptr, &this->settings_error);
-    // Until the multiple-upstream settings UI is implemented, the existing
-    // single endpoint remains authoritative. Never silently bypass it via
-    // direct origin downloads, even with an unavailable WireGuard proxy.
-    cascade.upstreams.clear();
-    if (valid && !upstream.url.isEmpty())
-    {
-        cascade.upstreams.append(upstream);
-        cascade.allow_direct_fetch = false;
-    }
     if (!valid)
     {
         qWarning().noquote() << "Invalid MAP settings:" << this->settings_error;
+        cascade.upstreams.clear();
         cascade.allow_direct_fetch = false;
+        if (this->settings_error.isEmpty()) this->settings_error = QStringLiteral("MAP settings unavailable");
         providers.clear();
         disabled.clear();
         this->upstream_routes.clear();
