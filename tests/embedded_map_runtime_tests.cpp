@@ -25,7 +25,7 @@ static bool checkSettings(const QString &root)
         MobileMapSettings settings(old_url, profile, nullptr, root);
         if (!settings.ready() || settings.upstreams().size() != 1 || settings.allowDirectFetch() ||
             settings.profileUsers(profile).size() != 1) return false;
-        if (!settings.addUpstream(QStringLiteral("second"), QStringLiteral("https://192.0.2.2"), profile, {}) ||
+        if (!settings.addUpstream(QStringLiteral("second"), QStringLiteral("https://192.0.2.2"), profile, QStringLiteral("test-key")) ||
             settings.cascadeConfig().upstreams.last().url.port() != 8122 ||
             !settings.moveUpstream(QStringLiteral("second"), -1) ||
             settings.cascadeConfig().upstreams.first().name != QStringLiteral("second") ||
@@ -44,6 +44,32 @@ static bool checkSettings(const QString &root)
             settings.setAcquisition(provider, QStringLiteral("direct")) ||
             !settings.setRoutes(provider, {QStringLiteral("second"), QStringLiteral("mobile-upstream")}) ||
             !settings.setPoorInternet(true) || !settings.setJpegQuality(65)) return false;
+        if (!settings.setRoutes(inherited.provider.id, {QStringLiteral("mobile-upstream"), QStringLiteral("second")}) ||
+            settings.setUpstreamField(QStringLiteral("second"), QStringLiteral("name"), QStringLiteral("mobile-upstream")) ||
+            settings.setUpstreamField(QStringLiteral("second"), QStringLiteral("name"), QStringLiteral("bad name")) ||
+            settings.setUpstreamField(QStringLiteral("second"), QStringLiteral("name"), QString()) ||
+            settings.cascadeConfig().upstreams.first().name != QStringLiteral("second")) return false;
+
+        // A stale cascade revision must not leave renamed provider routes behind.
+        QString error, revision;
+        std::unique_ptr<Aowis::Map::SettingsRepository> writer = MobileMapSettings::openRepository(root, &error);
+        Aowis::Map::MapCascadeConfig concurrent;
+        if (!writer || !writer->readCascade(&concurrent, &revision, &error)) return false;
+        concurrent.jpeg_quality = 66;
+        if (!writer->saveCascade(concurrent, revision, nullptr, &error) ||
+            settings.setUpstreamField(QStringLiteral("second"), QStringLiteral("name"), QStringLiteral("site-map"))) return false;
+        QHash<QString, QStringList> routes;
+        if (!writer->readProviderUpstreamRoutes(&routes, nullptr, &error) ||
+            routes.value(provider) != QStringList{QStringLiteral("second"), QStringLiteral("mobile-upstream")} ||
+            routes.value(inherited.provider.id) != QStringList{QStringLiteral("mobile-upstream"), QStringLiteral("second")} ||
+            settings.jpegQuality() != 66) return false;
+
+        if (!settings.setUpstreamField(QStringLiteral("second"), QStringLiteral("name"), QStringLiteral(" site-map ")) ||
+            !settings.setJpegQuality(65)) return false;
+        const Aowis::Map::MapCascadeUpstream renamed = settings.cascadeConfig().upstreams.first();
+        if (renamed.name != QStringLiteral("site-map") || renamed.url != QUrl(QStringLiteral("https://192.0.2.2:8122")) ||
+            renamed.wireguard_profile_id != profile || renamed.api_key != QByteArray("test-key") ||
+            settings.allowDirectFetch() || !settings.profileUsers(profile).contains(QStringLiteral("Map server: site-map"))) return false;
     }
     {
         MobileMapSettings settings(old_url, profile, nullptr, root);
@@ -56,14 +82,15 @@ static bool checkSettings(const QString &root)
             const QVariantMap p = value.toMap();
             if (p.value(QStringLiteral("id")).toString() == inherited.provider.id)
                 inherited_disabled = p.value(QStringLiteral("inherited")).toBool() &&
-                    !p.value(QStringLiteral("enabled")).toBool();
+                    !p.value(QStringLiteral("enabled")).toBool() &&
+                    p.value(QStringLiteral("routes")).toStringList() == QStringList{QStringLiteral("mobile-upstream"), QStringLiteral("site-map")};
             if (p.value(QStringLiteral("id")).toString() != provider) continue;
             found = p.value(QStringLiteral("maxZoom")).toInt() == 16 &&
                 !p.value(QStringLiteral("enabled")).toBool() &&
                 p.value(QStringLiteral("mode")).toString() == QStringLiteral("cascade") &&
-                p.value(QStringLiteral("routes")).toStringList().size() == 2;
+                p.value(QStringLiteral("routes")).toStringList() == QStringList{QStringLiteral("site-map"), QStringLiteral("mobile-upstream")};
         }
-        if (!found || !inherited_disabled || !settings.removeUpstream(QStringLiteral("second")) ||
+        if (!found || !inherited_disabled || !settings.removeUpstream(QStringLiteral("site-map")) ||
             !settings.removeUpstream(QStringLiteral("mobile-upstream")) || settings.allowDirectFetch() ||
             !settings.profileUsers(profile).isEmpty()) return false;
     }

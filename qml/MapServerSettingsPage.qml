@@ -53,7 +53,9 @@ Rectangle {
         return mobileMapSettings.setProviderField(selectedId, field, value)
     }
     function upstreamField(field, value) {
-        return mobileMapSettings.setUpstreamField(selectedId, field, value)
+        if (!mobileMapSettings.setUpstreamField(selectedId, field, value)) return false
+        if (field === "name") selectedId = value.trim()
+        return true
     }
     function routeNames() {
         const result = []
@@ -114,12 +116,16 @@ Rectangle {
     }
     component SavedField: Field {
         property string savedValue: ""
+        property bool committing: false
         signal commit(string value)
         text: savedValue
         onSavedValueChanged: if (!activeFocus) text = savedValue
         onEditingFinished: {
+            if (committing) return
+            committing = true
             if (text !== savedValue) commit(text)
             text = savedValue
+            committing = false
         }
     }
     component Toggle: CheckBox {
@@ -469,6 +475,9 @@ Rectangle {
                 ColumnLayout {
                     Layout.fillWidth: true
                     visible: page.section === "upstream" && !!page.upstream.name
+                    Heading { text: qsTr("Upstream name") }
+                    SavedField { savedValue: page.upstream.name || ""; inputMethodHints: Qt.ImhNoPredictiveText; onCommit: function(value) { if (page.section === "upstream") page.upstreamField("name", value) } }
+                    Hint { text: qsTr("Use a unique name starting with a letter, followed by letters, digits, hyphens or underscores.") }
                     Heading { text: qsTr("Server URL") }
                     SavedField { savedValue: page.upstream.url || ""; LayoutMirroring.enabled: false; inputMethodHints: Qt.ImhUrlCharactersOnly; onCommit: function(value) { if (page.section === "upstream") page.upstreamField("url", value) } }
                     Hint { text: qsTr("Use http:// or https://. The default AOWIS MAP server port is 8122; specify another port in the URL if needed.") }

@@ -351,10 +351,49 @@ bool MobileMapSettings::addUpstream(const QString &name, const QString &url, con
 
 bool MobileMapSettings::setUpstreamField(const QString &name, const QString &field, const QString &value)
 {
+    if (!this->valid) return false;
     MapCascadeConfig proposed = this->cascade;
     for (MapCascadeUpstream &u : proposed.upstreams)
         if (u.name == name)
         {
+            if (field == QStringLiteral("name"))
+            {
+                const QString renamed = value.trimmed();
+                if (renamed == name) return true;
+                u.name = renamed;
+                QString error;
+                if (!Aowis::Map::validateCascadeSettings(proposed, &error)) return this->fail(error);
+
+                // MAP routes refer to upstream names, not immutable IDs. Keep
+                // the renamed server at the same priority in every route.
+                QHash<QString, QStringList> updated = this->routes;
+                for (QHash<QString, QStringList>::iterator it = updated.begin(); it != updated.end(); ++it)
+                {
+                    QStringList &names = it.value();
+                    if (!names.contains(name)) continue;
+                    // A previously removed upstream may have left this name
+                    // in a route. Avoid duplicates, retaining the old position.
+                    names.removeAll(renamed);
+                    names[names.indexOf(name)] = renamed;
+                }
+                if (updated == this->routes) return this->saveCascade(proposed);
+
+                // The repository stores routes and cascade separately. Do not
+                // publish a half-applied change to the live renderer; restore
+                // the original routes if the cascade write fails (including
+                // an optimistic-concurrency conflict).
+                QString updated_revision;
+                if (!this->repository->saveProviderUpstreamRoutes(updated, this->route_revision, &updated_revision, &error))
+                    return this->finish(false, error);
+                if (!this->repository->saveCascade(proposed, this->cascade_revision, nullptr, &error))
+                {
+                    QString rollback_error;
+                    if (!this->repository->saveProviderUpstreamRoutes(this->routes, updated_revision, nullptr, &rollback_error))
+                        error += QStringLiteral("; ") + rollback_error;
+                    return this->finish(false, error);
+                }
+                return this->finish(true, {});
+            }
             if (field == QStringLiteral("url")) u.url = upstreamUrl(value);
             else if (field == QStringLiteral("profile")) u.wireguard_profile_id = value;
             else if (field == QStringLiteral("key")) u.api_key = value.toUtf8();

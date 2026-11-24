@@ -59,8 +59,9 @@ upstream port is **8122**; another port may be specified in the URL.
   apply without reconnecting upstreams. A choice that becomes invalid (for
   example after disabling its target) is inactive until eligible again.
   Inherited providers do not participate in personal fallback chains.
-- Upstreams have a stable unique name, URL, optional API key and optional
-  WireGuard profile. Global order and explicit per-provider order are editable.
+- Upstreams have an editable unique name, URL, optional API key and optional
+  WireGuard profile. Renaming preserves the global priority and updates explicit
+  per-provider routes. Global order and explicit per-provider order are editable.
   An empty provider route uses global order; use the reset action after removing
   obsolete upstream names from a route.
 - Adding the first upstream disables direct provider downloads. The direct

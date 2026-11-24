@@ -202,6 +202,11 @@ checks = [
      'MapServerSettingsPage {' in qml and 'root.openPage("mapserver")' in qml and
      'qsTr("Network & servers")' in qml and 'mapServerSettings.save' not in map_server_page and
      'map-upstream/' in source),
+    ("upstream rename autosaves and retains the selected entry",
+     'savedValue: page.upstream.name' in map_server_page and
+     'page.upstreamField("name", value)' in map_server_page and
+     'if (field === "name") selectedId = value.trim()' in map_server_page and
+     'names[names.indexOf(name)] = renamed' in (root / "src/mobile_map_settings.cpp").read_text()),
     ("system dark light theme and explicit field contrast", 'appearanceSettings.mode' in qml and
      'appearanceSettings.dark' in qml and 'appearanceSettings.setMode' in qml and
      'placeholderColor: root.uiPlaceholder' in qml and
