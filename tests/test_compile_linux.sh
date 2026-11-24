@@ -87,6 +87,22 @@ mkdir -p "$TMP_DIR/repo/external/AOWIS-NETWORK"
 touch "$TMP_DIR/repo/external/AOWIS-NETWORK/CMakeLists.txt"
 printf 'PASS: NETWORK is required for baseline and bgfx builds\n'
 
+# MAP is required in both modes, before CMake or preflight runs.
+for mode in normal baseline; do
+    args=()
+    [[ "$mode" != baseline ]] || args+=(--baseline)
+    : > "$AOWIS_LINUX_TEST_LOG"
+    if "$TMP_DIR/repo/compile_linux.sh" "${args[@]}" --build-only > "$TMP_DIR/error.log" 2>&1; then
+        echo 'Expected failure for missing MAP submodule' >&2; exit 1
+    fi
+    grep -F 'tools/init_map.sh' "$TMP_DIR/error.log" >/dev/null
+    [[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
+done
+mkdir -p "$TMP_DIR/repo/external/AOWIS-SERVER-MAP/include/aowis/map"
+touch "$TMP_DIR/repo/external/AOWIS-SERVER-MAP/CMakeLists.txt" \
+      "$TMP_DIR/repo/external/AOWIS-SERVER-MAP/include/aowis/map/settings_repository.h"
+printf 'PASS: MAP is required for baseline and bgfx builds\n'
+
 # Baseline must work without any bgfx sources.
 : > "$AOWIS_LINUX_TEST_LOG"
 "$TMP_DIR/repo/compile_linux.sh" --baseline --build-only
@@ -121,6 +137,8 @@ assert_contains '-DAOWIS_MOBILE_WITH_BGFX=ON'
 assert_contains '-DCMAKE_BUILD_TYPE=RelWithDebInfo'
 assert_contains '-DBUILD_TESTING=OFF'
 assert_contains 'build-linux-bgfx'
+assert_not_contains 'build-linux-bgfx-embedded-map'
+assert_not_contains 'AOWIS_MOBILE_WITH_EMBEDDED_MAP'
 assert_contains 'run '
 assert_not_contains 'ctest '
 printf 'PASS: targeted optimized map build and launch\n'
@@ -130,7 +148,7 @@ AOWIS_BUILD_TYPE=Debug "$TMP_DIR/repo/compile_linux.sh" --build-only --tests
 assert_contains '-DCMAKE_BUILD_TYPE=Debug'
 assert_contains '-DBUILD_TESTING=ON'
 assert_contains '--target aowis-mobile-map-math-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-wireguard-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-look-around-engine-tests aowis-mobile-look-around-field-tests aowis-mobile-look-around-vision-tests aowis-mobile-look-around-direct-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel 3'
-assert_contains '^aowis-mobile-(map-math|lifecycle|map-server-settings|wireguard-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|look-around-engine|look-around-field|look-around-vision|look-around-direct|gradienter-math|plumb-bob-math|flashlight)$'
+assert_contains '^aowis-mobile-(map-math|lifecycle|map-server-settings|wireguard-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|look-around-engine|look-around-field|look-around-vision|look-around-direct|gradienter-math|plumb-bob-math|flashlight|embedded-map)$'
 assert_contains 'ctest --test-dir '
 assert_not_contains 'run '
 printf 'PASS: optional map-math, settings and lifecycle tests and build type override\n'
@@ -148,18 +166,7 @@ if "$TMP_DIR/repo/compile_linux.sh" --does-not-exist >"$TMP_DIR/error.log" 2>&1;
     echo 'Expected rejection of unknown option' >&2; exit 1
 fi
 printf 'PASS: invalid argument handling\n'
-# Embedded MAP must not affect ordinary builds; qualification uses a separate
-# build directory and runs the real check immediately after a successful build.
-: > "$AOWIS_LINUX_TEST_LOG"
 if "$TMP_DIR/repo/compile_linux.sh" --embedded-map --build-only > "$TMP_DIR/error.log" 2>&1; then
-    echo 'Expected failure for missing MAP submodule' >&2; exit 1
+    echo 'Obsolete MAP build option accepted' >&2; exit 1
 fi
-grep -F 'tools/init_map.sh' "$TMP_DIR/error.log" >/dev/null
-[[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
-mkdir -p "$TMP_DIR/repo/external/AOWIS-SERVER-MAP"
-touch "$TMP_DIR/repo/external/AOWIS-SERVER-MAP/CMakeLists.txt"
-"$TMP_DIR/repo/compile_linux.sh" --embedded-map --build-only
-assert_contains '-DAOWIS_MOBILE_WITH_EMBEDDED_MAP=ON'
-assert_contains 'build-linux-bgfx-embedded-map'
-assert_contains 'run -platform offscreen --check-embedded-map'
 echo 'Linux compile script tests passed.'

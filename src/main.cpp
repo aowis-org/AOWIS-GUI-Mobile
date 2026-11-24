@@ -9,9 +9,7 @@
 #include "plumb_bob_service.h"
 #include "flashlight_service.h"
 #include "wireguard_vpn_settings.h"
-#if AOWIS_MOBILE_WITH_EMBEDDED_MAP
 #include "embedded_map_check.h"
-#endif
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -55,15 +53,11 @@ int main(int argc, char *argv[])
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("AOWIS mobile field survey application"));
     parser.addHelpOption();
-#if AOWIS_MOBILE_WITH_EMBEDDED_MAP
     parser.addOption(QCommandLineOption(QStringLiteral("check-embedded-map"),
         QStringLiteral("Check MAP storage and offline library initialization in a temporary directory.")));
-#endif
     parser.process(application);
-#if AOWIS_MOBILE_WITH_EMBEDDED_MAP
     if (parser.isSet(QStringLiteral("check-embedded-map")))
         return checkEmbeddedMap();
-#endif
 
     qmlRegisterType<MobileMapView>("AOWIS.Map", 1, 0, "MapView");
     MapServerSettings mapServerSettings;

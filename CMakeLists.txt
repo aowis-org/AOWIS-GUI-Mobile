@@ -17,7 +17,6 @@ endif()
 qt_standard_project_setup(REQUIRES 6.5)
 
 option(AOWIS_MOBILE_WITH_BGFX "Build the AOWIS map (bgfx in Qt Quick); OFF: QML-only baseline" ON)
-option(AOWIS_MOBILE_WITH_EMBEDDED_MAP "Qualify the embedded MAP library (REST remains the active renderer transport)" OFF)
 option(AOWIS_MOBILE_WITH_WIREGUARD "Embed the userspace WireGuard engine (AOWIS-NETWORK)" ON)
 
 # Keep application artwork shared across build targets; platform-specific
@@ -111,50 +110,47 @@ if(NOT TARGET aowis::config)
 endif()
 target_link_libraries(aowis-mobile PRIVATE aowis::config)
 
-# First integration boundary: link the real MAP core and qualify its local
-# storage APIs before switching the live renderer transport. No HTTP server.
-if(AOWIS_MOBILE_WITH_EMBEDDED_MAP)
-    set(AOWIS_MAP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-SERVER-MAP")
-    if(NOT EXISTS "${AOWIS_MAP_SOURCE_DIR}/CMakeLists.txt" OR
-       NOT EXISTS "${AOWIS_MAP_SOURCE_DIR}/include/aowis/map/settings_repository.h")
-        message(FATAL_ERROR "MAP submodule missing. Run ./tools/init_map.sh once, or ./git_submodule_init.sh --map.")
-    endif()
-    if(ANDROID)
-        set(AOWIS_MOBILE_MAP_DEPS_PREFIX "" CACHE PATH "Android ARM64 MAP static dependency prefix")
-        if(NOT EXISTS "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libturbojpeg.a")
-            message(FATAL_ERROR "Android MAP libraries missing. Use ./compile_android.sh --embedded-map.")
-        endif()
-        list(PREPEND CMAKE_PREFIX_PATH "${AOWIS_MOBILE_MAP_DEPS_PREFIX}")
-        list(APPEND CMAKE_FIND_ROOT_PATH "${AOWIS_MOBILE_MAP_DEPS_PREFIX}")
-        # Explicit target paths: never reuse host TIFF/PNG/TurboJPEG libraries.
-        set(TIFF_INCLUDE_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/include" CACHE PATH "" FORCE)
-        set(TIFF_LIBRARY_RELEASE "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libtiff.a" CACHE FILEPATH "" FORCE)
-        set(TIFF_LIBRARY_DEBUG "${TIFF_LIBRARY_RELEASE}" CACHE FILEPATH "" FORCE)
-        set(PNG_PNG_INCLUDE_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/include" CACHE PATH "" FORCE)
-        set(PNG_LIBRARY_RELEASE "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libpng16.a" CACHE FILEPATH "" FORCE)
-        set(PNG_LIBRARY_DEBUG "${PNG_LIBRARY_RELEASE}" CACHE FILEPATH "" FORCE)
-        set(AOWIS_TURBOJPEG_INCLUDE_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/include" CACHE PATH "" FORCE)
-        set(AOWIS_TURBOJPEG_LIBRARY "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libturbojpeg.a" CACHE FILEPATH "" FORCE)
-        set(zstd_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/cmake/zstd" CACHE PATH "" FORCE)
-        find_package(ZLIB REQUIRED)
-    endif()
-    function(aowis_mobile_add_map)
-        set(BUILD_TESTING OFF)
-        set(AOWIS_SERVER_MAP_BUILD_SERVER OFF)
-        add_subdirectory("${AOWIS_MAP_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-map" EXCLUDE_FROM_ALL)
-    endfunction()
-    aowis_mobile_add_map()
-    if(ANDROID)
-        # CMake's FindTIFF imported target does not always propagate the
-        # static TIFF archive's private zlib dependency.
-        target_link_libraries(aowis-server-map-core PRIVATE ZLIB::ZLIB)
-    endif()
-    target_sources(aowis-mobile PRIVATE src/embedded_map_check.cpp src/embedded_map_check.h)
-    target_link_libraries(aowis-mobile PRIVATE AOWIS::ServerMap)
-    target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_EMBEDDED_MAP=1)
-else()
-    target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_EMBEDDED_MAP=0)
+# MAP is a required in-process library on every build, including the QML-only
+# baseline. Its HTTP server is not built. Live renderer transport is still REST.
+set(AOWIS_MAP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-SERVER-MAP")
+if(NOT EXISTS "${AOWIS_MAP_SOURCE_DIR}/CMakeLists.txt" OR
+   NOT EXISTS "${AOWIS_MAP_SOURCE_DIR}/include/aowis/map/settings_repository.h")
+    message(FATAL_ERROR "MAP submodule missing. Run ./tools/init_map.sh once, or ./git_submodule_init.sh --map.")
 endif()
+if(ANDROID)
+    set(AOWIS_MOBILE_MAP_DEPS_PREFIX "" CACHE PATH "Android ARM64 MAP static dependency prefix")
+    foreach(archive libtiff.a libpng16.a libturbojpeg.a libzstd.a)
+        if(NOT EXISTS "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/${archive}")
+            message(FATAL_ERROR "Android MAP library ${archive} missing. Use ./compile_android.sh.")
+        endif()
+    endforeach()
+    list(PREPEND CMAKE_PREFIX_PATH "${AOWIS_MOBILE_MAP_DEPS_PREFIX}")
+    list(APPEND CMAKE_FIND_ROOT_PATH "${AOWIS_MOBILE_MAP_DEPS_PREFIX}")
+    # Explicit target paths: never reuse host TIFF/PNG/TurboJPEG libraries.
+    set(TIFF_INCLUDE_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/include" CACHE PATH "" FORCE)
+    set(TIFF_LIBRARY_RELEASE "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libtiff.a" CACHE FILEPATH "" FORCE)
+    set(TIFF_LIBRARY_DEBUG "${TIFF_LIBRARY_RELEASE}" CACHE FILEPATH "" FORCE)
+    set(PNG_PNG_INCLUDE_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/include" CACHE PATH "" FORCE)
+    set(PNG_LIBRARY_RELEASE "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libpng16.a" CACHE FILEPATH "" FORCE)
+    set(PNG_LIBRARY_DEBUG "${PNG_LIBRARY_RELEASE}" CACHE FILEPATH "" FORCE)
+    set(AOWIS_TURBOJPEG_INCLUDE_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/include" CACHE PATH "" FORCE)
+    set(AOWIS_TURBOJPEG_LIBRARY "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/libturbojpeg.a" CACHE FILEPATH "" FORCE)
+    set(zstd_DIR "${AOWIS_MOBILE_MAP_DEPS_PREFIX}/lib/cmake/zstd" CACHE PATH "" FORCE)
+    find_package(ZLIB REQUIRED)
+endif()
+function(aowis_mobile_add_map)
+    set(BUILD_TESTING OFF)
+    set(AOWIS_SERVER_MAP_BUILD_SERVER OFF)
+    add_subdirectory("${AOWIS_MAP_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/aowis-map" EXCLUDE_FROM_ALL)
+endfunction()
+aowis_mobile_add_map()
+if(ANDROID)
+    # CMake's FindTIFF imported target does not always propagate the
+    # static TIFF archive's private zlib dependency.
+    target_link_libraries(aowis-server-map-core PRIVATE ZLIB::ZLIB)
+endif()
+target_sources(aowis-mobile PRIVATE src/embedded_map_check.cpp src/embedded_map_check.h)
+target_link_libraries(aowis-mobile PRIVATE AOWIS::ServerMap)
 
 # Embedded userspace WireGuard (wireguard-go + gVisor netstack behind a
 # loopback SOCKS5 proxy): no OS VPN, no VpnService, no root. Desktop builds
@@ -499,7 +495,7 @@ if(BUILD_TESTING)
     add_test(NAME aowis-mobile-lifecycle COMMAND aowis-mobile-lifecycle-tests)
 endif()
 
-if(BUILD_TESTING AND AOWIS_MOBILE_WITH_EMBEDDED_MAP AND NOT ANDROID)
+if(BUILD_TESTING AND NOT ANDROID)
     add_test(NAME aowis-mobile-embedded-map
         COMMAND aowis-mobile -platform offscreen --check-embedded-map)
 endif()

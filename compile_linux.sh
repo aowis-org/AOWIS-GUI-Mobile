@@ -13,7 +13,6 @@ Usage: ./compile_linux.sh [options]
   (default)       Build optimized Qt Quick app with the AOWIS map and launch it.
   --build-only    Build without launching the application.
   --baseline      Build and launch the QML-only baseline (no map renderer).
-  --embedded-map  Also link and qualify the embedded MAP library (REST still active).
   --tests         Also build and run the targeted C++ regression tests.
   --help          Show this help.
 
@@ -26,26 +25,25 @@ Requires CMake, Ninja, a C++20 compiler, Go (WireGuard engine) and Qt 6.5+
 (Core, Gui with private headers, Qml, Quick, QuickControls2, Positioning,
 Sensors, OpenGL, Network and the QML modules Controls, Layouts, Dialogs).
 Missing pieces are reported with the install command for this distribution:
-  Arch:          sudo pacman -S --needed cmake ninja gcc go qt6-base qt6-declarative qt6-positioning qt6-sensors
+  Arch:          sudo pacman -S --needed cmake ninja gcc go qt6-base qt6-declarative qt6-positioning qt6-sensors libtiff libpng libjpeg-turbo zstd zlib pkgconf
   Debian/Ubuntu: Debian 13 (trixie), Ubuntu 25.04 or newer (older releases ship Qt < 6.5);
                  the apt-get package list is printed by the check.
 For the map (AOWIS-GUI-Render with its pinned bgfx) and GeographicLib: ./git_submodule_init.sh.
 For MODEL registration (once): ./tools/init_model.sh.
 For the embedded WireGuard engine: ./tools/init_network.sh (once).
 For configuration storage: ./tools/init_config.sh (once).
+For the required MAP library: ./tools/init_map.sh (once).
 HELP
 }
 
 build_only=false
 baseline=false
 run_tests=false
-embedded_map=OFF
 while (( $# > 0 )); do
     case "$1" in
         --build-only) build_only=true ;;
         --baseline) baseline=true ;;
         --tests) run_tests=true ;;
-        --embedded-map) embedded_map=ON ;;
         --help|-h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -71,6 +69,11 @@ if [[ ! -f "$PROJECT_DIR/external/AOWIS-CONFIG/CMakeLists.txt" ]]; then
 fi
 if [[ ! -f "$PROJECT_DIR/external/AOWIS-NETWORK/CMakeLists.txt" ]]; then
     printf 'AOWIS Mobile Linux: NETWORK submodule missing. Run ./tools/init_network.sh once.\n' >&2
+    exit 1
+fi
+if [[ ! -f "$PROJECT_DIR/external/AOWIS-SERVER-MAP/CMakeLists.txt" ||
+      ! -f "$PROJECT_DIR/external/AOWIS-SERVER-MAP/include/aowis/map/settings_repository.h" ]]; then
+    printf 'AOWIS Mobile Linux: MAP submodule missing. Run ./tools/init_map.sh once.\n' >&2
     exit 1
 fi
 if [[ "${AOWIS_LINUX_SKIP_PREFLIGHT:-0}" != 1 ]]; then
@@ -99,31 +102,19 @@ else
     done
 fi
 
-if [[ "$embedded_map" == ON ]]; then
-    [[ -f "$PROJECT_DIR/external/AOWIS-SERVER-MAP/CMakeLists.txt" ]] || {
-        echo 'MAP submodule missing: run ./tools/init_map.sh once.' >&2; exit 1;
-    }
-    BUILD_DIR="$BUILD_DIR-embedded-map"
-fi
-
 TESTING=OFF
 "$run_tests" && TESTING=ON
 printf '=== Building AOWIS Mobile Linux (%s, %s) ===\n' "$BUILD_TYPE" "$BGFX"
 cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DAOWIS_MOBILE_WITH_BGFX="$BGFX" \
-    -DAOWIS_MOBILE_WITH_EMBEDDED_MAP="$embedded_map" \
     -DBUILD_TESTING="$TESTING"
 # Build only the application and its actual dependencies, not every test/tool.
 cmake --build "$BUILD_DIR" --target aowis-mobile --parallel "$JOBS"
 
-if [[ "$embedded_map" == ON ]]; then
-    "$BUILD_DIR/aowis-mobile" -platform offscreen --check-embedded-map
-fi
-
 if "$run_tests"; then
     cmake --build "$BUILD_DIR" --target aowis-mobile-map-math-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-wireguard-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-look-around-engine-tests aowis-mobile-look-around-field-tests aowis-mobile-look-around-vision-tests aowis-mobile-look-around-direct-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel "$JOBS"
-    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-(map-math|lifecycle|map-server-settings|wireguard-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|look-around-engine|look-around-field|look-around-vision|look-around-direct|gradienter-math|plumb-bob-math|flashlight)$'
+    ctest --test-dir "$BUILD_DIR" --output-on-failure -R '^aowis-mobile-(map-math|lifecycle|map-server-settings|wireguard-settings|appearance-settings|language-settings|unit-profile-settings|unit-registry-contract|location-snapshot|compass-heading|look-around-engine|look-around-field|look-around-vision|look-around-direct|gradienter-math|plumb-bob-math|flashlight|embedded-map)$'
 fi
 
 if "$build_only"; then

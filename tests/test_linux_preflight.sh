@@ -41,6 +41,11 @@ for tool in cmake ninja c++; do
     printf '#!/usr/bin/env bash\n' > "$work/full/$tool"
     chmod +x "$work/full/$tool"
 done
+cat > "$work/full/pkg-config" <<'STUB'
+#!/usr/bin/env bash
+[[ "$1" == --exists && "$2" != "${MISSING_MAP_PACKAGE:-}" ]]
+STUB
+chmod +x "$work/full/pkg-config"
 for os in debian ubuntu arch fedora; do
     case "$os" in
         ubuntu) printf 'ID=ubuntu\nID_LIKE=debian\n' > "$work/$os-release" ;;
@@ -62,7 +67,7 @@ check debian "$work/core"
 (( status == 1 )) || fail 'empty Debian host accepted'
 for expected in 'missing command: cmake' 'missing command: ninja' 'missing C++ compiler' 'missing Go' \
                 'Qt 6 development tools not found' 'sudo apt-get install' 'ninja-build' 'golang-go' \
-                'qt6-base-private-dev' 'qt6-declarative-dev-tools' 'qml6-module-qtquick-dialogs'; do
+                'qt6-base-private-dev' 'qt6-declarative-dev-tools' 'qml6-module-qtquick-dialogs' 'missing command: pkg-config' 'libtiff-dev' 'libturbojpeg0-dev' 'libzstd-dev'; do
     [[ "$output" == *"$expected"* ]] || fail "Debian message lacks: $expected"
 done
 check ubuntu "$work/core"
@@ -98,6 +103,11 @@ fake_qt 6.8.2
 fake_go 1.24.4
 check debian "$work/full:$work/core"
 (( status == 0 )) || fail 'complete Debian 13 host rejected'
+export MISSING_MAP_PACKAGE=libturbojpeg
+check debian "$work/full:$work/core"
+(( status == 1 )) || fail 'missing MAP dependency accepted'
+[[ "$output" == *'missing MAP development files: libturbojpeg'* ]] || fail 'missing MAP diagnostic'
+unset MISSING_MAP_PACKAGE
 # A missing QML runtime module or private headers is reported.
 rm -r "$work/qt-6.8.2/qml/QtQuick/Dialogs" "$work/qt-6.8.2/include/QtGui/6.8.2/QtGui/private"
 check debian "$work/full:$work/core"

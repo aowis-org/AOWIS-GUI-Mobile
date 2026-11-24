@@ -13,12 +13,10 @@ qt_cmake="/opt/qt/$qt_version/android_arm64_v8a/bin/qt-cmake"
 qt_host="/opt/qt/$qt_version/gcc_64"
 ndk="$ANDROID_SDK_ROOT/ndk/$ndk_version"
 bgfx="${AOWIS_ANDROID_BGFX:-ON}"
-embedded_map="${AOWIS_ANDROID_EMBEDDED_MAP:-OFF}"
 build_name="${AOWIS_ANDROID_BUILD_NAME:-build-android-bgfx}"
 jobs="${AOWIS_ANDROID_JOBS:-8}"
 android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
 
-[[ "$embedded_map" == ON || "$embedded_map" == OFF ]] || { echo 'Invalid AOWIS_ANDROID_EMBEDDED_MAP.' >&2; exit 2; }
 [[ "$bgfx" == ON || "$bgfx" == OFF ]] || { echo 'Invalid AOWIS_ANDROID_BGFX.' >&2; exit 2; }
 [[ "$build_name" =~ ^build-android-[a-zA-Z0-9_-]+$ ]] || { echo 'Invalid build directory name.' >&2; exit 2; }
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid parallel job count.' >&2; exit 2; }
@@ -33,6 +31,11 @@ android_build_tools="${AOWIS_ANDROID_BUILD_TOOLS_VERSION:-36.0.0}"
 }
 [[ -f "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" ]] || {
     echo 'AOWIS-NETWORK submodule missing in Docker /project. Run ./tools/init_network.sh on the host.' >&2
+    exit 1
+}
+[[ -f "$project_dir/external/AOWIS-SERVER-MAP/CMakeLists.txt" &&
+   -f "$project_dir/external/AOWIS-SERVER-MAP/include/aowis/map/settings_repository.h" ]] || {
+    echo 'AOWIS-SERVER-MAP submodule missing in Docker /project. Run ./tools/init_map.sh on the host.' >&2
     exit 1
 }
 command -v go >/dev/null 2>&1 || {
@@ -99,12 +102,9 @@ printf '%s\n' "$engine_segments" | awk '$1 == "LOAD" && $NF != "0x4000" && $NF !
     exit 1
 }
 
-map_cmake_args=(-DAOWIS_MOBILE_WITH_EMBEDDED_MAP="$embedded_map")
-if [[ "$embedded_map" == ON ]]; then
-    map_prefix="$build_dir/map-native/prefix"
-    bash "$project_dir/tools/qt-android/build_map_dependencies.sh" "$ndk" "$engine_api" "$jobs" "$build_dir/map-native"
-    map_cmake_args+=(-DAOWIS_MOBILE_MAP_DEPS_PREFIX="$map_prefix")
-fi
+# MAP is always linked into the APK, using target-only static libraries.
+map_prefix="$build_dir/map-native/prefix"
+bash "$project_dir/tools/qt-android/build_map_dependencies.sh" "$ndk" "$engine_api" "$jobs" "$build_dir/map-native"
 
 echo "=== Building AOWIS Mobile Android ARM64 ($bgfx) inside Docker ==="
 echo "Qt:    $qt_version"
@@ -119,7 +119,7 @@ echo "Build: $build_dir"
     -DAOWIS_MOBILE_WITH_BGFX="$bgfx" \
     -DAOWIS_NETWORK_WIREGUARD_ARCHIVE="$engine_library" \
     "${render_cmake_args[@]}" \
-    "${map_cmake_args[@]}"
+    -DAOWIS_MOBILE_MAP_DEPS_PREFIX="$map_prefix"
 cmake --build "$build_dir" --target aowis-mobile_make_apk --parallel "$jobs"
 
 # Verify the actual produced APK has the same signature as the persistent

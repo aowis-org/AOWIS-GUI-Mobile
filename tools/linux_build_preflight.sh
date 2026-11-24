@@ -26,16 +26,16 @@ aowis_distro_family() {
 aowis_install_hint() {
     case "$1" in
         arch)
-            echo 'sudo pacman -S --needed cmake ninja gcc go qt6-base qt6-declarative qt6-positioning qt6-sensors' ;;
+            echo 'sudo pacman -S --needed cmake ninja gcc go qt6-base qt6-declarative qt6-positioning qt6-sensors libtiff libpng libjpeg-turbo zstd zlib pkgconf' ;;
         debian)
             # -dev packages for CMake, the private GUI headers Render uses, the
             # Qt build tools (moc, qmlcachegen) and the QML runtime modules
             # (Debian splits each QML import into its own package).
-            echo 'sudo apt-get install cmake ninja-build g++ golang-go git python3 libgl-dev libegl-dev libx11-dev qt6-base-dev qt6-base-private-dev qt6-base-dev-tools qt6-declarative-dev qt6-declarative-dev-tools qt6-positioning-dev qt6-sensors-dev libqt6opengl6-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtquick-dialogs qml6-module-qtqml-workerscript qml6-module-qtcore qml6-module-qt-labs-folderlistmodel' ;;
+            echo 'sudo apt-get install cmake ninja-build g++ golang-go git python3 libgl-dev libegl-dev libx11-dev qt6-base-dev qt6-base-private-dev qt6-base-dev-tools qt6-declarative-dev qt6-declarative-dev-tools qt6-positioning-dev qt6-sensors-dev libqt6opengl6-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtquick-dialogs qml6-module-qtqml-workerscript qml6-module-qtcore qml6-module-qt-labs-folderlistmodel libtiff-dev libpng-dev libturbojpeg0-dev libzstd-dev zlib1g-dev pkg-config' ;;
         fedora)
-            echo 'sudo dnf install cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qtpositioning-devel qt6-qtsensors-devel mesa-libGL-devel mesa-libEGL-devel libX11-devel' ;;
+            echo 'sudo dnf install cmake ninja-build gcc-c++ golang qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qtpositioning-devel qt6-qtsensors-devel mesa-libGL-devel mesa-libEGL-devel libX11-devel libtiff-devel libpng-devel libjpeg-turbo-devel libzstd-devel zlib-devel pkgconf-pkg-config' ;;
         *)
-            echo 'Install CMake, Ninja, a C++20 compiler, Go and Qt 6.5+ (Base incl. private headers, Declarative, Positioning, Sensors) with their development files.' ;;
+            echo 'Install CMake, Ninja, a C++20 compiler, Go and Qt 6.5+ (Base incl. private headers, Declarative, Positioning, Sensors) with their development files; also pkg-config, TIFF, PNG, TurboJPEG, Zstandard and zlib development files.' ;;
     esac
 }
 
@@ -70,11 +70,18 @@ aowis_linux_preflight() {
     local project="$1" family problems=() tool go_required go_have qtpaths qt_version qml libs headers module
     family="$(aowis_distro_family)"
 
-    for tool in cmake ninja; do
+    for tool in cmake ninja pkg-config; do
         command -v "$tool" >/dev/null 2>&1 || problems+=("missing command: $tool")
     done
     command -v c++ >/dev/null 2>&1 || command -v g++ >/dev/null 2>&1 || command -v clang++ >/dev/null 2>&1 ||
         problems+=("missing C++ compiler (g++ or clang++)")
+
+    # MAP is linked by every build. Check native development packages before CMake.
+    if command -v pkg-config >/dev/null 2>&1; then
+        for module in libtiff-4 libpng libturbojpeg libzstd zlib; do
+            pkg-config --exists "$module" || problems+=("missing MAP development files: $module")
+        done
+    fi
 
     # The embedded WireGuard engine is Go; its go.mod names the minimum.
     go_required="$(sed -nE 's/^go ([0-9.]+).*/\1/p' "$project/external/AOWIS-NETWORK/bridge/go.mod" 2>/dev/null | head -n1)"

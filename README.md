@@ -61,6 +61,10 @@ To register the source-only EPANET dependency in an existing Git checkout,
 run `./tools/init_epanet.sh` once, then commit its Git gitlink together with
 `.gitmodules`. EPANET is not yet built or linked by Mobile.
 
+For existing checkouts, register MAP once with `./tools/init_map.sh` and
+commit its Git gitlink with `.gitmodules`. MAP is a required in-process
+library in all builds; the renderer currently still requests tiles over REST.
+
 For new clones, initialize all pinned submodules, including Render's nested
 bgfx/bx/bimg revisions (the same ones the desktop GUI builds):
 
@@ -93,14 +97,15 @@ Linux (the distribution's Qt 6.5+, CMake, Ninja, a C++20 compiler and Go;
 Arch, Debian 13 / Ubuntu 25.04 or newer, Fedora). `compile_linux.sh` checks
 these first and prints the install command for the detected distribution,
 e.g. the `apt-get` package list on Debian/Ubuntu, which also covers the Qt
-GUI private headers and the separately packaged QML modules. Debian 12 and
+GUI private headers, the separately packaged QML modules and the MAP
+image/terrain development libraries (TIFF, PNG, TurboJPEG, Zstd, zlib). Debian 12 and
 Ubuntu 24.04 ship Qt 6.4, which is too old.
 
 ```bash
 ./compile_linux.sh                # build and launch with the map
 ./compile_linux.sh --build-only   # build only
 ./compile_linux.sh --baseline     # separate QML-only build without the map renderer
-./compile_linux.sh --tests        # run the map-math, settings and lifecycle tests
+./compile_linux.sh --tests        # run regression tests, including embedded MAP
 ```
 
 Android ARM64 (Docker on host; optional Arch `adb` for deployment):

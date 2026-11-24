@@ -108,11 +108,32 @@ run_case() {
 assert_log() { grep -Fq -- "$1" "$MOCK_LOG" || fail "missing log entry: $1"; }
 assert_not_log() { ! grep -Fq -- "$1" "$MOCK_LOG" || fail "unexpected log entry: $1"; }
 
+# Every APK build requires MAP (including the baseline); device-only commands do not.
+for mode in normal baseline; do
+    args=()
+    [[ "$mode" != baseline ]] || args+=(--baseline)
+    : > "$MOCK_LOG"
+    if ./compile_android.sh "${args[@]}" --build-only > "$work/output.log" 2>&1; then
+        fail 'missing MAP accepted'
+    fi
+    grep -Fq 'tools/init_map.sh' "$work/output.log" || fail 'missing MAP diagnostic'
+    assert_not_log 'docker run '
+done
+mkdir -p "$work/repo/external/AOWIS-SERVER-MAP/include/aowis/map"
+touch "$work/repo/external/AOWIS-SERVER-MAP/CMakeLists.txt" \
+      "$work/repo/external/AOWIS-SERVER-MAP/include/aowis/map/settings_repository.h"
+if ./compile_android.sh --embedded-map --build-only > "$work/output.log" 2>&1; then
+    fail 'obsolete MAP option accepted'
+fi
+
 # First build automatically builds the image, but does not install without ADB.
 export FAKE_IMAGE_EXISTS=0 FAKE_DEVICE_COUNT=0
 run_case
 assert_log 'docker build '
 assert_log 'docker run '
+assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-bgfx'
+assert_not_log 'AOWIS_ANDROID_EMBEDDED_MAP'
+assert_not_log 'build-android-bgfx-embedded-map'
 assert_log ':/aowis-render:ro'
 assert_log 'AOWIS_ANDROID_RENDER_SOURCE_DIR=/aowis-render'
 assert_log '-e LANG=C.UTF-8 -e LC_ALL=C.UTF-8'
@@ -134,21 +155,6 @@ export FAKE_IMAGE_EXISTS=1 FAKE_DEVICE_COUNT=1
 run_case --build-only
 assert_not_log 'docker build '
 assert_log 'docker run '
-assert_not_log 'adb '
-
-# Opt-in MAP qualification needs a registered source checkout and uses its
-# own Docker build directory, preserving the normal APK workflow.
-: > "$MOCK_LOG"
-if ./compile_android.sh --embedded-map --build-only > "$work/output.log" 2>&1; then
-    fail 'missing MAP accepted'
-fi
-grep -Fq 'tools/init_map.sh' "$work/output.log" || fail 'missing MAP diagnostic'
-assert_not_log 'docker run '
-mkdir -p "$work/repo/external/AOWIS-SERVER-MAP"
-touch "$work/repo/external/AOWIS-SERVER-MAP/CMakeLists.txt"
-run_case --embedded-map --build-only
-assert_log 'AOWIS_ANDROID_EMBEDDED_MAP=ON'
-assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-bgfx-embedded-map'
 assert_not_log 'adb '
 
 # One authorized device deploys; baseline produces its own output.
@@ -327,6 +333,15 @@ grep -Fq 'keytool -genkeypair -noprompt' "$root/tools/qt-android/prepare_debug_s
 grep -Fq 'APK signature DOES NOT match' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'APK certificate comparison missing'
 grep -Fq 'ANDROID_USER_HOME=/tmp/.android' "$root/compile_android.sh" || fail 'persistent Gradle signing location missing'
 grep -Fq 'prepare_debug_signing.sh' "$root/tools/qt-android/build_android_inside_container.sh" || fail 'signing provisioning script not invoked'
+
+# The real container entrypoint must build and pass target MAP dependencies,
+# without a feature switch; CMake must always link the core.
+inner="$root/tools/qt-android/build_android_inside_container.sh"
+grep -Fq 'bash "$project_dir/tools/qt-android/build_map_dependencies.sh"' "$inner" || fail 'MAP dependencies not built'
+grep -Fq -- '-DAOWIS_MOBILE_MAP_DEPS_PREFIX="$map_prefix"' "$inner" || fail 'MAP prefix not passed to CMake'
+! grep -Eq 'AOWIS_ANDROID_EMBEDDED_MAP|AOWIS_MOBILE_WITH_EMBEDDED_MAP' "$inner" || fail 'optional MAP in container'
+grep -Fq 'target_link_libraries(aowis-mobile PRIVATE AOWIS::ServerMap)' "$root/CMakeLists.txt" || fail 'MAP library link missing'
+! grep -Fq 'AOWIS_MOBILE_WITH_EMBEDDED_MAP' "$root/CMakeLists.txt" || fail 'optional MAP in CMake'
 
 printf 'Android Docker entrypoint: 15+ scenarios + build dependency contracts passed\n'
 
