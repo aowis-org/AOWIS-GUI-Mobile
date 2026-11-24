@@ -47,7 +47,7 @@ Window {
         { page: "alarms", title: qsTr("Alarms") },
         { page: "logs", title: qsTr("Logs") }
     ]
-    readonly property int mainTabIndex: mainTabs.findIndex(tab => tab.page === activePage)
+    readonly property int mainTabIndex: mainTabs.findIndex(tab => tab.page === activeMainPage)
 
     // Workspace activity is independent of the map camera (2D/3D/Look around).
     // Hydraulic monitor/editor tools will use this selection when implemented.
@@ -55,7 +55,11 @@ Window {
     readonly property string distributionMapModeTitle: distributionMapMode === "editor"
         ? qsTr("Distribution Map Editor") : qsTr("Distribution Map Monitor")
 
-    property string activePage: "map"
+    // Keep the selected workspace independent of Settings and tool navigation.
+    // Secondary pages temporarily replace the content, not the tab selection.
+    property string activeMainPage: "map"
+    property string secondaryPage: ""
+    readonly property string activePage: secondaryPage || activeMainPage
     onActivePageChanged: {
         if (activePage !== "map" && mapView.lookAround)
             mapView.lookAround = false
@@ -105,7 +109,12 @@ Window {
             const languages = ["en", "fr", "ar", "de", "es"]
             languageSelector.currentIndex = languages.indexOf(languageSettings.language)
         }
-        activePage = page
+        if (mainTabs.some(tab => tab.page === page)) {
+            activeMainPage = page
+            secondaryPage = ""
+        } else {
+            secondaryPage = page
+        }
     }
     // Back is in-app navigation while a drawer or secondary page is open.
     // At the map root, leave Android's native Back behavior intact.
@@ -122,6 +131,8 @@ Window {
             mapServerPage.goBack()
         } else if (activePage === "units") {
             openPage("settings")
+        } else if (secondaryPage !== "") {
+            openPage(activeMainPage)
         } else if (activePage !== "map") {
             openPage("map")
         }
@@ -1612,7 +1623,7 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: mainNavigation.top
-        visible: root.mainTabIndex >= 0 && root.activePage !== "map"
+        visible: root.secondaryPage === "" && root.activeMainPage !== "map"
         color: root.uiSurface
         LayoutMirroring.enabled: languageSettings.rightToLeft
         LayoutMirroring.childrenInherit: true

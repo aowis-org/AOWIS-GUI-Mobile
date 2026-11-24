@@ -174,7 +174,7 @@ checks = [
      'id: pendingWorkspace' in qml and 'This workspace is not yet implemented on mobile.' in qml and
      qml.count('anchors.bottom: mainNavigation.top') == 11 and
      'mainNavigation.y - y - 8' in qml and
-     'mainTabs.findIndex(tab => tab.page === activePage)' in qml),
+     'mainTabs.findIndex(tab => tab.page === activeMainPage)' in qml),
     ("full-window bgfx underlay with bottom navigation overlay",
      'anchors.fill: parent' in map_qml and 'mainNavigation' not in map_qml and
      'anchors.bottom: parent.bottom' in nav_qml and 'z: 4' in nav_qml and
@@ -184,6 +184,14 @@ checks = [
      all(page != 'settings' for page, _ in main_tabs) and
      'onClicked: root.openPage("settings")' in qml.split('id: navigationDrawer', 1)[1] and
      'onClicked: navigationDrawer.open()' in qml),
+    ("secondary pages preserve main workspace selection and visibility",
+     'property string activeMainPage: "map"' in qml and
+     'property string secondaryPage: ""' in qml and
+     'readonly property string activePage: secondaryPage || activeMainPage' in qml and
+     'if (mainTabs.some(tab => tab.page === page)) {\n            activeMainPage = page\n            secondaryPage = ""\n        } else {\n            secondaryPage = page' in qml and
+     'visible: root.secondaryPage === "" && root.activeMainPage !== "map"' in qml and
+     'else if (secondaryPage !== "") {\n            openPage(activeMainPage)' in qml and
+     'readonly property bool selected: index === root.mainTabIndex' in nav_qml),
     ("Android Back returns from secondary pages", 'sequences: ["Back"]' in qml and
      'Qt.platform.os === "android"' in qml and
      'navigationDrawer.opened || root.activePage !== "map"' in qml and
