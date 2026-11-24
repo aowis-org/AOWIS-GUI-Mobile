@@ -47,7 +47,8 @@ private:
 
     std::unique_ptr<QSettings> settings;
     QString savedUrl;
-    int savedPort = 0;
+    static constexpr int DefaultMapPort = 8122;
+    int savedPort = DefaultMapPort;
     QString savedProfile;
     QString validationError;
 };

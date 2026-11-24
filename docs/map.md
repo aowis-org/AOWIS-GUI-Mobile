@@ -36,7 +36,7 @@ GLSL shaders, Android the ESSL ones.
 ## Map server
 
 `serverUrl` is bound to `mapServerSettings.endpointUrl` (Settings → Map
-server). For a configured server the item creates Render's
+server; default port **8122**). For a configured server the item creates Render's
 `InterfaceServerMapREST` transport, the `MapTileRepository` and
 `MapTerrainRepository`, and refreshes the server's imagery provider catalog
 (`MapProviderCatalog`, `GET /map/v1/providers`). Changing the server rebuilds

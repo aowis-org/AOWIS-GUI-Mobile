@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QTemporaryDir>
+#include <QSettings>
 #include <QDebug>
 
 static bool check(bool condition, const char *message)
@@ -20,6 +21,7 @@ int main(int argc, char *argv[])
     const QString file = directory.filePath(QStringLiteral("settings.ini"));
     {
         MapServerSettings settings(nullptr, file);
+        if (!check(settings.serverPort() == 8122, "default MAP port")) return 1;
         if (!check(!settings.configured() && settings.endpointUrl().isEmpty(), "new installation is unconfigured")) return 1;
         if (!check(!settings.save(QStringLiteral("ftp://example.org"), QStringLiteral("80")), "reject unsupported scheme")) return 1;
         if (!check(!settings.save(QStringLiteral("example.org"), QStringLiteral("80")), "require absolute URL")) return 1;
@@ -55,6 +57,18 @@ int main(int argc, char *argv[])
     {
         MapServerSettings direct(nullptr, file);
         if (!check(direct.wireguardProfileId().isEmpty(), "direct connection restored")) return 1;
+    }
+    {
+        const QString legacyFile = directory.filePath(QStringLiteral("legacy.ini"));
+        {
+            QSettings legacy(legacyFile, QSettings::IniFormat);
+            legacy.setValue(QStringLiteral("mapServer/url"), QStringLiteral("http://example.org"));
+            legacy.sync();
+        }
+        MapServerSettings legacy(nullptr, legacyFile);
+        if (!check(legacy.configured() && legacy.serverPort() == 8122 &&
+                   legacy.endpointUrl() == QStringLiteral("http://example.org:8122"),
+                   "missing stored port uses default")) return 1;
     }
     qInfo() << "Map server settings persistence and validation passed.";
     return 0;

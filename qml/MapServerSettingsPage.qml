@@ -104,7 +104,7 @@ Rectangle {
                     onTextEdited: page.saveFeedback = ""
                 }
                 Label {
-                    text: qsTr("Use http:// or https://. Enter the port separately.")
+                    text: qsTr("Use http:// or https://. Enter the port separately. The default AOWIS MAP server port is 8122.")
                     color: page.mutedColor
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -130,7 +130,7 @@ Rectangle {
                         border.color: mapServerPort.activeFocus ? page.accentColor : page.borderColor
                     }
                     Layout.fillWidth: true
-                    placeholderText: qsTr("e.g. 8080")
+                    placeholderText: qsTr("e.g. 8122")
                     selectByMouse: true
                     maximumLength: 5
                     inputMethodHints: Qt.ImhDigitsOnly | Qt.ImhNoPredictiveText

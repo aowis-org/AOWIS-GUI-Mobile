@@ -20,7 +20,7 @@ MapServerSettings::MapServerSettings(QObject *parent, const QString &settingsFil
     }
 
     const QString restoredUrl = this->settings->value(QStringLiteral("mapServer/url")).toString();
-    const QString restoredPort = this->settings->value(QStringLiteral("mapServer/port")).toString();
+    const QString restoredPort = this->settings->value(QStringLiteral("mapServer/port"), DefaultMapPort).toString();
     QString normalized;
     QString ignoredError;
     int port = 0;
