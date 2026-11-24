@@ -136,6 +136,21 @@ assert_not_log 'docker build '
 assert_log 'docker run '
 assert_not_log 'adb '
 
+# Opt-in MAP qualification needs a registered source checkout and uses its
+# own Docker build directory, preserving the normal APK workflow.
+: > "$MOCK_LOG"
+if ./compile_android.sh --embedded-map --build-only > "$work/output.log" 2>&1; then
+    fail 'missing MAP accepted'
+fi
+grep -Fq 'tools/init_map.sh' "$work/output.log" || fail 'missing MAP diagnostic'
+assert_not_log 'docker run '
+mkdir -p "$work/repo/external/AOWIS-SERVER-MAP"
+touch "$work/repo/external/AOWIS-SERVER-MAP/CMakeLists.txt"
+run_case --embedded-map --build-only
+assert_log 'AOWIS_ANDROID_EMBEDDED_MAP=ON'
+assert_log 'AOWIS_ANDROID_BUILD_NAME=build-android-bgfx-embedded-map'
+assert_not_log 'adb '
+
 # One authorized device deploys; baseline produces its own output.
 run_case --baseline
 assert_log "$work/data/aowis-gui-mobile/android-debug-signing:/tmp/.android"

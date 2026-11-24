@@ -19,3 +19,6 @@
 [submodule "external/AOWIS-CONFIG"]
 	path = external/AOWIS-CONFIG
 	url = https://github.com/aowis-org/AOWIS-CONFIG.git
+[submodule "external/AOWIS-SERVER-MAP"]
+	path = external/AOWIS-SERVER-MAP
+	url = https://github.com/aowis-org/AOWIS-SERVER-MAP.git

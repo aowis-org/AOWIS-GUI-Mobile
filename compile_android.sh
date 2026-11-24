@@ -16,6 +16,7 @@ Usage: ./compile_android.sh [options]
   --run                         Require a device and install/launch after building.
   --build-only                  Build APK; do not use ADB.
   --baseline                    Build QML-only baseline without the map renderer.
+  --embedded-map                Also link embedded MAP (REST still active).
   --devices                     List USB/Wi-Fi ADB devices without building.
   --wifi                        Discover/reconnect paired Wi-Fi devices via mDNS;
                                 prefer Wi-Fi for deployment.
@@ -49,6 +50,7 @@ die() { printf 'AOWIS Mobile Android: %s\n' "$*" >&2; exit 1; }
 
 install_mode=auto
 bgfx=ON
+embedded_map=OFF
 list_devices=false
 wifi_preferred=false
 wifi_pair=
@@ -62,6 +64,7 @@ while (( $# > 0 )); do
             [[ "$install_mode" != build-only ]] || die 'Do not combine --run and --build-only.'
             install_mode=run ;;
         --baseline) bgfx=OFF ;;
+        --embedded-map) embedded_map=ON ;;
         --devices) list_devices=true ;;
         --wifi) wifi_preferred=true ;;
         --wifi-pair|--wifi-connect)
@@ -227,11 +230,16 @@ fi
 [[ -f "$project_dir/external/AOWIS-NETWORK/CMakeLists.txt" &&
    -f "$project_dir/external/AOWIS-NETWORK/tools/build_wireguard_engine.sh" ]] ||
     die 'AOWIS-NETWORK missing: run ./tools/init_network.sh once (or ./git_submodule_init.sh --network).'
+if [[ "$embedded_map" == ON ]]; then
+    [[ -f "$project_dir/external/AOWIS-SERVER-MAP/CMakeLists.txt" ]] ||
+        die 'MAP missing: run ./tools/init_map.sh once.'
+fi
 jobs="${AOWIS_ANDROID_JOBS:-8}"
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || die 'AOWIS_ANDROID_JOBS must be a positive integer.'
 
 build_name=build-android-bgfx
 [[ "$bgfx" == ON ]] || build_name=build-android-baseline
+[[ "$embedded_map" == OFF ]] || build_name="$build_name-embedded-map"
 
 if ! docker image inspect "$AOWIS_ANDROID_IMAGE" >/dev/null 2>&1; then
     echo '=== Android Docker toolchain missing; preparing image ==='
@@ -274,6 +282,7 @@ docker run --rm --network="${AOWIS_DOCKER_RUN_NETWORK:-host}" \
     -e "AOWIS_ANDROID_NDK_VERSION=$AOWIS_ANDROID_NDK_VERSION" \
     -e "AOWIS_ANDROID_BUILD_TOOLS_VERSION=$AOWIS_ANDROID_BUILD_TOOLS_VERSION" \
     -e "AOWIS_ANDROID_BGFX=$bgfx" \
+    -e "AOWIS_ANDROID_EMBEDDED_MAP=$embedded_map" \
     -e AOWIS_ANDROID_RENDER_SOURCE_DIR=/aowis-render \
     -e "AOWIS_ANDROID_BUILD_NAME=$build_name" \
     -e "AOWIS_ANDROID_JOBS=$jobs" \

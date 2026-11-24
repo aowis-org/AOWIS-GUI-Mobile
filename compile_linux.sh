@@ -13,6 +13,7 @@ Usage: ./compile_linux.sh [options]
   (default)       Build optimized Qt Quick app with the AOWIS map and launch it.
   --build-only    Build without launching the application.
   --baseline      Build and launch the QML-only baseline (no map renderer).
+  --embedded-map  Also link and qualify the embedded MAP library (REST still active).
   --tests         Also build and run the targeted C++ regression tests.
   --help          Show this help.
 
@@ -38,11 +39,13 @@ HELP
 build_only=false
 baseline=false
 run_tests=false
+embedded_map=OFF
 while (( $# > 0 )); do
     case "$1" in
         --build-only) build_only=true ;;
         --baseline) baseline=true ;;
         --tests) run_tests=true ;;
+        --embedded-map) embedded_map=ON ;;
         --help|-h) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -96,15 +99,27 @@ else
     done
 fi
 
+if [[ "$embedded_map" == ON ]]; then
+    [[ -f "$PROJECT_DIR/external/AOWIS-SERVER-MAP/CMakeLists.txt" ]] || {
+        echo 'MAP submodule missing: run ./tools/init_map.sh once.' >&2; exit 1;
+    }
+    BUILD_DIR="$BUILD_DIR-embedded-map"
+fi
+
 TESTING=OFF
 "$run_tests" && TESTING=ON
 printf '=== Building AOWIS Mobile Linux (%s, %s) ===\n' "$BUILD_TYPE" "$BGFX"
 cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DAOWIS_MOBILE_WITH_BGFX="$BGFX" \
+    -DAOWIS_MOBILE_WITH_EMBEDDED_MAP="$embedded_map" \
     -DBUILD_TESTING="$TESTING"
 # Build only the application and its actual dependencies, not every test/tool.
 cmake --build "$BUILD_DIR" --target aowis-mobile --parallel "$JOBS"
+
+if [[ "$embedded_map" == ON ]]; then
+    "$BUILD_DIR/aowis-mobile" -platform offscreen --check-embedded-map
+fi
 
 if "$run_tests"; then
     cmake --build "$BUILD_DIR" --target aowis-mobile-map-math-tests aowis-mobile-lifecycle-tests aowis-mobile-map-server-settings-tests aowis-mobile-wireguard-settings-tests aowis-mobile-appearance-settings-tests aowis-mobile-language-settings-tests aowis-mobile-unit-profile-settings-tests aowis-mobile-unit-registry-contract-tests aowis-mobile-location-snapshot-tests aowis-mobile-compass-heading-tests aowis-mobile-look-around-engine-tests aowis-mobile-look-around-field-tests aowis-mobile-look-around-vision-tests aowis-mobile-look-around-direct-tests aowis-mobile-gradienter-math-tests aowis-mobile-plumb-bob-math-tests aowis-mobile-flashlight-tests --parallel "$JOBS"

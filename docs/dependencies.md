@@ -12,6 +12,7 @@ relative and independent of the checkout directory name.
 | `external/AOWIS-SERVER-EPANET` | `https://github.com/aowis-org/AOWIS-SERVER-EPANET.git` | Pinned source dependency for future hydraulic simulation; not compiled or linked yet |
 | `external/AOWIS-CONFIG` | `https://github.com/aowis-org/AOWIS-CONFIG.git` | `aowis::config`: configuration storage (owner root `gui-mobile`), currently the WireGuard profiles |
 | `external/AOWIS-NETWORK` | `https://github.com/aowis-org/AOWIS-NETWORK.git` | `AOWIS::Network` / `AOWIS::NetworkQt`: embedded userspace WireGuard engine (Go) behind a loopback SOCKS5 proxy |
+| `external/AOWIS-SERVER-MAP` | `https://github.com/aowis-org/AOWIS-SERVER-MAP.git` | Embedded MAP core build qualification (`--embedded-map`); active renderer still uses REST |
 
 The GeographicLib path and URL match those used in Desktop AOWIS-GUI. Git
 records each dependency's exact commit as a *gitlink*, not as copied source.
@@ -77,3 +78,50 @@ premature build or runtime dependencies.
 `tools/zip_mobile_project.sh` exports Mobile's own files and dependency metadata,
 not source trees owned by Git submodules. The resulting `mobile.zip` is a source
 snapshot, **not** a replacement for the real Git gitlinks.
+
+## Embedded MAP build qualification
+
+`external/AOWIS-SERVER-MAP` is registered with:
+
+```bash
+./tools/init_map.sh
+```
+
+Commit `.gitmodules` and the actual MAP gitlink. Later checkouts use
+`./git_submodule_init.sh --map`; deliberate upgrades use
+`./git_submodule_update.sh --map`. MAP reuses Mobile's `aowis::config` target;
+its nested CONFIG checkout is not needed. MAP is not advanced by `--all`.
+
+The first integration stage is opt-in. On Arch Linux install the native
+MAP library dependencies (in addition to the usual Mobile toolchain):
+
+```bash
+sudo pacman -S --needed libtiff libpng libjpeg-turbo zstd zlib pkgconf
+./compile_linux.sh --embedded-map --build-only
+```
+
+The build links `AOWIS::ServerMap`, not the MAP HTTP executable. It then runs
+`aowis-mobile -platform offscreen --check-embedded-map` in a temporary
+storage root. The check exercises MAP's own SettingsRepository, including
+provider settings and cascade persistence, and initializes raster and terrain
+with remote fetching disabled. It never changes the real app settings.
+
+For Android:
+
+```bash
+./compile_android.sh --embedded-map --build-only
+```
+
+The existing Docker/NDK toolchain builds ARM64 static PNG, TurboJPEG, Zstd
+and TIFF libraries in `build-android-bgfx-embedded-map/map-native/`. Their
+release-tag source checkouts are retained, their resolved commit IDs recorded
+in `source-revisions.txt`, and all archive members checked for AArch64. NDK
+zlib is used; TIFF retains lossless LZW/Deflate support. No host libraries are
+used. The first build requires Internet access to the dependency repositories;
+subsequent builds reuse the checkouts. The ordinary Linux and Android builds
+are unchanged.
+
+This stage does **not** change the renderer transport, move the current MAP
+endpoint into cascade settings, or add provider editing UI. Those require
+wiring the MAP catalog and tile/terrain adapters to the renderer, including
+fail-closed WireGuard routing, and then exposing MAP's settings APIs in QML.

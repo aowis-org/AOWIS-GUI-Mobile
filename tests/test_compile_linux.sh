@@ -148,4 +148,18 @@ if "$TMP_DIR/repo/compile_linux.sh" --does-not-exist >"$TMP_DIR/error.log" 2>&1;
     echo 'Expected rejection of unknown option' >&2; exit 1
 fi
 printf 'PASS: invalid argument handling\n'
+# Embedded MAP must not affect ordinary builds; qualification uses a separate
+# build directory and runs the real check immediately after a successful build.
+: > "$AOWIS_LINUX_TEST_LOG"
+if "$TMP_DIR/repo/compile_linux.sh" --embedded-map --build-only > "$TMP_DIR/error.log" 2>&1; then
+    echo 'Expected failure for missing MAP submodule' >&2; exit 1
+fi
+grep -F 'tools/init_map.sh' "$TMP_DIR/error.log" >/dev/null
+[[ ! -s "$AOWIS_LINUX_TEST_LOG" ]]
+mkdir -p "$TMP_DIR/repo/external/AOWIS-SERVER-MAP"
+touch "$TMP_DIR/repo/external/AOWIS-SERVER-MAP/CMakeLists.txt"
+"$TMP_DIR/repo/compile_linux.sh" --embedded-map --build-only
+assert_contains '-DAOWIS_MOBILE_WITH_EMBEDDED_MAP=ON'
+assert_contains 'build-linux-bgfx-embedded-map'
+assert_contains 'run -platform offscreen --check-embedded-map'
 echo 'Linux compile script tests passed.'

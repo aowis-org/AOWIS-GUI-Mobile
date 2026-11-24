@@ -10,7 +10,7 @@ cd -- "$project_dir"
 
 usage() {
     cat <<'HELP'
-Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --epanet | --network | --config | --all | --help]
+Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --epanet | --network | --config | --map | --all | --help]
 
   (no option)  Advance AOWIS-GUI-Render to its tracked remote branch.
   --render     Same as the default; leave MODEL untouched.
@@ -19,11 +19,12 @@ Usage: ./git_submodule_update.sh [--render | --model | --dvmdb | --epanet | --ne
   --epanet     Deliberately advance only the EPANET gitlink, without nested modules.
   --network    Advance only AOWIS-NETWORK to its tracked remote branch.
   --config     Advance only AOWIS-CONFIG to its tracked remote branch.
-  --all        Advance Render, MODEL, NETWORK and CONFIG. DVMDB and EPANET
+  --map        Deliberately advance MAP, without its nested CONFIG.
+  --all        Advance Render, MODEL, NETWORK and CONFIG. MAP, DVMDB and EPANET
                are opt-in only. Nested modules stay at recorded commits.
   --help       Show this help.
 
-Review and commit any changed Render/MODEL/DVMDB/EPANET/NETWORK/CONFIG gitlinks explicitly.
+Review and commit any changed first-party gitlinks explicitly.
 GeographicLib always stays pinned; choose a tested release before changing it.
 bgfx is pinned by Render (the GUI pins the same revisions).
 HELP
@@ -42,6 +43,7 @@ update_dvmdb=false
 update_epanet=false
 update_network=false
 update_config=false
+update_map=false
 update_render=true
 case "${1:-}" in
     '')
@@ -75,6 +77,11 @@ case "${1:-}" in
         update_render=false
         update_config=true
         ;;
+    --map)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        update_render=false
+        update_map=true
+        ;;
     --all)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         update_model=true
@@ -97,10 +104,11 @@ if "$update_render" && [[ "$(git ls-files --stage -- "$render_path")" != '160000
     die "Missing Git submodule gitlink for $render_path. First run 'git submodule add https://github.com/aowis-org/AOWIS-GUI-Render.git $render_path' and commit the gitlink and .gitmodules."
 fi
 
-git submodule sync --recursive
+git submodule sync
 # Advance only selected first-party submodules; leave third-party commits pinned.
 if "$update_render"; then
     git submodule update --init --remote --checkout -- "$render_path"
+    git -C "$render_path" submodule sync --recursive
     git -C "$render_path" submodule update --init --recursive --checkout
     printf 'Updated %s to %s. Review and commit the gitlink.\n' \
         "$render_path" "$(git -C "$render_path" rev-parse --short HEAD)"
@@ -148,4 +156,13 @@ if "$update_config"; then
     git submodule update --init --remote --checkout -- "$config_path"
     printf 'Updated %s to %s. Review and commit the gitlink.\n' \
         "$config_path" "$(git -C "$config_path" rev-parse --short HEAD)"
+fi
+
+if "$update_map"; then
+    map_path='external/AOWIS-SERVER-MAP'
+    [[ "$(git ls-files --stage -- "$map_path")" == '160000 '* ]] ||
+        die 'MAP gitlink missing. Run ./tools/init_map.sh once.'
+    git submodule update --init --remote --checkout -- "$map_path"
+    printf 'Updated %s to %s. Review and commit the gitlink.\n' \
+        "$map_path" "$(git -C "$map_path" rev-parse --short HEAD)"
 fi
