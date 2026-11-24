@@ -341,6 +341,25 @@ Rectangle {
                             editable: true
                             onValueModified: page.providerField("maxZoom", value)
                         }
+                        Heading { text: qsTr("My fallback") }
+                        Hint { text: qsTr("Choose a higher-resolution provider for zooming beyond this provider's maximum zoom. Fallbacks can form a chain and are personal, not upstream settings.") }
+                        MapCombo {
+                            id: fallbackChoice
+                            Layout.fillWidth: true
+                            textRole: "label"; valueRole: "id"
+                            model: [{id: "", label: qsTr("None (enlarge available tiles)")}].concat(page.provider.fallbackChoices || [])
+                            function savedIndex() {
+                                const selected = page.provider.fallback || ""
+                                for (let i = 0; i < model.length; ++i)
+                                    if (model[i].id === selected) return i
+                                return 0
+                            }
+                            currentIndex: savedIndex()
+                            onActivated: {
+                                mobileMapSettings.setFallback(page.selectedId, currentValue)
+                                currentIndex = Qt.binding(function() { return fallbackChoice.savedIndex() })
+                            }
+                        }
                         Toggle {
                             text: qsTr("Allow remote downloads")
                             checked: !!page.provider.remote

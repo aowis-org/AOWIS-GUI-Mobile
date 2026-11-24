@@ -72,6 +72,60 @@ static bool checkSettings(const QString &root)
         restarted.removeProvider(provider);
 }
 
+static bool checkFallbacks(const QString &root)
+{
+    QString a, b, c, gap;
+    const QString url = QStringLiteral("https://example.org/%1/{z}/{x}/{y}.png");
+    {
+        MobileMapSettings settings({}, {}, nullptr, root);
+        if (!settings.ready()) return false;
+        a = settings.addProvider(QStringLiteral("Fallback A"), url.arg(QStringLiteral("a")));
+        b = settings.addProvider(QStringLiteral("Fallback B"), url.arg(QStringLiteral("b")));
+        c = settings.addProvider(QStringLiteral("Fallback C"), url.arg(QStringLiteral("c")));
+        gap = settings.addProvider(QStringLiteral("Fallback gap"), url.arg(QStringLiteral("gap")));
+        if (a.isEmpty() || b.isEmpty() || c.isEmpty() || gap.isEmpty() ||
+            !settings.setProviderField(a, QStringLiteral("maxZoom"), 10) ||
+            !settings.setProviderField(b, QStringLiteral("maxZoom"), 15) ||
+            !settings.setProviderField(c, QStringLiteral("maxZoom"), 20) ||
+            !settings.setProviderField(gap, QStringLiteral("minZoom"), 12)) return false;
+        int backend_changes = 0;
+        QObject::connect(&settings, &MobileMapSettings::changed, &settings, [&backend_changes]() { ++backend_changes; });
+        if (!settings.setFallback(a, b) || !settings.setFallback(b, c) ||
+            settings.setFallback(a, a) || settings.setFallback(b, a) || settings.setFallback(a, gap) ||
+            backend_changes != 0) return false;
+    }
+    MobileMapSettings settings({}, {}, nullptr, root);
+    if (settings.personalFallbacks().value(a) != b || settings.personalFallbacks().value(b) != c) return false;
+    QString error;
+    std::unique_ptr<Aowis::Map::SettingsRepository> repository = MobileMapSettings::openRepository(root, &error);
+    QVector<Aowis::Map::MapProvider> local;
+    if (!repository || !repository->readProviders(&local, nullptr, &error)) return false;
+    QVector<Aowis::Map::AvailableMapProvider> available;
+    for (const Aowis::Map::MapProvider &provider : local) available.append({provider, false, {}});
+    MobileMapProviderDirectory directory;
+    directory.replace(available, settings.personalFallbacks());
+    if (directory.sourceForZoom(a, 10) != a || directory.sourceForZoom(a, 11) != b ||
+        directory.sourceForZoom(a, 16) != c || directory.maximumSourceZoom(a) != 20) return false;
+    int notifications = 0;
+    QObject::connect(&directory, &MobileMapProviderDirectory::catalogChanged, &directory, [&notifications]() { ++notifications; });
+    QObject::connect(&settings, &MobileMapSettings::fallbacksChanged, &directory, [&]() {
+        directory.setFallbacks(settings.personalFallbacks());
+    });
+    if (!settings.setFallback(b, {}) || directory.maximumSourceZoom(a) != 15 || notifications != 1 ||
+        !settings.setFallback(b, c) || directory.maximumSourceZoom(a) != 20 || notifications != 2) return false;
+    // An inherited provider cannot enter the chain even if its UUID was once local.
+    for (Aowis::Map::AvailableMapProvider &entry : available)
+        if (entry.provider.id == b) entry.inherited = true;
+    directory.replace(available, settings.personalFallbacks());
+    if (directory.maximumSourceZoom(a) != 10) return false;
+    if (!settings.setProviderField(b, QStringLiteral("enabled"), false) ||
+        settings.personalFallbacks().contains(a) || settings.setFallback(a, b) ||
+        !settings.setProviderField(b, QStringLiteral("enabled"), true) ||
+        settings.personalFallbacks().value(a) != b || !settings.removeProvider(b) ||
+        settings.personalFallbacks().contains(a)) return false;
+    return settings.setFallback(a, {}) && !settings.personalFallbacks().contains(a);
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -80,6 +134,8 @@ int main(int argc, char **argv)
     const QDir root(temporary.path());
     if (!checkSettings(root.filePath(QStringLiteral("settings-ui"))))
     { qCritical() << "MAP settings migration/persistence failed"; return 1; }
+    if (!checkFallbacks(root.filePath(QStringLiteral("fallback-settings"))))
+    { qCritical() << "Personal imagery fallback regression failed"; return 1; }
     const QString settings = root.filePath(QStringLiteral("settings"));
     const QString data = root.filePath(QStringLiteral("data"));
     QString error;

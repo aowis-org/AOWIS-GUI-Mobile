@@ -32,6 +32,14 @@ std::unique_ptr<SettingsRepository> MobileMapSettings::openRepository(const QStr
 MobileMapSettings::MobileMapSettings(const QString &legacy_url, const QString &legacy_profile,
                                      QObject *parent, const QString &root) : QObject(parent)
 {
+    // Personal display preferences belong to Mobile, never the MAP repository.
+    this->personal_settings = root.isEmpty()
+        ? std::make_unique<QSettings>(QSettings::NativeFormat, QSettings::UserScope,
+                                      QStringLiteral("AOWIS"), QStringLiteral("AOWIS-GUI-Mobile"))
+        : std::make_unique<QSettings>(QDir(root).filePath(QStringLiteral("mobile-personal.ini")), QSettings::IniFormat);
+    const QVariantMap stored = this->personal_settings->value(QStringLiteral("mapProviderFallbacks")).toMap();
+    for (QVariantMap::const_iterator it = stored.constBegin(); it != stored.constEnd(); ++it)
+        if (!it.value().toString().isEmpty()) this->saved_fallbacks.insert(it.key(), it.value().toString());
     this->repository = openRepository(root, &this->last_error);
     if (!this->repository || !this->load()) return;
     // The first persisted cascade is the migration marker. Deleting the last
@@ -94,6 +102,66 @@ bool MobileMapSettings::saveCascade(const MapCascadeConfig &value)
     return this->finish(ok, error);
 }
 
+bool MobileMapSettings::validFallback(const QString &id, const QString &target) const
+{
+    if (id.isEmpty() || target.isEmpty() || id == target) return false;
+    const MapProvider *source = nullptr;
+    const MapProvider *alternative = nullptr;
+    for (const MapProvider &p : this->local)
+    {
+        if (p.id == id) source = &p;
+        if (p.id == target) alternative = &p;
+    }
+    // Same rules as Desktop: local providers only, strictly more detail,
+    // and no gap at the transition. Strictly increasing max zoom forbids cycles.
+    return source && alternative && alternative->enabled &&
+        alternative->maximum_zoom > source->maximum_zoom &&
+        alternative->minimum_zoom <= source->maximum_zoom + 1;
+}
+
+QVariantList MobileMapSettings::fallbackChoices(const QString &id) const
+{
+    QVariantList choices;
+    for (const MapProvider &p : this->local)
+        if (this->validFallback(id, p.id))
+            choices.append(QVariantMap{{QStringLiteral("id"), p.id}, {QStringLiteral("label"), p.name}});
+    return choices;
+}
+
+QHash<QString, QString> MobileMapSettings::personalFallbacks() const
+{
+    QHash<QString, QString> effective;
+    if (!this->valid) return effective;
+    for (QHash<QString, QString>::const_iterator it = this->saved_fallbacks.constBegin();
+         it != this->saved_fallbacks.constEnd(); ++it)
+        if (this->validFallback(it.key(), it.value())) effective.insert(it.key(), it.value());
+    return effective;
+}
+
+bool MobileMapSettings::setFallback(const QString &id, const QString &target)
+{
+    if (!this->valid) return false;
+    bool local_source = false;
+    for (const MapProvider &p : this->local) local_source = local_source || p.id == id;
+    if (!local_source || (!target.isEmpty() && !this->validFallback(id, target)))
+        return this->fail(tr("Invalid personal imagery fallback."));
+    QHash<QString, QString> updated = this->saved_fallbacks;
+    if (target.isEmpty()) updated.remove(id); else updated.insert(id, target);
+    QVariantMap stored;
+    for (QHash<QString, QString>::const_iterator it = updated.constBegin(); it != updated.constEnd(); ++it)
+        stored.insert(it.key(), it.value());
+    this->personal_settings->setValue(QStringLiteral("mapProviderFallbacks"), stored);
+    this->personal_settings->sync();
+    if (this->personal_settings->status() != QSettings::NoError)
+        return this->fail(tr("Could not save personal imagery fallbacks."));
+    this->saved_fallbacks = updated;
+    this->last_error.clear();
+    emit fallbacksChanged();
+    emit catalogChanged();
+    emit errorChanged();
+    return true;
+}
+
 QVariantList MobileMapSettings::providers() const
 {
     QVariantList result;
@@ -108,6 +176,7 @@ QVariantList MobileMapSettings::providers() const
                 local_exists = local_exists || provider.id == entry.provider.id;
             if (!local_exists) entries.append(entry);
         }
+    const QHash<QString, QString> fallbacks = this->personalFallbacks();
     for (const AvailableMapProvider &entry : entries)
     {
         const MapProvider &p = entry.provider;
@@ -119,7 +188,9 @@ QVariantList MobileMapSettings::providers() const
             {QStringLiteral("enabled"), entry.inherited ? !this->disabled.contains(p.id) : p.enabled},
             {QStringLiteral("inherited"), entry.inherited}, {QStringLiteral("remote"), p.remote_fetch_enabled},
             {QStringLiteral("lossy"), p.allow_lossy_transfer}, {QStringLiteral("minZoom"), p.minimum_zoom}, {QStringLiteral("maxZoom"), p.maximum_zoom},
-            {QStringLiteral("mode"), Aowis::Map::providerAcquisitionModeName(mode)}, {QStringLiteral("routes"), this->routes.value(p.id)}});
+            {QStringLiteral("mode"), Aowis::Map::providerAcquisitionModeName(mode)}, {QStringLiteral("routes"), this->routes.value(p.id)},
+            {QStringLiteral("fallback"), fallbacks.value(p.id)},
+            {QStringLiteral("fallbackChoices"), entry.inherited ? QVariantList() : this->fallbackChoices(p.id)}});
     }
     return result;
 }

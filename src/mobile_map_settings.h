@@ -3,6 +3,7 @@
 #include <aowis/map/settings_repository.h>
 #include <aowis/map/provider_catalog.h>
 #include <QObject>
+#include <QSettings>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -30,6 +31,8 @@ public:
     Aowis::Map::MapCascadeConfig cascadeConfig() const { return this->cascade; }
     QVariantList providers() const;
     QVariantList upstreams() const;
+    QHash<QString, QString> personalFallbacks() const;
+    Q_INVOKABLE bool setFallback(const QString &id, const QString &target);
     void setAvailable(const QVector<Aowis::Map::AvailableMapProvider> &entries);
     QStringList profileUsers(const QString &id) const;
     Q_INVOKABLE QString addProvider(const QString &name, const QString &url);
@@ -47,6 +50,7 @@ public:
 signals:
     void changed();
     void catalogChanged();
+    void fallbacksChanged();
     void errorChanged();
 private:
     bool load();
@@ -55,6 +59,10 @@ private:
     bool saveProviders(const QVector<Aowis::Map::MapProvider> &value);
     bool saveCascade(const Aowis::Map::MapCascadeConfig &value);
     bool knownProvider(const QString &id) const;
+    QVariantList fallbackChoices(const QString &id) const;
+    bool validFallback(const QString &id, const QString &target) const;
+    std::unique_ptr<QSettings> personal_settings;
+    QHash<QString, QString> saved_fallbacks;
     std::unique_ptr<Aowis::Map::SettingsRepository> repository;
     Aowis::Map::MapCascadeConfig cascade;
     QVector<Aowis::Map::MapProvider> local;

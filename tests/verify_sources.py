@@ -98,7 +98,12 @@ checks = [
      "No map server configured. Tap to set one up." not in qml and
      "aowis-mobile-embedded-map-runtime" in cmake),
     ("map server from the settings", "mapSettings: mobileMapSettings" in qml and
-     "MobileEmbeddedMapTransport(*backend, parent)" in source and "catalog.replace(this->backend->availableProviders())" in source),
+     "MobileEmbeddedMapTransport(*backend, parent)" in source and "catalog.replace(available, this->map_settings ? this->map_settings->personalFallbacks()" in source),
+    ("personal imagery fallbacks use shared zoom resolution without MAP reconfiguration",
+     "sourceForZoom(this->entries, this->fallbacks, id, zoom)" in (root / "src/mobile_map_provider_directory.cpp").read_text() and
+     "maximumSourceZoom(this->entries, this->fallbacks, id)" in (root / "src/mobile_map_provider_directory.cpp").read_text() and
+     "&MobileMapSettings::fallbacksChanged" in source and
+     "mobileMapSettings.setFallback(page.selectedId, currentValue)" in (root / "qml/MapServerSettingsPage.qml").read_text()),
     ("map gestures and Qt Quick HUD", "void touchEvent(QTouchEvent *event) override;" in header and
      "mapViewHudEnabled() const override { return false; }" in source and
      "handleHudMouseEvent" not in source and "handleHudWheelEvent" not in source and

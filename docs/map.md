@@ -51,6 +51,14 @@ upstream port is **8122**; another port may be specified in the URL.
 - Provider definitions, zoom range, availability, remote downloads and lossy
   transfer are editable for local providers. Inherited definitions are read-only;
   local availability and acquisition/routing policy can be changed.
+- **My fallback** is a personal imagery preference, not a MAP acquisition route.
+  Select another enabled local provider with a higher maximum zoom and no gap
+  at the transition. Chains can continue through multiple providers; without
+  another eligible fallback, the highest-resolution tiles are enlarged by Render.
+  Choices save immediately in the mobile application's personal settings and
+  apply without reconnecting upstreams. A choice that becomes invalid (for
+  example after disabling its target) is inactive until eligible again.
+  Inherited providers do not participate in personal fallback chains.
 - Upstreams have a stable unique name, URL, optional API key and optional
   WireGuard profile. Global order and explicit per-provider order are editable.
   An empty provider route uses global order; use the reset action after removing

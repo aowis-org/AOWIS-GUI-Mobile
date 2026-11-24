@@ -151,6 +151,7 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     MobileMapView *item = nullptr;
     QPointer<MobileMapSettings> map_settings;
     QMetaObject::Connection map_settings_connection;
+    QMetaObject::Connection map_fallbacks_connection;
     QPointer<WireGuardVpnSettings> wireguard;
     QMetaObject::Connection wireguard_connection;
     QHash<QString, QString> required_tunnels;
@@ -590,8 +591,10 @@ void MobileMapView::Impl::rebuildServer()
         this->backend = std::make_unique<MobileEmbeddedMapBackend>();
         QObject::connect(this->backend.get(), &MobileEmbeddedMapBackend::providersChanged,
                          this->item, [this]() {
-            this->catalog.replace(this->backend->availableProviders());
-            if (this->map_settings) this->map_settings->setAvailable(this->backend->availableProviders());
+            const QVector<Aowis::Map::AvailableMapProvider> available = this->backend->availableProviders();
+            if (this->map_settings) this->map_settings->setAvailable(available);
+            this->catalog.replace(available, this->map_settings ? this->map_settings->personalFallbacks()
+                                                                : QHash<QString, QString>());
         });
         MobileEmbeddedMapBackend *backend = this->backend.get();
         MapServerTransport transport;
@@ -1057,10 +1060,16 @@ void MobileMapView::setMapSettings(QObject *settings)
     MobileMapSettings *typed = qobject_cast<MobileMapSettings *>(settings);
     if (this->impl->map_settings == typed) return;
     QObject::disconnect(this->impl->map_settings_connection);
+    QObject::disconnect(this->impl->map_fallbacks_connection);
     this->impl->map_settings = typed;
     if (typed)
+    {
         this->impl->map_settings_connection = connect(typed, &MobileMapSettings::changed, this,
             [this]() { this->impl->scheduleRebuild(); });
+        this->impl->map_fallbacks_connection = connect(typed, &MobileMapSettings::fallbacksChanged, this,
+            [this, typed]() { this->impl->catalog.setFallbacks(typed->personalFallbacks()); });
+    }
+    this->impl->catalog.setFallbacks(typed ? typed->personalFallbacks() : QHash<QString, QString>());
     this->impl->scheduleRebuild();
     emit mapSettingsChanged();
 }
