@@ -37,6 +37,9 @@ void MobileEmbeddedMapBackend::configure(const Aowis::Map::MapCascadeConfig &run
         MobileMapSettings::openRepository(this->settings_root, &this->settings_error);
     QVector<Aowis::Map::MapProvider> providers;
     Aowis::Map::MapCascadeConfig cascade = runtime_cascade;
+    // Never forward deprecated MAP API keys, even from a stale runtime config.
+    for (Aowis::Map::MapCascadeUpstream &upstream : cascade.upstreams)
+        upstream.api_key.clear();
     QSet<QString> disabled;
     this->upstream_routes.clear();
     this->acquisition_modes.clear();

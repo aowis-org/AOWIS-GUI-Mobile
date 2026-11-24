@@ -198,10 +198,20 @@ checks = [
      all(token in map_server_page for token in ('mobileMapSettings.addProvider', 'mobileMapSettings.addUpstream',
          'mobileMapSettings.setProviderField', 'mobileMapSettings.setUpstreamField',
          'mobileMapSettings.setRoutes', 'mobileMapSettings.setAcquisition', 'mobileMapSettings.moveUpstream',
-         'default AOWIS MAP server port is 8122', 'onEditingFinished', 'TextInput.Password')) and
+         'default AOWIS MAP server port is 8122', 'onEditingFinished')) and
      'MapServerSettingsPage {' in qml and 'root.openPage("mapserver")' in qml and
      'qsTr("Network & servers")' in qml and 'mapServerSettings.save' not in map_server_page and
      'map-upstream/' in source),
+    ("deprecated MAP upstream keys removed from UI and transport",
+     all(token not in map_server_page for token in ('API key', 'newUpstreamKey', 'page.upstream.key', 'TextInput.Password')) and
+     'upstream.api_key.clear()' in (root / "src/mobile_map_settings.cpp").read_text() and
+     'upstream.api_key.clear()' in (root / "src/mobile_embedded_map_backend.cpp").read_text() and
+     'field == QStringLiteral("key")' not in (root / "src/mobile_map_settings.cpp").read_text()),
+    ("WireGuard manager available during upstream creation without resetting draft",
+     'Manage WireGuard profiles…' in map_server_page.split('id: newTunnel', 1)[1].split('visible: page.section === "upstream"', 1)[0] and
+     'onWireguardRequested: root.openPage("wireguard")' in qml and
+     'if (page === "mapserver" && activePage !== "wireguard")' in qml and
+     'onBackRequested: root.openPage(root.wireguardReturnPage)' in qml),
     ("upstream rename autosaves and retains the selected entry",
      'savedValue: page.upstream.name' in map_server_page and
      'page.upstreamField("name", value)' in map_server_page and

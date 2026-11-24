@@ -65,6 +65,24 @@ bool MobileMapSettings::load()
         this->repository->readDisabledInheritedProviders(&this->disabled, &this->disabled_revision, &this->last_error) &&
         this->repository->readProviderAcquisitionModes(&this->modes, &this->mode_revision, &this->last_error) &&
         this->repository->readProviderUpstreamRoutes(&this->routes, &this->route_revision, &this->last_error);
+    if (this->valid)
+    {
+        // Remove deprecated upstream credentials from MAP-owned storage.
+        // A failed write leaves settings unavailable rather than using old keys.
+        bool removed_keys = false;
+        for (MapCascadeUpstream &upstream : this->cascade.upstreams)
+        {
+            removed_keys = removed_keys || !upstream.api_key.isEmpty();
+            upstream.api_key.clear();
+        }
+        if (removed_keys)
+        {
+            QString revision;
+            this->valid = this->repository->saveCascade(this->cascade, this->cascade_revision,
+                                                        &revision, &this->last_error);
+            if (this->valid) this->cascade_revision = revision;
+        }
+    }
     return this->valid;
 }
 
@@ -200,7 +218,7 @@ QVariantList MobileMapSettings::upstreams() const
     QVariantList result;
     for (const MapCascadeUpstream &u : this->cascade.upstreams)
         result.append(QVariantMap{{QStringLiteral("name"), u.name}, {QStringLiteral("url"), u.url.toString()},
-                                  {QStringLiteral("profile"), u.wireguard_profile_id}, {QStringLiteral("key"), QString::fromUtf8(u.api_key)}});
+                                  {QStringLiteral("profile"), u.wireguard_profile_id}});
     return result;
 }
 
@@ -335,14 +353,13 @@ static QUrl upstreamUrl(const QString &text)
     return url;
 }
 
-bool MobileMapSettings::addUpstream(const QString &name, const QString &url, const QString &profile, const QString &key)
+bool MobileMapSettings::addUpstream(const QString &name, const QString &url, const QString &profile)
 {
     MapCascadeConfig proposed = this->cascade;
     MapCascadeUpstream u;
     u.name = name.trimmed();
     u.url = upstreamUrl(url);
     u.wireguard_profile_id = profile;
-    u.api_key = key.toUtf8();
     // Do not silently bypass a new first upstream. Users can opt in afterward.
     if (proposed.upstreams.isEmpty()) proposed.allow_direct_fetch = false;
     proposed.upstreams.append(u);
@@ -396,7 +413,6 @@ bool MobileMapSettings::setUpstreamField(const QString &name, const QString &fie
             }
             if (field == QStringLiteral("url")) u.url = upstreamUrl(value);
             else if (field == QStringLiteral("profile")) u.wireguard_profile_id = value;
-            else if (field == QStringLiteral("key")) u.api_key = value.toUtf8();
             else return false;
             return this->saveCascade(proposed);
         }

@@ -43,7 +43,7 @@ public:
     Q_INVOKABLE bool setAllowDirectFetch(bool enabled);
     Q_INVOKABLE bool setPoorInternet(bool enabled);
     Q_INVOKABLE bool setJpegQuality(int quality);
-    Q_INVOKABLE bool addUpstream(const QString &name, const QString &url, const QString &profile, const QString &key);
+    Q_INVOKABLE bool addUpstream(const QString &name, const QString &url, const QString &profile);
     Q_INVOKABLE bool setUpstreamField(const QString &name, const QString &field, const QString &value);
     Q_INVOKABLE bool moveUpstream(const QString &name, int step);
     Q_INVOKABLE bool removeUpstream(const QString &name);

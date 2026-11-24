@@ -444,7 +444,7 @@ Rectangle {
                     Action {
                         text: qsTr("Add upstream")
                         onClicked: {
-                            newUpstreamName.text = ""; newUpstreamUrl.text = ""; newUpstreamKey.text = ""; newTunnel.profileId = ""
+                            newUpstreamName.text = ""; newUpstreamUrl.text = ""; newTunnel.profileId = ""
                             page.showSection("addUpstream", "")
                         }
                     }
@@ -459,15 +459,14 @@ Rectangle {
                     Heading { text: qsTr("Server URL") }
                     Field { id: newUpstreamUrl; placeholderText: qsTr("http://192.168.2.10:8122"); LayoutMirroring.enabled: false; inputMethodHints: Qt.ImhUrlCharactersOnly }
                     Hint { text: qsTr("Use http:// or https://. The default AOWIS MAP server port is 8122; specify another port in the URL if needed.") }
-                    Heading { text: qsTr("API key") }
-                    Field { id: newUpstreamKey; echoMode: TextInput.Password }
                     Heading { text: qsTr("Connection") }
                     TunnelChoice { id: newTunnel; onActivated: profileId = currentValue }
+                    Action { text: qsTr("Manage WireGuard profiles…"); visible: wireguardVpnSettings.engineAvailable; onClicked: page.wireguardRequested() }
                     Action {
                         text: qsTr("Add upstream")
                         enabled: newUpstreamName.text.trim() !== "" && newUpstreamUrl.text.trim() !== ""
                         onClicked: {
-                            if (mobileMapSettings.addUpstream(newUpstreamName.text, newUpstreamUrl.text, newTunnel.profileId, newUpstreamKey.text))
+                            if (mobileMapSettings.addUpstream(newUpstreamName.text, newUpstreamUrl.text, newTunnel.profileId))
                                 page.showSection("upstream", newUpstreamName.text.trim())
                         }
                     }
@@ -481,8 +480,6 @@ Rectangle {
                     Heading { text: qsTr("Server URL") }
                     SavedField { savedValue: page.upstream.url || ""; LayoutMirroring.enabled: false; inputMethodHints: Qt.ImhUrlCharactersOnly; onCommit: function(value) { if (page.section === "upstream") page.upstreamField("url", value) } }
                     Hint { text: qsTr("Use http:// or https://. The default AOWIS MAP server port is 8122; specify another port in the URL if needed.") }
-                    Heading { text: qsTr("API key") }
-                    SavedField { savedValue: page.upstream.key || ""; echoMode: TextInput.Password; onCommit: function(value) { if (page.section === "upstream") page.upstreamField("key", value) } }
                     Heading { text: qsTr("Connection") }
                     TunnelChoice { profileId: page.upstream.profile || ""; onActivated: page.upstreamField("profile", currentValue) }
                     Hint { text: qsTr("Upstream downloads use only the selected tunnel. Cached map data remains available offline.") }

@@ -25,12 +25,12 @@ static bool checkSettings(const QString &root)
         MobileMapSettings settings(old_url, profile, nullptr, root);
         if (!settings.ready() || settings.upstreams().size() != 1 || settings.allowDirectFetch() ||
             settings.profileUsers(profile).size() != 1) return false;
-        if (!settings.addUpstream(QStringLiteral("second"), QStringLiteral("https://192.0.2.2"), profile, QStringLiteral("test-key")) ||
+        if (!settings.addUpstream(QStringLiteral("second"), QStringLiteral("https://192.0.2.2"), profile) ||
             settings.cascadeConfig().upstreams.last().url.port() != 8122 ||
             !settings.moveUpstream(QStringLiteral("second"), -1) ||
             settings.cascadeConfig().upstreams.first().name != QStringLiteral("second") ||
             settings.profileUsers(profile).size() != 2) return false;
-        if (settings.addUpstream(QStringLiteral("duplicate"), QStringLiteral("https://192.0.2.2:8122"), {}, {})) return false;
+        if (settings.addUpstream(QStringLiteral("duplicate"), QStringLiteral("https://192.0.2.2:8122"), {})) return false;
         settings.setAvailable({inherited});
         if (!settings.setProviderField(inherited.provider.id, QStringLiteral("enabled"), false) ||
             settings.setProviderField(inherited.provider.id, QStringLiteral("name"), QStringLiteral("Forbidden")) ||
@@ -68,7 +68,7 @@ static bool checkSettings(const QString &root)
             !settings.setJpegQuality(65)) return false;
         const Aowis::Map::MapCascadeUpstream renamed = settings.cascadeConfig().upstreams.first();
         if (renamed.name != QStringLiteral("site-map") || renamed.url != QUrl(QStringLiteral("https://192.0.2.2:8122")) ||
-            renamed.wireguard_profile_id != profile || renamed.api_key != QByteArray("test-key") ||
+            renamed.wireguard_profile_id != profile || !renamed.api_key.isEmpty() ||
             settings.allowDirectFetch() || !settings.profileUsers(profile).contains(QStringLiteral("Map server: site-map"))) return false;
     }
     {
@@ -97,6 +97,39 @@ static bool checkSettings(const QString &root)
     MobileMapSettings restarted(old_url, profile, nullptr, root);
     return restarted.ready() && restarted.upstreams().isEmpty() && !restarted.allowDirectFetch() &&
         restarted.removeProvider(provider);
+}
+
+static bool checkDeprecatedKeys(const QString &root)
+{
+    const QString profile = QStringLiteral("0199cc11-0000-7000-8000-000000000001");
+    const QString name = QStringLiteral("legacy-map");
+    const QUrl url(QStringLiteral("https://192.0.2.2:8122"));
+    QString error, revision;
+    {
+        std::unique_ptr<Aowis::Map::SettingsRepository> repository = MobileMapSettings::openRepository(root, &error);
+        Aowis::Map::MapCascadeConfig cascade;
+        if (!repository || !repository->readCascade(&cascade, &revision, &error)) return false;
+        Aowis::Map::MapCascadeUpstream upstream;
+        upstream.name = name;
+        upstream.url = url;
+        upstream.wireguard_profile_id = profile;
+        upstream.api_key = QByteArrayLiteral("deprecated-test-key");
+        cascade.upstreams.append(upstream);
+        cascade.allow_direct_fetch = false;
+        if (!repository->saveCascade(cascade, revision, nullptr, &error)) return false;
+    }
+    MobileMapSettings settings({}, {}, nullptr, root);
+    if (!settings.ready() || settings.upstreams().size() != 1 || settings.allowDirectFetch() ||
+        settings.upstreams().first().toMap().contains(QStringLiteral("key")) ||
+        settings.setUpstreamField(name, QStringLiteral("key"), QStringLiteral("rejected"))) return false;
+    const Aowis::Map::MapCascadeUpstream loaded = settings.cascadeConfig().upstreams.first();
+    if (!loaded.api_key.isEmpty() || loaded.name != name || loaded.url != url ||
+        loaded.wireguard_profile_id != profile || !settings.setJpegQuality(65)) return false;
+    std::unique_ptr<Aowis::Map::SettingsRepository> repository = MobileMapSettings::openRepository(root, &error);
+    Aowis::Map::MapCascadeConfig saved;
+    return repository && repository->readCascade(&saved, nullptr, &error) &&
+        saved.upstreams.size() == 1 && saved.upstreams.first().api_key.isEmpty() &&
+        saved.upstreams.first().wireguard_profile_id == profile && saved.jpeg_quality == 65;
 }
 
 static bool checkFallbacks(const QString &root)
@@ -161,6 +194,8 @@ int main(int argc, char **argv)
     const QDir root(temporary.path());
     if (!checkSettings(root.filePath(QStringLiteral("settings-ui"))))
     { qCritical() << "MAP settings migration/persistence failed"; return 1; }
+    if (!checkDeprecatedKeys(root.filePath(QStringLiteral("deprecated-keys"))))
+    { qCritical() << "Deprecated MAP key migration failed"; return 1; }
     if (!checkFallbacks(root.filePath(QStringLiteral("fallback-settings"))))
     { qCritical() << "Personal imagery fallback regression failed"; return 1; }
     const QString settings = root.filePath(QStringLiteral("settings"));
