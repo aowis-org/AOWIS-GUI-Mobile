@@ -17,9 +17,9 @@ Quick's own OpenGL / OpenGL ES context. One finger pans, two fingers zoom and,
 on the globe, turn and tilt; the mouse wheel zooms and the right button
 orbits the globe on desktop.
 
-Imagery tiles, terrain and the imagery provider catalog come from the
-**aowis-server-map** configured under **Settings → Network & servers → Map server** (HTTP/HTTPS
-URL and port); changing it reconnects at once. The top-left map menu controls GPS acquisition and optional auto-pan.
+The embedded MAP library loads and persistently caches imagery and terrain.
+**Settings → Network & servers → Map server** configures an optional upstream
+(HTTP/HTTPS, default port 8122). The top-left map menu controls GPS acquisition and optional auto-pan.
 The location button re-centres the map on demand. See [the map](docs/map.md).
 
 The hamburger menu opens **Settings → Appearance** (system/dark/light theme),
@@ -63,7 +63,7 @@ run `./tools/init_epanet.sh` once, then commit its Git gitlink together with
 
 For existing checkouts, register MAP once with `./tools/init_map.sh` and
 commit its Git gitlink with `.gitmodules`. MAP is a required in-process
-library in all builds; the renderer currently still requests tiles over REST.
+library in all builds; the renderer accesses it directly when bgfx is enabled.
 
 For new clones, initialize all pinned submodules, including Render's nested
 bgfx/bx/bimg revisions (the same ones the desktop GUI builds):

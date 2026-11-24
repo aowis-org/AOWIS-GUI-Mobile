@@ -12,7 +12,7 @@ relative and independent of the checkout directory name.
 | `external/AOWIS-SERVER-EPANET` | `https://github.com/aowis-org/AOWIS-SERVER-EPANET.git` | Pinned source dependency for future hydraulic simulation; not compiled or linked yet |
 | `external/AOWIS-CONFIG` | `https://github.com/aowis-org/AOWIS-CONFIG.git` | `aowis::config`: configuration storage (owner root `gui-mobile`), currently the WireGuard profiles |
 | `external/AOWIS-NETWORK` | `https://github.com/aowis-org/AOWIS-NETWORK.git` | `AOWIS::Network` / `AOWIS::NetworkQt`: embedded userspace WireGuard engine (Go) behind a loopback SOCKS5 proxy |
-| `external/AOWIS-SERVER-MAP` | `https://github.com/aowis-org/AOWIS-SERVER-MAP.git` | Required `AOWIS::ServerMap` core library; active renderer still uses REST |
+| `external/AOWIS-SERVER-MAP` | `https://github.com/aowis-org/AOWIS-SERVER-MAP.git` | Required `AOWIS::ServerMap` core library; direct in-process renderer transport |
 
 The GeographicLib path and URL match those used in Desktop AOWIS-GUI. Git
 records each dependency's exact commit as a *gitlink*, not as copied source.

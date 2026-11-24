@@ -149,7 +149,7 @@ Window {
         function onChanged() { root.updateLocation() }
     }
 
-    // The AOWIS map (imagery and terrain from the configured aowis-server-map)
+    // The AOWIS map (imagery and terrain from the embedded MAP backend)
     // bgfx draws into Qt Quick's window framebuffer, so the host must fill
     // the entire window. The bottom navigation overlays the map, just like
     // the top controls; shrinking the host would offset the GL viewport.
@@ -200,32 +200,6 @@ Window {
             color: root.uiRaised
             border.color: root.uiBorder
         }
-    }
-
-    // No map server yet: say where to configure one, over the map.
-    Button {
-        visible: root.activePage === "map" && !mapServerSettings.configured
-        anchors.top: parent.top
-        anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left
-        anchors.right: hamburgerButton.left
-        anchors.margins: 14
-        height: 52
-        z: 2
-        onClicked: root.openPage("mapserver")
-        contentItem: Text {
-            text: qsTr("No map server configured. Tap to set one up.")
-            color: root.uiText
-            font.pixelSize: 13
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: 11
-            color: root.uiRaised
-            border.color: root.uiAccent
-        }
-        Accessible.name: qsTr("No map server configured. Tap to set one up.")
     }
 
     // The map server is reached only through its WireGuard tunnel, which is
@@ -946,7 +920,7 @@ Window {
                     }
                     Label {
                         text: !mapServerSettings.configured
-                              ? qsTr("No map server configured yet.")
+                              ? qsTr("No upstream configured. Local map acquisition policy applies.")
                               : mapServerSettings.wireguardProfileId === ""
                                 ? qsTr("Saved endpoint: %1").arg(mapServerSettings.endpointUrl)
                                 : qsTr("Saved endpoint: %1 through WireGuard “%2”").arg(mapServerSettings.endpointUrl)
@@ -1627,7 +1601,7 @@ Window {
                     }
                     text: qsTr("Reload map server")
                     Layout.fillWidth: true
-                    enabled: mapServerSettings.configured && mapView.rendererAvailable
+                    enabled: mapView.rendererAvailable
                     onClicked: mapView.reloadServer()
                 }
             }

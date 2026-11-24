@@ -111,7 +111,7 @@ endif()
 target_link_libraries(aowis-mobile PRIVATE aowis::config)
 
 # MAP is a required in-process library on every build, including the QML-only
-# baseline. Its HTTP server is not built. Live renderer transport is still REST.
+# baseline. Its HTTP server is not built. The live renderer uses an in-process adapter.
 set(AOWIS_MAP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-SERVER-MAP")
 if(NOT EXISTS "${AOWIS_MAP_SOURCE_DIR}/CMakeLists.txt" OR
    NOT EXISTS "${AOWIS_MAP_SOURCE_DIR}/include/aowis/map/settings_repository.h")
@@ -277,7 +277,7 @@ endif()
 
 if(AOWIS_MOBILE_WITH_BGFX)
     # The whole map stack of AOWIS-GUI-Render: geodesy, map model, imagery
-    # and terrain repositories with the aowis-server-map REST client, the
+    # and terrain repositories with the embedded MAP adapter, the
     # globe terrain and network scenes and the bgfx map view. Nothing is
     # fetched: every source is a pinned Git submodule.
     set(AOWIS_RENDER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/AOWIS-GUI-Render"
@@ -338,6 +338,10 @@ if(AOWIS_MOBILE_WITH_BGFX)
         # function is provided by the Android NDK's libandroid, not EGL/GLES.
         target_link_libraries(aowis-mobile PRIVATE android)
     endif()
+    target_sources(aowis-mobile PRIVATE
+        src/mobile_embedded_map_backend.cpp src/mobile_embedded_map_backend.h
+        src/mobile_embedded_map_transport.cpp src/mobile_embedded_map_transport.h
+        src/mobile_map_provider_directory.cpp src/mobile_map_provider_directory.h)
     target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_MAP=1)
 else()
     target_compile_definitions(aowis-mobile PRIVATE AOWIS_MOBILE_WITH_MAP=0)
@@ -378,6 +382,15 @@ if(BUILD_TESTING)
     target_link_libraries(aowis-mobile-flashlight-tests PRIVATE Qt6::Core)
     add_test(NAME aowis-mobile-flashlight COMMAND aowis-mobile-flashlight-tests)
     if(AOWIS_MOBILE_WITH_BGFX)
+        add_executable(aowis-mobile-embedded-map-runtime-tests
+            tests/embedded_map_runtime_tests.cpp
+            src/mobile_embedded_map_backend.cpp src/mobile_embedded_map_backend.h
+            src/mobile_embedded_map_transport.cpp src/mobile_embedded_map_transport.h
+            src/mobile_map_provider_directory.cpp src/mobile_map_provider_directory.h)
+        target_include_directories(aowis-mobile-embedded-map-runtime-tests PRIVATE src)
+        target_link_libraries(aowis-mobile-embedded-map-runtime-tests PRIVATE
+            AOWIS::ServerMap AOWIS::RenderMap AOWIS::RenderMapRest)
+        add_test(NAME aowis-mobile-embedded-map-runtime COMMAND aowis-mobile-embedded-map-runtime-tests)
         # Compile and run against the production geometry headers from the
         # pinned Render submodule (not local Mobile copies). No GPU required.
         add_executable(aowis-mobile-shared-render-geometry-tests

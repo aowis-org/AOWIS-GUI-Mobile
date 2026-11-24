@@ -240,7 +240,7 @@ Rectangle {
                 }
                 Label {
                     visible: wireguardVpnSettings.engineAvailable && mapServerTunnel.selectedId !== ""
-                    text: qsTr("Tiles, terrain and imagery are then loaded only through this tunnel, never directly.")
+                    text: qsTr("Upstream downloads use only this tunnel. Cached map data remains available offline.")
                     color: page.mutedColor
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -295,7 +295,7 @@ Rectangle {
                     Layout.fillWidth: true
                 }
                 Label {
-                    text: qsTr("Map tiles, terrain and imagery providers are loaded from this aowis-server-map.")
+                    text: qsTr("The embedded MAP caches imagery and terrain on this device. This server is an optional upstream for missing data.")
                     color: page.mutedColor
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap

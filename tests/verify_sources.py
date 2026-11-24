@@ -84,8 +84,21 @@ checks = [
     ("borrowed EGL context", "nativeInterface<QNativeInterface::QEGLContext>" in source),
     ("scene-graph release", "sceneGraphInvalidated" in source),
     ("frames requested on demand", "hostFrameRequested" in source and "->update()" in source),
+    ("embedded MAP catalog and persistent storage without loopback", all(
+        token in (root / "src/mobile_embedded_map_backend.cpp").read_text()
+        for token in ("QStandardPaths::AppDataLocation", "QStringLiteral(\"raster\")",
+                      "QStringLiteral(\"terrain\")", "SettingsRepository::openForCurrentUser",
+                      "this->provider_catalog->available()", "cascade.allow_direct_fetch = false")) and
+     all(token not in (root / "src/mobile_embedded_map_backend.cpp").read_text() +
+         (root / "src/mobile_embedded_map_backend.h").read_text()
+         for token in ("QTcpServer", "QTcpSocket", "catalogServer", "127.0.0.1")) and
+     "MapImageryProviderDirectory" in (root / "src/mobile_map_provider_directory.h").read_text() and
+     "InterfaceServerMapREST" not in source and
+     "hasWireGuardTransport(upstream)" in source and
+     "No map server configured. Tap to set one up." not in qml and
+     "aowis-mobile-embedded-map-runtime" in cmake),
     ("map server from the settings", "serverUrl: mapServerSettings.endpointUrl" in qml and
-     "InterfaceServerMapREST(server, parent)" in source and "catalog.refresh()" in source),
+     "MobileEmbeddedMapTransport(*backend, parent)" in source and "catalog.replace(this->backend->availableProviders())" in source),
     ("map gestures and Qt Quick HUD", "void touchEvent(QTouchEvent *event) override;" in header and
      "mapViewHudEnabled() const override { return false; }" in source and
      "handleHudMouseEvent" not in source and "handleHudWheelEvent" not in source and
@@ -130,7 +143,7 @@ checks = [
      'showCenter' not in qml and 'mapModeMenu.open()' in qml and
      'x: mapControlGroup.x' in qml and
      'y: mapControlGroup.y + mapControlGroup.height + 6' in qml and
-     qml.count('anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left') == 2),
+     qml.count('anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left') == 1),
     ("GPS centering under follow checkbox in map settings",
      qml.index('id: mapMenu\n') < qml.index('text: qsTr("Keep GPS marker centered")') <
      qml.index('id: centerOnLocationButton') < qml.index('text: qsTr("Map provider")') and

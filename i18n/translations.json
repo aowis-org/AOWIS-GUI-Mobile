@@ -439,7 +439,12 @@
     "Servers and projects": "الخوادم والمشاريع",
     "Tanks": "الخزانات متغيرة المنسوب",
     "This workspace is not yet implemented on mobile.": "لم تُنفّذ مساحة العمل هذه بعد في تطبيق الجوال.",
-    "Valves": "الصمامات"
+    "Valves": "الصمامات",
+    "The embedded MAP caches imagery and terrain on this device. This server is an optional upstream for missing data.": "يخزن MAP المدمج الصور والتضاريس على هذا الجهاز. هذا الخادم مصدر اختياري للبيانات الناقصة.",
+    "Upstream downloads use only this tunnel. Cached map data remains available offline.": "تستخدم التنزيلات من الخادم المصدر هذا النفق فقط. تبقى بيانات الخريطة المخزنة متاحة دون اتصال.",
+    "Initializing local map": "تهيئة الخريطة المحلية",
+    "Local map: %1 imagery providers": "الخريطة المحلية: %1 من مزودي الصور",
+    "No upstream configured. Local map acquisition policy applies.": "لم يتم إعداد خادم مصدر. تُطبق سياسة تنزيل الخريطة المحلية."
   },
   "de": {
     "%1 (custom)": "%1 (benutzerdefiniert)",
@@ -881,7 +886,12 @@
     "Servers and projects": "Server und Projekte",
     "Tanks": "Speicherbehälter",
     "This workspace is not yet implemented on mobile.": "Dieser Arbeitsbereich ist auf Mobilgeräten noch nicht implementiert.",
-    "Valves": "Ventile"
+    "Valves": "Ventile",
+    "The embedded MAP caches imagery and terrain on this device. This server is an optional upstream for missing data.": "Das integrierte MAP speichert Bild- und Geländedaten auf diesem Gerät. Dieser Server ist ein optionaler Upstream für fehlende Daten.",
+    "Upstream downloads use only this tunnel. Cached map data remains available offline.": "Upstream-Downloads verwenden ausschließlich diesen Tunnel. Gespeicherte Kartendaten bleiben offline verfügbar.",
+    "Initializing local map": "Lokale Karte wird initialisiert",
+    "Local map: %1 imagery providers": "Lokale Karte: %1 Bildanbieter",
+    "No upstream configured. Local map acquisition policy applies.": "Kein Upstream konfiguriert. Es gilt die lokale Kartenbezugsrichtlinie."
   },
   "es": {
     "%1 (custom)": "%1 (personalizado)",
@@ -1323,7 +1333,12 @@
     "Servers and projects": "Servidores y proyectos",
     "Tanks": "Depósitos",
     "This workspace is not yet implemented on mobile.": "Este espacio de trabajo aún no está implementado en dispositivos móviles.",
-    "Valves": "Válvulas"
+    "Valves": "Válvulas",
+    "The embedded MAP caches imagery and terrain on this device. This server is an optional upstream for missing data.": "MAP integrado almacena imágenes y relieve en este dispositivo. Este servidor es una fuente opcional para los datos faltantes.",
+    "Upstream downloads use only this tunnel. Cached map data remains available offline.": "Las descargas del servidor usan solo este túnel. Los datos almacenados siguen disponibles sin conexión.",
+    "Initializing local map": "Inicializando mapa local",
+    "Local map: %1 imagery providers": "Mapa local: %1 proveedores de imágenes",
+    "No upstream configured. Local map acquisition policy applies.": "No hay servidor configurado. Se aplica la política de descarga local."
   },
   "fr": {
     "%1 (custom)": "%1 (personnalisé)",
@@ -1765,6 +1780,11 @@
     "Servers and projects": "Serveurs et projets",
     "Tanks": "Réservoirs à niveau variable",
     "This workspace is not yet implemented on mobile.": "Cet espace de travail n’est pas encore disponible sur mobile.",
-    "Valves": "Vannes"
+    "Valves": "Vannes",
+    "The embedded MAP caches imagery and terrain on this device. This server is an optional upstream for missing data.": "MAP intégré stocke les images et le relief sur cet appareil. Ce serveur amont facultatif fournit les données manquantes.",
+    "Upstream downloads use only this tunnel. Cached map data remains available offline.": "Les téléchargements amont passent uniquement par ce tunnel. Les données cartographiques en cache restent disponibles hors ligne.",
+    "Initializing local map": "Initialisation de la carte locale",
+    "Local map: %1 imagery providers": "Carte locale : %1 fournisseurs d’images",
+    "No upstream configured. Local map acquisition policy applies.": "Aucun serveur amont configuré. La politique d’acquisition locale s’applique."
   }
 }

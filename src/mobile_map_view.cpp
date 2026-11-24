@@ -25,8 +25,9 @@
 #include "map/data/map_terrain_repository.h"
 #include "map/data/map_tile_repository.h"
 #include "map/render/map_render_types.h"
-#include "services/interface_server_map_rest.h"
-#include "services/map_server_rest_configuration.h"
+#include "mobile_embedded_map_backend.h"
+#include "mobile_embedded_map_transport.h"
+#include "mobile_map_provider_directory.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -153,7 +154,8 @@ struct MobileMapView::Impl final : public MapBgfxMapViewHost
     bool server_blocked = false;
     bool rebuild_pending = false;
     bool dark = false;
-    MapProviderCatalog catalog;
+    std::unique_ptr<MobileEmbeddedMapBackend> backend;
+    MobileMapProviderDirectory catalog;
     MapModel model;
     std::unique_ptr<MapTileRepository> tiles;
     std::unique_ptr<MapTerrainRepository> terrain;
@@ -326,24 +328,15 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
 
     // Server providers: the model re-resolves its provider, the tiles their
     // provider URLs.
-    QObject::connect(&this->catalog, &MapProviderCatalog::catalogChanged, this->item, [this]()
+    QObject::connect(&this->catalog, &MobileMapProviderDirectory::catalogChanged, this->item, [this]()
     {
         this->model.providerCatalogChanged();
         emit this->item->providersChanged();
         if (this->tiles)
             this->tiles->invalidateProviderCatalog();
-        this->server_status = MobileMapView::tr("Map server: %1 imagery providers").arg(this->catalog.providers().size());
-        emit this->item->statusChanged();
-    });
-    QObject::connect(&this->catalog, &MapProviderCatalog::fallbackChanged, this->item, [this]()
-    {
-        this->model.providerFallbackChanged();
-    });
-    QObject::connect(&this->catalog, &MapProviderCatalog::errorOccurred, this->item,
-                     [this](const QString &message)
-    {
-        this->server_status = MobileMapView::tr("Map server error: %1")
-                                  .arg(message);
+        if (!this->server_blocked && this->backend && this->backend->settingsError().isEmpty() &&
+            this->backend->terrainReady())
+            this->server_status = MobileMapView::tr("Local map: %1 imagery providers").arg(this->catalog.providers().size());
         emit this->item->statusChanged();
     });
     QObject::connect(&this->model, &MapModel::providerIdChanged, this->item,
@@ -373,7 +366,7 @@ MobileMapView::Impl::Impl(MobileMapView *owner)
     });
     this->status_timer.start();
     restoreCamera();
-    this->server_status = MobileMapView::tr("No map server configured");
+    this->server_status = MobileMapView::tr("Initializing local map");
 }
 
 MobileMapView::Impl::~Impl()
@@ -549,55 +542,51 @@ void MobileMapView::Impl::requireTunnel()
 
 void MobileMapView::Impl::rebuildServer()
 {
-    this->view->setTileRepository(nullptr);
-    this->view->setTerrainRepository(nullptr);
-    this->tiles.reset();
-    this->terrain.reset();
-    MapServerRestConfiguration server;
-    server.base_url = this->server_url;
+    // Keep repositories and cached rendering data alive across tunnel changes.
+    // A tunnel is an upstream transport, not a prerequisite for cached tiles.
+    Aowis::Map::MapCascadeUpstream upstream;
+    upstream.name = QStringLiteral("mobile-upstream");
+    upstream.url = QUrl(this->server_url);
+    upstream.wireguard_profile_id = this->wireguard_profile;
     this->server_blocked = false;
-    if (server.configured() && !this->wireguard_profile.isEmpty())
+    QString reason;
+    if (!upstream.url.isEmpty() && !this->wireguard_profile.isEmpty())
     {
-        // Fail closed: without the running tunnel nothing is requested.
-        QString reason;
         QNetworkProxy proxy;
         if (!this->wireguard)
             reason = MobileMapView::tr("The map server is configured for WireGuard, which is not available.");
         else if (this->wireguard->proxyFor(this->wireguard_profile, &proxy, &reason))
-            server.proxy = proxy;
-        if (!reason.isEmpty())
+            upstream.proxy = proxy;
+        // MAP checks the profile ID and proxy itself and skips unusable
+        // WireGuard upstreams. Never turn this into a direct connection.
+        this->server_blocked = !Aowis::Map::hasWireGuardTransport(upstream);
+    }
+    if (!this->backend)
+    {
+        this->backend = std::make_unique<MobileEmbeddedMapBackend>();
+        QObject::connect(this->backend.get(), &MobileEmbeddedMapBackend::providersChanged,
+                         this->item, [this]() { this->catalog.replace(this->backend->availableProviders()); });
+        MobileEmbeddedMapBackend *backend = this->backend.get();
+        MapServerTransport transport;
+        transport.create = [backend](QObject *parent) -> InterfaceServerMap *
         {
-            this->catalog.setServer(MapServerRestConfiguration());
-            emit this->item->providersChanged();
-            this->server_blocked = true;
-            this->server_status = reason;
-            emit this->item->statusChanged();
-            return;
-        }
+            return new MobileEmbeddedMapTransport(*backend, parent);
+        };
+        this->tiles = std::make_unique<MapTileRepository>(transport);
+        this->terrain = std::make_unique<MapTerrainRepository>(transport);
+        this->view->setTileRepository(this->tiles.get());
+        this->view->setTerrainRepository(this->terrain.get());
     }
-    this->catalog.setServer(server);
-    emit this->item->providersChanged();
-    if (!server.configured())
-    {
-        this->server_status = MobileMapView::tr("No map server configured");
-        emit this->item->statusChanged();
-        return;
-    }
-    MapServerTransport transport;
-    transport.create = [server](QObject *parent) -> InterfaceServerMap *
-    {
-        return new InterfaceServerMapREST(server, parent);
-    };
-    this->tiles = std::make_unique<MapTileRepository>(transport);
-    this->terrain = std::make_unique<MapTerrainRepository>(transport);
-    this->view->setTileRepository(this->tiles.get());
-    this->view->setTerrainRepository(this->terrain.get());
-    this->server_status = this->wireguard_profile.isEmpty()
-        ? MobileMapView::tr("Map server: connecting to %1").arg(this->server_url)
-        : MobileMapView::tr("Map server: connecting to %1 through WireGuard “%2”")
-              .arg(this->server_url, this->wireguard->profileName(this->wireguard_profile));
+    this->backend->configure(upstream);
+    if (!this->backend->settingsError().isEmpty())
+        this->server_status = MobileMapView::tr("Map server error: %1").arg(this->backend->settingsError());
+    else if (this->server_blocked)
+        this->server_status = reason;
+    else if (!this->backend->terrainReady())
+        this->server_status = MobileMapView::tr("Map server error: %1").arg(this->backend->terrainError());
+    else
+        this->server_status = MobileMapView::tr("Local map: %1 imagery providers").arg(this->catalog.providers().size());
     emit this->item->statusChanged();
-    this->catalog.refresh();
 }
 
 void MobileMapView::Impl::panBy(const QPointF &delta)
@@ -1027,6 +1016,7 @@ MobileMapView::MobileMapView(QQuickItem *parent)
     setAcceptTouchEvents(true);
     setFlag(QQuickItem::ItemIsFocusScope, true);
     this->impl->application_active = qGuiApp->applicationState() == Qt::ApplicationActive;
+    this->impl->scheduleRebuild();
 }
 
 MobileMapView::~MobileMapView()
@@ -1234,8 +1224,6 @@ bool MobileMapView::globeAvailable() const
 QVariantList MobileMapView::providers() const
 {
     QVariantList result;
-    if (!this->impl->catalog.server().configured())
-        return result;
     for (const MapProviderEntry &entry : this->impl->catalog.providers())
     {
         if (entry.enabled)

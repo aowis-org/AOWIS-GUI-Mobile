@@ -35,13 +35,25 @@ GLSL shaders, Android the ESSL ones.
 
 ## Map server
 
-`serverUrl` is bound to `mapServerSettings.endpointUrl` (Settings → Map
-server; default port **8122**). For a configured server the item creates Render's
-`InterfaceServerMapREST` transport, the `MapTileRepository` and
-`MapTerrainRepository`, and refreshes the server's imagery provider catalog
-(`MapProviderCatalog`, `GET /map/v1/providers`). Changing the server rebuilds
-them. Without a server the map shows its background and a banner points to
-Settings. Diagnostics → **Reload map server** reconnects.
+Mobile uses one in-process MAP backend for raster and terrain. The renderer
+repositories call `MobileEmbeddedMapTransport`; the provider directory reads
+MAP's typed available-provider entries directly. There is no local HTTP server,
+listener or authentication bridge.
+
+Persistent data is stored under the app-private data location in `map/raster`,
+`map/terrain` and `map/provider-catalogs`. MAP owns the storage and provider
+settings (AOWIS-CONFIG owner `mobile-map`).
+
+Settings → Network & servers → Map server configures an optional upstream
+(default port **8122**). When configured, the single upstream is authoritative:
+missing data must use it, never a direct origin. A WireGuard upstream is skipped
+if its SOCKS5 tunnel is unavailable; validated provider snapshots and cached
+tiles can still be used. Without an upstream, MAP's local acquisition policy
+applies. Settings failures disable remote fetching. Changing the connection
+updates the existing backend rather than recreating the renderer repositories.
+Diagnostics → **Reload map server** reapplies the configuration.
+
+The multiple-upstream and provider editing UI will be added separately.
 
 ## Input
 
