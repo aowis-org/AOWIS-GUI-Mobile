@@ -62,7 +62,13 @@ renderer HUD, including its crosshair, scale bar and device-position marker.
 The camera is saved when the app goes to the background and restored on the
 next start. Without a saved camera the map opens on Central Europe. Enable
 **Keep GPS marker centered** in the map menu to follow fresh fixes at the
-current zoom. The location button also re-centres the map on demand.
+current zoom. The **Center the map on my location** button directly below
+that checkbox also re-centres the map on demand.
+
+The second half of the top-left split control selects **Distribution Map
+Monitor** or **Distribution Map Editor**, independently of 2D/3D and Look
+around. Monitor is selected by default. The selector establishes the workspace
+mode; hydraulic monitoring and editing tools are not yet implemented.
 
 ## Look around
 

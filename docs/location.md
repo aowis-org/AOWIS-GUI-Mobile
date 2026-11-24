@@ -29,8 +29,9 @@ vertical-datum conversion or guarantee of survey-grade accuracy is made.
 The map menu shows acquisition status and horizontal accuracy beside the GPS
 switch. A blue marker shows the current fix in 2D and on the globe. A gray
 marker indicates the last known position. With GPS on, **Keep GPS marker
-centered** follows fresh fixes at the current zoom. The location button
-re-centres the camera on demand.
+centered** follows fresh fixes at the current zoom. The **Center the map on
+my location** button directly below the checkbox re-centres the camera on
+demand when a fix is available and Look around is off.
 
 Location coordinates are kept **in memory only**. They are neither saved to
 QSettings nor uploaded to the map server, included in lifecycle diagnostics, or

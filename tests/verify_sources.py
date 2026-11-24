@@ -124,16 +124,30 @@ checks = [
     ("right-side mobile navigation", 'id: hamburgerButton' in qml and
      'anchors.right: parent.right' in qml and 'edge: Qt.RightEdge' in qml and
      'closePolicy: Popup.CloseOnReleaseOutside' in qml),
-    ("top-left combined Map/Center button", 'id: mapControlGroup' in qml and
-     'anchors.top: hamburgerButton.top' in qml and
-     'id: mapMenuButton' in qml and 'id: centerOnLocationButton' in qml and
-     qml.index('id: mapMenuButton') < qml.index('id: centerOnLocationButton') < qml.index('id: mapMenu\n') and
-     'visible: mapControlGroup.showCenter' in qml and
-     'width: (showMap ? 52 : 0) + (showCenter ? 52 : 0) + (showMap && showCenter ? 1 : 0)' in qml and
+    ("top-left combined Map/workspace mode button", 'id: mapControlGroup' in qml and
+     'anchors.top: hamburgerButton.top' in qml and 'width: 105' in qml and
+     qml.index('id: mapMenuButton') < qml.index('id: mapModeButton') < qml.index('id: mapMenu\n') and
+     'showCenter' not in qml and 'mapModeMenu.open()' in qml and
      'x: mapControlGroup.x' in qml and
      'y: mapControlGroup.y + mapControlGroup.height + 6' in qml and
-     qml.count('anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left') == 2 and
-     'onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)' in qml),
+     qml.count('anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left') == 2),
+    ("GPS centering under follow checkbox in map settings",
+     qml.index('id: mapMenu\n') < qml.index('text: qsTr("Keep GPS marker centered")') <
+     qml.index('id: centerOnLocationButton') < qml.index('text: qsTr("Map provider")') and
+     'enabled: locationService.hasFix && !mapView.lookAround' in qml and
+     'mapView.centerOn(locationService.longitude, locationService.latitude, 16)' in qml),
+    ("distribution mode selection independent of camera settings",
+     'property string distributionMapMode: "monitor"' in qml and
+     'root.distributionMapMode = modelData.mode' in qml and
+     'root.distributionMapMode === modelData.mode' in qml and
+     'if (mapModeMenu.visible)' in qml and
+     'mapMenu.visible || mapModeMenu.visible || navigationDrawer.opened' in qml and
+     re.findall(r'\{ mode: "([^"\n]+)", title: qsTr\("([^"\n]+)"\), icon: "([^"\n]+)" \}', qml) == [
+         ('monitor', 'Distribution Map Monitor', 'distributionMonitor'),
+         ('editor', 'Distribution Map Editor', 'distributionEditor')] and
+     all('icon.kind === "' + kind + '"' in ui_icons for kind in ('distributionMonitor', 'distributionEditor')) and
+     all(action not in qml.split('id: mapModeMenu\n', 1)[1].split('id: mapCompass', 1)[0]
+         for action in ('setGlobe(', 'mapView.lookAround', 'centerOn('))),
     ("desktop main workspaces in mobile bottom navigation", main_tabs == expected_main_tabs and
      all('icon.kind === "' + page + '"' in ui_icons for page, _ in main_tabs) and
      'id: mainNavigation' in qml and 'orientation: ListView.Horizontal' in qml and

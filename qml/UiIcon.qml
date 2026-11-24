@@ -121,6 +121,18 @@ Item {
                     line([0.50 + 0.30 * Math.cos(angle), 0.50 + 0.30 * Math.sin(angle),
                           0.50 + 0.43 * Math.cos(angle), 0.50 + 0.43 * Math.sin(angle)])
                 }
+            } else if (icon.kind === "distributionMonitor") {
+                // Eye: observe the distribution network.
+                context.moveTo(width * 0.07, height * 0.50)
+                context.quadraticCurveTo(width * 0.50, height * 0.02, width * 0.93, height * 0.50)
+                context.quadraticCurveTo(width * 0.50, height * 0.98, width * 0.07, height * 0.50)
+                circle(0.50, 0.50, 0.15)
+            } else if (icon.kind === "distributionEditor") {
+                // Pencil: edit the distribution network.
+                line([0.12, 0.88, 0.20, 0.62, 0.72, 0.10, 0.90, 0.28,
+                      0.38, 0.80, 0.12, 0.88])
+                line([0.61, 0.21, 0.79, 0.39])
+                line([0.20, 0.62, 0.38, 0.80])
             } else if (icon.kind === "map") {
                 context.moveTo(width * 0.10, height * 0.27)
                 context.lineTo(width * 0.36, height * 0.15)

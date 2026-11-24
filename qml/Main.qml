@@ -49,6 +49,12 @@ Window {
     ]
     readonly property int mainTabIndex: mainTabs.findIndex(tab => tab.page === activePage)
 
+    // Workspace activity is independent of the map camera (2D/3D/Look around).
+    // Hydraulic monitor/editor tools will use this selection when implemented.
+    property string distributionMapMode: "monitor"
+    readonly property string distributionMapModeTitle: distributionMapMode === "editor"
+        ? qsTr("Distribution Map Editor") : qsTr("Distribution Map Monitor")
+
     property string activePage: "map"
     onActivePageChanged: {
         if (activePage !== "map" && mapView.lookAround)
@@ -86,6 +92,7 @@ Window {
     property string wireguardReturnPage: "settings"
     function openPage(page) {
         mapMenu.close()
+        mapModeMenu.close()
         navigationDrawer.close()
         if (page === "mapserver" && activePage !== "wireguard")
             mapServerPage.reload()
@@ -103,7 +110,9 @@ Window {
     // Back is in-app navigation while a drawer or secondary page is open.
     // At the map root, leave Android's native Back behavior intact.
     function navigateBack() {
-        if (mapMenu.visible) {
+        if (mapModeMenu.visible) {
+            mapModeMenu.close()
+        } else if (mapMenu.visible) {
             mapMenu.close()
         } else if (navigationDrawer.opened) {
             navigationDrawer.close()
@@ -121,13 +130,13 @@ Window {
     Shortcut {
         sequences: ["Back"]
         enabled: Qt.platform.os === "android" &&
-                 (mapMenu.visible || navigationDrawer.opened || root.activePage !== "map")
+                 (mapMenu.visible || mapModeMenu.visible || navigationDrawer.opened || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
     Shortcut {
         sequence: "Escape"
         enabled: Qt.platform.os !== "android" &&
-                 (mapMenu.visible || navigationDrawer.opened || root.activePage !== "map")
+                 (mapMenu.visible || mapModeMenu.visible || navigationDrawer.opened || root.activePage !== "map")
         onActivated: root.navigateBack()
     }
     function updateLocation() {
@@ -175,7 +184,7 @@ Window {
     }
     Label {
         visible: gpsHintTimer.running && mapView.visible && locationService.follow &&
-                 locationService.enabled && !mapMenu.visible && !navigationDrawer.opened
+                 locationService.enabled && !mapMenu.visible && !mapModeMenu.visible && !navigationDrawer.opened
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: mainNavigation.top
         anchors.bottomMargin: 24
@@ -247,18 +256,14 @@ Window {
         Accessible.name: blockedText.text
     }
 
-    // A single split control: Map on the left, Center on the right. When a
-    // location fix is unavailable, only the Map half is shown.
+    // Map settings and distribution workspace mode share a split control.
     Item {
         id: mapControlGroup
-        readonly property bool showMap: root.activePage === "map" && mapView.rendererAvailable
-        readonly property bool showCenter: root.activePage === "map" &&
-                                           locationService.hasFix && !mapView.lookAround
-        visible: showMap || showCenter
+        visible: root.activePage === "map" && mapView.rendererAvailable
         anchors.left: parent.left
         anchors.leftMargin: 14
         anchors.top: hamburgerButton.top
-        width: (showMap ? 52 : 0) + (showCenter ? 52 : 0) + (showMap && showCenter ? 1 : 0)
+        width: 105
         height: hamburgerButton.height
         z: 1
 
@@ -274,7 +279,6 @@ Window {
 
             Button {
                 id: mapMenuButton
-                visible: mapControlGroup.showMap
                 width: 52
                 height: parent.height
                 Accessible.name: qsTr("Map controls")
@@ -290,34 +294,34 @@ Window {
                 background: Rectangle {
                     radius: 12
                     color: mapMenuButton.down ? root.uiPressed : "transparent"
-                    // Keep the inner edge square when both halves are shown.
+                    // Keep the inner edge square.
                     Rectangle {
-                        visible: mapControlGroup.showCenter
                         anchors.right: parent.right
                         width: 12
                         height: parent.height
                         color: parent.color
                     }
                 }
-                onClicked: mapMenu.open()
+                onClicked: {
+                    mapModeMenu.close()
+                    mapMenu.open()
+                }
             }
 
             Rectangle {
-                visible: mapControlGroup.showMap && mapControlGroup.showCenter
                 width: 1
                 height: parent.height
-                color: locationService.fresh ? root.uiAccent : root.uiBorder
+                color: root.uiBorder
             }
 
             Button {
-                id: centerOnLocationButton
-                visible: mapControlGroup.showCenter
+                id: mapModeButton
                 width: 52
                 height: parent.height
-                Accessible.name: qsTr("Center the map on my location")
+                Accessible.name: root.distributionMapModeTitle
                 contentItem: Item {
                     UiIcon {
-                        kind: "location"
+                        kind: root.distributionMapMode === "editor" ? "distributionEditor" : "distributionMonitor"
                         strokeColor: root.uiText
                         width: 30
                         height: 30
@@ -326,16 +330,18 @@ Window {
                 }
                 background: Rectangle {
                     radius: 12
-                    color: centerOnLocationButton.down ? root.uiPressed : "transparent"
+                    color: mapModeButton.down ? root.uiPressed : "transparent"
                     Rectangle {
-                        visible: mapControlGroup.showMap
                         anchors.left: parent.left
                         width: 12
                         height: parent.height
                         color: parent.color
                     }
                 }
-                onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)
+                onClicked: {
+                    mapMenu.close()
+                    mapModeMenu.open()
+                }
             }
         }
 
@@ -401,6 +407,32 @@ Window {
                     text: qsTr("Keep GPS marker centered")
                     checked: locationService.follow
                     onToggled: locationService.follow = checked
+                }
+                Button {
+                    id: centerOnLocationButton
+                    Layout.fillWidth: true
+                    visible: locationService.enabled
+                    enabled: locationService.hasFix && !mapView.lookAround
+                    text: qsTr("Center the map on my location")
+                    contentItem: RowLayout {
+                        spacing: 8
+                        UiIcon {
+                            kind: "location"
+                            strokeColor: root.uiText
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: centerOnLocationButton.text
+                            color: root.uiText
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    onClicked: {
+                        mapView.centerOn(locationService.longitude, locationService.latitude, 16)
+                        mapMenu.close()
+                    }
                 }
                 Label { text: qsTr("Map provider"); color: root.uiText }
                 ComboBox {
@@ -522,6 +554,84 @@ Window {
                     text: qsTr("Hillshade")
                     checked: mapView.hillshade
                     onToggled: mapView.hillshade = checked
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: mapModeMenu
+        parent: root.contentItem
+        modal: true
+        dim: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        width: Math.min(330, root.width - 28)
+        x: Math.max(14, Math.min(mapControlGroup.x + 53, root.width - width - 14))
+        y: mapControlGroup.y + mapControlGroup.height + 6
+        padding: 10
+        height: Math.min(mapModeOptions.implicitHeight + 2 * padding, mainNavigation.y - y - 8)
+        palette.button: root.uiRaised
+        palette.buttonText: root.uiText
+        palette.window: root.uiSurface
+        palette.windowText: root.uiText
+        palette.text: root.uiText
+        palette.base: root.uiInput
+        palette.highlight: root.uiSelection
+        background: Rectangle {
+            color: root.uiSurface
+            border.color: root.uiBorder
+            radius: 12
+        }
+        contentItem: ScrollView {
+            id: mapModeScroll
+            clip: true
+            contentWidth: availableWidth
+            ColumnLayout {
+                id: mapModeOptions
+                width: mapModeScroll.availableWidth
+                spacing: 6
+                Repeater {
+                    model: [
+                        { mode: "monitor", title: qsTr("Distribution Map Monitor"), icon: "distributionMonitor" },
+                        { mode: "editor", title: qsTr("Distribution Map Editor"), icon: "distributionEditor" }
+                    ]
+                    delegate: Button {
+                        id: modeChoice
+                        required property var modelData
+                        readonly property bool selected: root.distributionMapMode === modelData.mode
+                        Layout.fillWidth: true
+                        Layout.minimumHeight: 44
+                        text: modelData.title
+                        highlighted: selected
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.checked: selected
+                        contentItem: RowLayout {
+                            spacing: 8
+                            UiIcon {
+                                kind: modeChoice.modelData.icon
+                                strokeColor: modeChoice.selected ? root.uiSelectedText : root.uiText
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 24
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modeChoice.text
+                                wrapMode: Text.WordWrap
+                                color: modeChoice.selected ? root.uiSelectedText : root.uiText
+                            }
+                        }
+                        background: Rectangle {
+                            radius: 6
+                            color: modeChoice.down ? root.uiPressed :
+                                   modeChoice.selected ? root.uiSelection : root.uiRaised
+                            border.color: modeChoice.selected ? root.uiAccent : root.uiBorder
+                        }
+                        onClicked: {
+                            root.distributionMapMode = modelData.mode
+                            mapModeMenu.close()
+                        }
+                    }
                 }
             }
         }
@@ -1570,7 +1680,7 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 68
+        height: 54
         color: root.uiSurface
         z: 4
 
@@ -1614,8 +1724,8 @@ Window {
                 readonly property bool selected: index === root.mainTabIndex
                 width: Math.max(78, tabLabel.implicitWidth + 20,
                                 navigationList.width / root.mainTabs.length - navigationList.spacing)
-                height: navigationList.height - 5
-                padding: 4
+                height: navigationList.height - navigationScrollBar.height
+                padding: 2
                 text: modelData.title
                 highlighted: selected
                 Accessible.name: text
@@ -1637,15 +1747,15 @@ Window {
                 }
                 contentItem: Item {
                     Column {
-                        spacing: 3
+                        spacing: 1
                         anchors.centerIn: parent
                         UiIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
                             kind: mainTabButton.modelData.page
                             strokeColor: mainTabButton.selected && !mainTabButton.down ?
                                          root.uiSelectedText : root.uiText
-                            width: 25
-                            height: 25
+                            width: 22
+                            height: 22
                         }
                         Text {
                             id: tabLabel
@@ -1660,8 +1770,9 @@ Window {
                 }
             }
             ScrollBar.horizontal: ScrollBar {
+                id: navigationScrollBar
                 policy: ScrollBar.AlwaysOn
-                height: 5
+                height: 3
                 padding: 0
                 contentItem: Rectangle {
                     radius: 2
