@@ -30,6 +30,25 @@ Window {
     readonly property color uiSuccess: darkTheme ? "#a2ebc2" : "#086b3c"
     readonly property color uiError: darkTheme ? "#ffb7ad" : "#ab2730"
 
+    // Main workspaces follow the desktop navigation order. Settings and
+    // tools are available from the top-right menu, not the bottom strip.
+    readonly property var mainTabs: [
+        { page: "projects", title: qsTr("Servers and projects") },
+        { page: "dashboard", title: qsTr("Dashboard") },
+        { page: "map", title: qsTr("Maps") },
+        { page: "reservoirs", title: qsTr("Reservoirs") },
+        { page: "tanks", title: qsTr("Tanks") },
+        { page: "pumps", title: qsTr("Pumps") },
+        { page: "valves", title: qsTr("Valves") },
+        { page: "junctions", title: qsTr("Junctions") },
+        { page: "pipes", title: qsTr("Pipes") },
+        { page: "demandPoints", title: qsTr("Demand Points") },
+        { page: "customers", title: qsTr("Customers") },
+        { page: "alarms", title: qsTr("Alarms") },
+        { page: "logs", title: qsTr("Logs") }
+    ]
+    readonly property int mainTabIndex: mainTabs.findIndex(tab => tab.page === activePage)
+
     property string activePage: "map"
     onActivePageChanged: {
         if (activePage !== "map" && mapView.lookAround)
@@ -122,8 +141,9 @@ Window {
     }
 
     // The AOWIS map (imagery and terrain from the configured aowis-server-map)
-    // underneath all QML: it fills the window and handles its own touch,
-    // mouse input. Hidden pages are opaque, so it is only drawn on Map.
+    // bgfx draws into Qt Quick's window framebuffer, so the host must fill
+    // the entire window. The bottom navigation overlays the map, just like
+    // the top controls; shrinking the host would offset the GL viewport.
     MapView {
         id: mapView
         Component.onCompleted: root.updateLocation()
@@ -139,7 +159,7 @@ Window {
 
     Label {
         visible: mapView.lookAround && !compassService.hasOrientation
-        anchors.centerIn: parent
+        anchors.centerIn: mapView
         padding: 12
         width: Math.min(parent.width - 32, 380)
         horizontalAlignment: Text.AlignHCenter
@@ -157,7 +177,7 @@ Window {
         visible: gpsHintTimer.running && mapView.visible && locationService.follow &&
                  locationService.enabled && !mapMenu.visible && !navigationDrawer.opened
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
+        anchors.bottom: mainNavigation.top
         anchors.bottomMargin: 24
         width: Math.min(parent.width - 32, 380)
         padding: 12
@@ -177,7 +197,7 @@ Window {
     Button {
         visible: root.activePage === "map" && !mapServerSettings.configured
         anchors.top: parent.top
-        anchors.left: mapMenuButton.visible ? mapMenuButton.right : parent.left
+        anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left
         anchors.right: hamburgerButton.left
         anchors.margins: 14
         height: 52
@@ -204,7 +224,7 @@ Window {
     Button {
         visible: root.activePage === "map" && mapServerSettings.configured && mapView.serverBlocked
         anchors.top: parent.top
-        anchors.left: mapMenuButton.visible ? mapMenuButton.right : parent.left
+        anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left
         anchors.right: hamburgerButton.left
         anchors.margins: 14
         height: Math.max(52, blockedText.implicitHeight + 16)
@@ -227,30 +247,106 @@ Window {
         Accessible.name: blockedText.text
     }
 
-    Button {
-        id: mapMenuButton
-        visible: root.activePage === "map" && mapView.rendererAvailable
+    // A single split control: Map on the left, Center on the right. When a
+    // location fix is unavailable, only the Map half is shown.
+    Item {
+        id: mapControlGroup
+        readonly property bool showMap: root.activePage === "map" && mapView.rendererAvailable
+        readonly property bool showCenter: root.activePage === "map" &&
+                                           locationService.hasFix && !mapView.lookAround
+        visible: showMap || showCenter
         anchors.left: parent.left
         anchors.leftMargin: 14
         anchors.top: hamburgerButton.top
-        width: hamburgerButton.width
+        width: (showMap ? 52 : 0) + (showCenter ? 52 : 0) + (showMap && showCenter ? 1 : 0)
         height: hamburgerButton.height
-        Accessible.name: qsTr("Map controls")
-        contentItem: Item {
-            UiIcon {
-                kind: "map"
-                strokeColor: root.uiText
-                width: 30
-                height: 30
-                anchors.centerIn: parent
+        z: 1
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 12
+            color: root.uiRaised
+        }
+
+        Row {
+            anchors.fill: parent
+            spacing: 0
+
+            Button {
+                id: mapMenuButton
+                visible: mapControlGroup.showMap
+                width: 52
+                height: parent.height
+                Accessible.name: qsTr("Map controls")
+                contentItem: Item {
+                    UiIcon {
+                        kind: "map"
+                        strokeColor: root.uiText
+                        width: 30
+                        height: 30
+                        anchors.centerIn: parent
+                    }
+                }
+                background: Rectangle {
+                    radius: 12
+                    color: mapMenuButton.down ? root.uiPressed : "transparent"
+                    // Keep the inner edge square when both halves are shown.
+                    Rectangle {
+                        visible: mapControlGroup.showCenter
+                        anchors.right: parent.right
+                        width: 12
+                        height: parent.height
+                        color: parent.color
+                    }
+                }
+                onClicked: mapMenu.open()
+            }
+
+            Rectangle {
+                visible: mapControlGroup.showMap && mapControlGroup.showCenter
+                width: 1
+                height: parent.height
+                color: locationService.fresh ? root.uiAccent : root.uiBorder
+            }
+
+            Button {
+                id: centerOnLocationButton
+                visible: mapControlGroup.showCenter
+                width: 52
+                height: parent.height
+                Accessible.name: qsTr("Center the map on my location")
+                contentItem: Item {
+                    UiIcon {
+                        kind: "location"
+                        strokeColor: root.uiText
+                        width: 30
+                        height: 30
+                        anchors.centerIn: parent
+                    }
+                }
+                background: Rectangle {
+                    radius: 12
+                    color: centerOnLocationButton.down ? root.uiPressed : "transparent"
+                    Rectangle {
+                        visible: mapControlGroup.showMap
+                        anchors.left: parent.left
+                        width: 12
+                        height: parent.height
+                        color: parent.color
+                    }
+                }
+                onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)
             }
         }
-        background: Rectangle {
+
+        // Draw one continuous outline, rather than borders around two buttons.
+        Rectangle {
+            anchors.fill: parent
             radius: 12
-            color: parent.down ? root.uiPressed : root.uiRaised
+            color: "transparent"
             border.color: root.uiBorder
+            z: 1
         }
-        onClicked: mapMenu.open()
     }
 
     Popup {
@@ -261,10 +357,10 @@ Window {
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         width: Math.min(292, root.width - 28)
-        x: mapMenuButton.x
-        y: mapMenuButton.y + mapMenuButton.height + 6
+        x: mapControlGroup.x
+        y: mapControlGroup.y + mapControlGroup.height + 6
         padding: 10
-        height: Math.min(mapOptions.implicitHeight + 2 * padding, root.height - y - 8)
+        height: Math.min(mapOptions.implicitHeight + 2 * padding, mainNavigation.y - y - 8)
         palette.button: root.uiRaised
         palette.buttonText: root.uiText
         palette.window: root.uiSurface
@@ -435,7 +531,7 @@ Window {
         id: mapCompass
         visible: mapView.visible && mapView.globe
         anchors.left: parent.left
-        anchors.bottom: parent.bottom
+        anchors.bottom: mainNavigation.top
         anchors.margins: 14
         width: 76
         height: width
@@ -456,42 +552,15 @@ Window {
         background: null
     }
 
-    // Back to the device position (the first fix centres the map once).
-    Button {
-        id: centerOnLocationButton
-        visible: root.activePage === "map" && locationService.hasFix && !mapView.lookAround
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: 14
-        width: 52
-        height: 52
-        z: 1
-        contentItem: Item {
-            implicitWidth: 30
-            implicitHeight: 30
-            UiIcon {
-                kind: "location"
-                strokeColor: root.uiText
-                width: 30
-                height: 30
-                anchors.centerIn: parent
-            }
-        }
-        background: Rectangle {
-            radius: 12
-            color: root.uiRaised
-            border.color: locationService.fresh ? root.uiAccent : root.uiBorder
-        }
-        onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)
-        Accessible.name: qsTr("Center the map on my location")
-    }
-
     // Settings is a full page instead of a permanent panel over the map.
     Rectangle {
         id: settingsPage
         LayoutMirroring.enabled: languageSettings.rightToLeft
         LayoutMirroring.childrenInherit: true
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "settings"
         color: root.uiSurface
 
@@ -887,7 +956,10 @@ Window {
 
     UnitSettingsPage {
         id: unitsPage
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "units"
         surfaceColor: root.uiSurface
         raisedColor: root.uiRaised
@@ -904,7 +976,10 @@ Window {
 
     MapServerSettingsPage {
         id: mapServerPage
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "mapserver"
         surfaceColor: root.uiSurface
         raisedColor: root.uiRaised
@@ -926,7 +1001,10 @@ Window {
 
     WireGuardSettingsPage {
         id: wireguardPage
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "wireguard"
         surfaceColor: root.uiSurface
         raisedColor: root.uiRaised
@@ -952,7 +1030,10 @@ Window {
         id: compassPage
         LayoutMirroring.enabled: languageSettings.rightToLeft
         LayoutMirroring.childrenInherit: true
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "compass"
         color: root.uiSurface
 
@@ -1090,7 +1171,10 @@ Window {
         id: gradienterPage
         LayoutMirroring.enabled: languageSettings.rightToLeft
         LayoutMirroring.childrenInherit: true
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "gradienter"
         color: root.uiSurface
 
@@ -1282,7 +1366,10 @@ Window {
         id: plumbBobPage
         LayoutMirroring.enabled: languageSettings.rightToLeft
         LayoutMirroring.childrenInherit: true
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "plumbbob"
         color: root.uiSurface
         ScrollView {
@@ -1385,7 +1472,10 @@ Window {
         id: diagnosticsPage
         LayoutMirroring.enabled: languageSettings.rightToLeft
         LayoutMirroring.childrenInherit: true
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
         visible: root.activePage === "diagnostics"
         color: root.uiSurface
 
@@ -1429,6 +1519,154 @@ Window {
                     Layout.fillWidth: true
                     enabled: mapServerSettings.configured && mapView.rendererAvailable
                     onClicked: mapView.reloadServer()
+                }
+            }
+        }
+    }
+
+    // Future workspaces remain distinct, navigable pages without inventing
+    // data or pretending that desktop functionality has been ported.
+    Rectangle {
+        id: pendingWorkspace
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: mainNavigation.top
+        visible: root.mainTabIndex >= 0 && root.activePage !== "map"
+        color: root.uiSurface
+        LayoutMirroring.enabled: languageSettings.rightToLeft
+        LayoutMirroring.childrenInherit: true
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.topMargin: 76
+            anchors.leftMargin: 20
+            anchors.rightMargin: 20
+            anchors.bottomMargin: 20
+            spacing: 15
+            Label {
+                Layout.fillWidth: true
+                text: root.mainTabIndex >= 0 ? root.mainTabs[root.mainTabIndex].title : ""
+                color: root.uiText
+                font.pixelSize: 26
+                font.bold: true
+                wrapMode: Text.WordWrap
+            }
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.uiBorder }
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("This workspace is not yet implemented on mobile.")
+                color: root.uiMuted
+                wrapMode: Text.WordWrap
+            }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    // Persistent, horizontally scrollable main tabs. Keep tap targets large
+    // enough for touch rather than squeezing the desktop tab count onto a phone.
+    Rectangle {
+        id: mainNavigation
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 68
+        color: root.uiSurface
+        z: 4
+
+        // Do not pass clicks in the strip's unused space to the map below.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onWheel: event => { event.accepted = true }
+        }
+
+        Rectangle {
+            anchors.top: parent.top
+            width: parent.width
+            height: 1
+            color: root.uiBorder
+        }
+        ListView {
+            id: navigationList
+            anchors.fill: parent
+            anchors.topMargin: 1
+            orientation: ListView.Horizontal
+            layoutDirection: languageSettings.rightToLeft ? Qt.RightToLeft : Qt.LeftToRight
+            clip: true
+            spacing: 2
+            boundsBehavior: Flickable.StopAtBounds
+            keyNavigationEnabled: false
+            model: root.mainTabs
+            currentIndex: root.mainTabIndex
+            onCurrentIndexChanged: {
+                if (currentIndex >= 0 && currentIndex < count)
+                    positionViewAtIndex(currentIndex, ListView.Contain)
+            }
+            Component.onCompleted: {
+                if (currentIndex >= 0)
+                    positionViewAtIndex(currentIndex, ListView.Contain)
+            }
+            delegate: Button {
+                id: mainTabButton
+                required property var modelData
+                required property int index
+                readonly property bool selected: index === root.mainTabIndex
+                width: Math.max(78, tabLabel.implicitWidth + 20,
+                                navigationList.width / root.mainTabs.length - navigationList.spacing)
+                height: navigationList.height - 5
+                padding: 4
+                text: modelData.title
+                highlighted: selected
+                Accessible.name: text
+                onClicked: root.openPage(modelData.page)
+                background: Rectangle {
+                    radius: 6
+                    color: mainTabButton.down ? root.uiPressed :
+                           mainTabButton.selected ? root.uiSelection : root.uiSurface
+                    border.color: mainTabButton.activeFocus ? root.uiAccent : "transparent"
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - 12
+                        height: 3
+                        radius: 1.5
+                        color: root.uiAccent
+                        visible: mainTabButton.selected
+                    }
+                }
+                contentItem: Item {
+                    Column {
+                        spacing: 3
+                        anchors.centerIn: parent
+                        UiIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            kind: mainTabButton.modelData.page
+                            strokeColor: mainTabButton.selected && !mainTabButton.down ?
+                                         root.uiSelectedText : root.uiText
+                            width: 25
+                            height: 25
+                        }
+                        Text {
+                            id: tabLabel
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: mainTabButton.text
+                            font.pixelSize: 12
+                            font.bold: mainTabButton.selected
+                            color: mainTabButton.selected && !mainTabButton.down ?
+                                   root.uiSelectedText : root.uiText
+                        }
+                    }
+                }
+            }
+            ScrollBar.horizontal: ScrollBar {
+                policy: ScrollBar.AlwaysOn
+                height: 5
+                padding: 0
+                contentItem: Rectangle {
+                    radius: 2
+                    color: root.uiBorder
+                    opacity: navigationList.contentWidth > navigationList.width ? 1 : 0
                 }
             }
         }

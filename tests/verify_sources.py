@@ -50,6 +50,19 @@ main = (root / "src/main.cpp").read_text()
 qml = (root / "qml/Main.qml").read_text()
 map_server_page = (root / "qml/MapServerSettingsPage.qml").read_text()
 
+ui_icons = (root / "qml/UiIcon.qml").read_text()
+main_tabs = re.findall(r'\{ page: "([^"]+)", title: qsTr\("([^"]+)"\) \}', qml)
+expected_main_tabs = [
+    ("projects", "Servers and projects"), ("dashboard", "Dashboard"), ("map", "Maps"),
+    ("reservoirs", "Reservoirs"), ("tanks", "Tanks"), ("pumps", "Pumps"),
+    ("valves", "Valves"), ("junctions", "Junctions"), ("pipes", "Pipes"),
+    ("demandPoints", "Demand Points"), ("customers", "Customers"), ("alarms", "Alarms"),
+    ("logs", "Logs"),
+]
+
+map_qml = qml.split("    MapView {", 1)[1].split("\n    }", 1)[0]
+nav_qml = qml.split("id: mainNavigation", 1)[1].split("\n    Drawer {", 1)[0]
+
 checks = [
     ("qml-only baseline still available", "AOWIS_MOBILE_WITH_BGFX" in cmake and
      "#else // !AOWIS_MOBILE_WITH_MAP" in source),
@@ -111,6 +124,34 @@ checks = [
     ("right-side mobile navigation", 'id: hamburgerButton' in qml and
      'anchors.right: parent.right' in qml and 'edge: Qt.RightEdge' in qml and
      'closePolicy: Popup.CloseOnReleaseOutside' in qml),
+    ("top-left combined Map/Center button", 'id: mapControlGroup' in qml and
+     'anchors.top: hamburgerButton.top' in qml and
+     'id: mapMenuButton' in qml and 'id: centerOnLocationButton' in qml and
+     qml.index('id: mapMenuButton') < qml.index('id: centerOnLocationButton') < qml.index('id: mapMenu\n') and
+     'visible: mapControlGroup.showCenter' in qml and
+     'width: (showMap ? 52 : 0) + (showCenter ? 52 : 0) + (showMap && showCenter ? 1 : 0)' in qml and
+     'x: mapControlGroup.x' in qml and
+     'y: mapControlGroup.y + mapControlGroup.height + 6' in qml and
+     qml.count('anchors.left: mapControlGroup.visible ? mapControlGroup.right : parent.left') == 2 and
+     'onClicked: mapView.centerOn(locationService.longitude, locationService.latitude, 16)' in qml),
+    ("desktop main workspaces in mobile bottom navigation", main_tabs == expected_main_tabs and
+     all('icon.kind === "' + page + '"' in ui_icons for page, _ in main_tabs) and
+     'id: mainNavigation' in qml and 'orientation: ListView.Horizontal' in qml and
+     'layoutDirection: languageSettings.rightToLeft ? Qt.RightToLeft : Qt.LeftToRight' in qml and
+     'currentIndex: root.mainTabIndex' in qml and 'onClicked: root.openPage(modelData.page)' in qml and
+     'id: pendingWorkspace' in qml and 'This workspace is not yet implemented on mobile.' in qml and
+     qml.count('anchors.bottom: mainNavigation.top') == 11 and
+     'mainNavigation.y - y - 8' in qml and
+     'mainTabs.findIndex(tab => tab.page === activePage)' in qml),
+    ("full-window bgfx underlay with bottom navigation overlay",
+     'anchors.fill: parent' in map_qml and 'mainNavigation' not in map_qml and
+     'anchors.bottom: parent.bottom' in nav_qml and 'z: 4' in nav_qml and
+     'MouseArea {' in nav_qml and 'acceptedButtons: Qt.AllButtons' in nav_qml and
+     nav_qml.index('MouseArea {') < nav_qml.index('ListView {')),
+    ("Settings reachable from top-right menu only, not main tabs",
+     all(page != 'settings' for page, _ in main_tabs) and
+     'onClicked: root.openPage("settings")' in qml.split('id: navigationDrawer', 1)[1] and
+     'onClicked: navigationDrawer.open()' in qml),
     ("Android Back returns from secondary pages", 'sequences: ["Back"]' in qml and
      'Qt.platform.os === "android"' in qml and
      'navigationDrawer.opened || root.activePage !== "map"' in qml and
